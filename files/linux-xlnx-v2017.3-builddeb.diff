@@ -1,0 +1,13 @@
+diff --git scripts/package/builddeb scripts/package/builddeb
+index 8ea9fd2..11d61a2 100755
+--- scripts/package/builddeb
++++ scripts/package/builddeb
+@@ -51,7 +51,7 @@ set_debarch() {
+ 		debarch=hppa ;;
+ 	mips*)
+ 		debarch=mips$(grep -q CPU_LITTLE_ENDIAN=y $KCONFIG_CONFIG && echo el || true) ;;
+-	arm64)
++	aarch64*|arm64*)
+ 		debarch=arm64 ;;
+ 	arm*)
+ 		if grep -q CONFIG_AEABI=y $KCONFIG_CONFIG; then
