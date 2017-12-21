@@ -2,7 +2,7 @@
 
 There are two ways
 
-1. run scripts/build-linux-xlnx.sh (easy)
+1. run scripts/build-linux-xlnx-v2017.3-zynqmp-fpga.sh (easy)
 2. run this chapter step-by-step (annoying)
 
 #### Download Linux Kernel Source
