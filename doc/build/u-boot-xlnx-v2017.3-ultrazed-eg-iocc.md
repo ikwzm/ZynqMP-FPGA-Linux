@@ -18,7 +18,12 @@ shell$ git checkout -b xilinx-v2017.3-ultrazed-eg-iocc refs/tags/xilinx-v2017.3
 #### Patch for UltraZed-EG-IOCC
 
 ```
-shell$ patch -p0 < ../files/u-boot-2016.03-zynq-zybo.diff
+shell$ patch -p0 < ../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc.diff
+shell$ git add arch/arm/dts/zynqmp-uz3eg-iocc.dts
+shell$ git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.c
+shell$ git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.h
+shell$ git add configs/xilinx_zynqmp_uz3eg_iocc_defconfig
+shell$ git add include/configs/xilinx_zynqmp_uz3eg_iocc.h
 shell$ git add --update
 shell$ git commit -m "patch for UltraZed-EG-IOCC"
 ```
@@ -37,4 +42,3 @@ shell$ make xilinx_zynqmp_uz3eg_iocc_defconfig
 ```
 shell$ make
 ```
-
