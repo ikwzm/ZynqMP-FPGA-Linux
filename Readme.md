@@ -27,6 +27,7 @@ COMING SOON.
 Build 
 ------------------------------------------------------------------------------------
 
+* [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build/Readme.md)
 * [Build Linux Kernel](doc/build/linux-xlnx-v2017.3-zynqmp-fpga.md)
 * [Build Debian9 RootFS](doc/build/debian9-rootfs.md)
 
