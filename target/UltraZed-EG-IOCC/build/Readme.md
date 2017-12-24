@@ -187,7 +187,18 @@ vivado% git add configs/xilinx_zynqmp_uz3eg_iocc_defconfig
 vivado% git add include/configs/xilinx_zynqmp_uz3eg_iocc.h
 vivado% git add --update
 vivado% git commit -m "patch for UltraZed-EG-IOCC"
+vivado% git tag -a xilinx-v2017.3-ultrazed-eg-iocc-0 -m "release xilinx-v2017.3-ultrazed-eg-iocc release 0"
 ```
+
+### Patch fix bug for I2C freeze when reboot
+
+```
+vivado% patch -p0 < ../../../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc-i2c-patch.diff
+vivado% git add --update
+vivado% git commit -m "[fix] bug for I2C freeze when reboot"
+vivado% git tag -a xilinx-v2017.3-ultrazed-eg-iocc-1 -m "release xilinx-v2017.3-ultrazed-eg-iocc release 1"
+```
+
 
 ### Setup for Build 
 
