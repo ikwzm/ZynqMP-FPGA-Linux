@@ -8,7 +8,7 @@ set project_name      "project"
 set project_dir       [pwd]
 set sdk_workspace     [file join $project_dir $project_name.sdk]
 set app_dir           [file join $sdk_workspace $app_name]
-set app_release_dir   [file join ".." [pwd]]
+set app_release_dir   [file join [pwd] ".." ]
 set app_release_elf   "zynqmp_pmufw.elf"
 
 set hw_design         [open_hw_design [file join $sdk_workspace $hwspec_file]]

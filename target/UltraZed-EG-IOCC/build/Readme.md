@@ -15,7 +15,7 @@ Build Boot Loader for UltraZed-EG-IOCC
 Build UltraZed-EG-IOCC Sample FPGA
 ------------------------------------------------------------------------------------
 
-## Requirement
+### Requirement
 
 * Vivado 2017.2
 
@@ -50,7 +50,7 @@ vivado% vivado -mode batch -source export_hardware.tcl
 Build FSBL
 ------------------------------------------------------------------------------------
 
-## Requirement
+### Requirement
 
 * Vivado SDK 2017.2
 
@@ -71,7 +71,7 @@ vivado% hsi -mode tcl -source build_zynqmp_fsbl.hsi
 Build PMU Firmware
 ------------------------------------------------------------------------------------
 
-## Requirement
+### Requirement
 
 * Vivado SDK 2017.2
 
@@ -93,7 +93,7 @@ vivado% hsi -mode tcl -source build_zynqmp_pmufw.hsi
 Build ARM Trusted Firmware
 ------------------------------------------------------------------------------------
 
-## Requirement
+### Requirement
 
 * Vivado SDK 2017.2 or gcc-aarch64-linux-gnu
 
@@ -156,7 +156,7 @@ vivado% cp build/zynqmp/release/bl31/bl31.elf ../bl31.elf
 Build U-Boot
 ------------------------------------------------------------------------------------
 
-## Requirement
+### Requirement
 
 * gcc-aarch64-linux-gnu
 
