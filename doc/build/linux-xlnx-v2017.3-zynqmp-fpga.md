@@ -65,7 +65,7 @@ shell$ make deb-pkg
 #### Build uImage and devicetree to target/zybo-pynqz1/boot/
 
 ```
-shell$ mkimage -A arm64 -O linux -a 0x80000 -e 0x80000 -n 'Linux-4.9.0-xlnx-v2017.3-fpga' -d arch/arm64/boot/Image.gz ../target/UltraZed-EG-IOCC/boot/uImage-4.9.0-xlnx-v2017.3-zynqmp-fpga
+shell$ cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-4.9.0-xlnx-v2017.3-fpga
 shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb
 shell$ dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb
 ```
