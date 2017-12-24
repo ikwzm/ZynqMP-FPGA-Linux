@@ -1,10 +1,5 @@
-Build Boot Loader
+Build Boot Loader for UltraZed-EG-IOCC
 ====================================================================================
-
-## Requirement
-
-* Vivado 2017.2
-* Vivado SDK 2017.2
 
 ## Files that you can to build
 
@@ -12,13 +7,17 @@ Build Boot Loader
   - build/
     + zynqmp_fsbl.elf  (FSBL)
     + zynqmp_pmufw.elf (PMU Firmware)
-    + bl31.elf         (ARM Trulsted Firmware Boot Loader state 3-1)
+    + bl31.elf         (ARM Trusted Firmware Boot Loader state 3-1)
     + u-boot.elf       (U-Boot)
   - boot/
     + boot.bin
 
 Build UltraZed-EG-IOCC Sample FPGA
 ------------------------------------------------------------------------------------
+
+## Requirement
+
+* Vivado 2017.2
 
 ### File Description
 
@@ -51,6 +50,10 @@ vivado% vivado -mode batch -source export_hardware.tcl
 Build FSBL
 ------------------------------------------------------------------------------------
 
+## Requirement
+
+* Vivado SDK 2017.2
+
 ### File Description
 
 * target/UltraZed-EG-IOCC/build/
@@ -68,6 +71,10 @@ vivado% hsi -mode tcl -source build_zynqmp_fsbl.hsi
 Build PMU Firmware
 ------------------------------------------------------------------------------------
 
+## Requirement
+
+* Vivado SDK 2017.2
+
 ### File Description
 
 * target/UltraZed-EG-IOCC/build/
@@ -83,8 +90,12 @@ vivado% cd target/UltraZed-EG-IOCC/build/fpga/
 vivado% hsi -mode tcl -source build_zynqmp_pmufw.hsi
 ```
 
-Build ARM Trulsted Firmware
+Build ARM Trusted Firmware
 ------------------------------------------------------------------------------------
+
+## Requirement
+
+* Vivado SDK 2017.2 or gcc-aarch64-linux-gnu
 
 ### Fetch Sources
 
@@ -145,6 +156,10 @@ vivado% cp build/zynqmp/release/bl31/bl31.elf ../bl31.elf
 Build U-Boot
 ------------------------------------------------------------------------------------
 
+## Requirement
+
+* gcc-aarch64-linux-gnu
+
 ### Download U-Boot Source
 
 #### Clone from u-boot-xlnx.git
@@ -198,13 +213,17 @@ vivado% cp u-boot.elf ../u-boot.elf
 Build boot.bin
 ------------------------------------------------------------------------------------
 
+## Requirement
+
+* Vivado SDK 2017.2
+
 ### File Description
 
 * target/UltraZed-EG-IOCC/
   - build/
     + zynqmp_fsbl.elf  (Built by "Build FSBL")
     + zynqmp_pmufw.elf (Built by "Build PMU Firmware")
-    + bl31.elf         (Built by "Build ARM Trulsted Firmware")  
+    + bl31.elf         (Built by "Build ARM Trusted Firmware")  
     + u-boot.elf       (Built by "Build U-Boot")
     + boot.bif
   - boot/
