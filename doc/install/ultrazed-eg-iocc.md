@@ -5,7 +5,7 @@
 ```
 shell$ git clone git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
-shell$ git checkout v0.1.0
+shell$ git checkout v0.1.1
 shell$ git lfs pull
 ```
 
@@ -16,8 +16,8 @@ shell$ git lfs pull
      - boot.bin                                                    : Stage 1 Boot Loader
      - uEnv.txt                                                    : U-Boot environment variables for linux boot
      - image-4.9.0-xlnx-v2017.3-fpga                               : Linux Kernel Image       (use Git LFS)
-     - devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb    : Linux Device Tree Blob   
-     - devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dts    : Linux Device Tree Source
+     - devicetree-4.9.0-xlnx-v2017.3-fpga-zynqmp-uz3eg-iocc.dtb    : Linux Device Tree Blob   
+     - devicetree-4.9.0-xlnx-v2017.3-fpga-zynqmp-uz3eg-iocc.dts    : Linux Device Tree Source
  * debian9-rootfs-vanilla.tgz                                      : Debian9 Root File System (use Git LFS)
  * linux-image-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb   : Linux Image Package      (use Git LFS)
  * linux-headers-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb : Linux Headers Package    (use Git LFS)
