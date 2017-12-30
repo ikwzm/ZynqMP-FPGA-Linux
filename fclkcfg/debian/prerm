@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+systemctl stop    fpga-clock.service
+systemctl disable fpga-clock.service
+
