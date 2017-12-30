@@ -29,6 +29,8 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + Installed ruby ruby-msgpack ruby-serialport
   + Installed python python3 msgpack-rpc-python
   + Installed u-boot-tools
+* FPGA Device Drivers and Services
+  + [fclkcfg    (FPGA Clock Configuration Device Driver)](https://github.com/ikwzm/fclkcfg)
 
 Install
 ------------------------------------------------------------------------------------
@@ -42,4 +44,4 @@ Build
 * [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build/Readme.md)
 * [Build Linux Kernel](doc/build/linux-xlnx-v2017.3-zynqmp-fpga.md)
 * [Build Debian9 RootFS](doc/build/debian9-rootfs.md)
-
+* [Build fclkcfg](fclkcfg/Readme.md)
