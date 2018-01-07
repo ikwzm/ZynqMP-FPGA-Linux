@@ -31,6 +31,7 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + Installed u-boot-tools
 * FPGA Device Drivers and Services
   + [fclkcfg    (FPGA Clock Configuration Device Driver)](https://github.com/ikwzm/fclkcfg)
+  + [udmabuf    (User space mappable DMA Buffer)](https://github.com/ikwzm/udmabuf)
 
 Install
 ------------------------------------------------------------------------------------
