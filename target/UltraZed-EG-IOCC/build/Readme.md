@@ -31,19 +31,19 @@ Build UltraZed-EG-IOCC Sample FPGA
 
 ### Create Project
 
-```
+```console
 vivado% vivado -mode batch -source create_project.tcl
 ```
 
 ### Implementation
 
-```
+```console
 vivado% vivado -mode batch -source implementation.tcl
 ```
 
 ### Export Hadware to project.sdk
 
-```
+```console
 vivado% vivado -mode batch -source export_hardware.tcl
 ```
 
@@ -63,7 +63,7 @@ Build FSBL
 
 ### Build zynqmp_fsbl.elf
 
-```
+```console
 vivado% cd target/UltraZed-EG-IOCC/build/fpga/
 vivado% hsi -mode tcl -source build_zynqmp_fsbl.hsi
 ```
@@ -85,7 +85,7 @@ Build PMU Firmware
 
 ### Build zynqmp_pmufw.elf
 
-```
+```console
 vivado% cd target/UltraZed-EG-IOCC/build/fpga/
 vivado% hsi -mode tcl -source build_zynqmp_pmufw.hsi
 ```
@@ -99,21 +99,21 @@ Build ARM Trusted Firmware
 
 ### Fetch Sources
 
-```
+```console
 vivado% cd target/UltraZed-EG-IOCC/build
 vivado% git clone https://github.com/Xilinx/arm-trusted-firmware.git
 ```
 
 ### Build
 
-```
+```console
 vivado% cd arm-trusted-firmware
 vivado% make CROSS_COMPILE=aarch64-linux-gnu- PLAT=zynqmp RESET_TO_BL31=1
 ```
 
 If you get the following error and you can not compile
 
-```
+```console
 Building zynqmp
   AS      bl31/aarch64/runtime_exceptions.S
 bl31/aarch64/runtime_exceptions.S: Assembler messages:
@@ -139,7 +139,7 @@ make: *** [build/zynqmp/release/bl31/runtime_exceptions.o] Error 1
 
 please build using tool chain of Vivado SDK.
 
-```
+```console
 vivado% cd arm-trusted-firmware
 vivado% make CROSS_COMPILE="<SDK PATH>/gnu/aarch64/<lin or nt>/aarch64-linux/bin/aarch64-linux-gnu-" PLAT=zynqmp RESET_TO_BL31=1
 ```
@@ -149,7 +149,7 @@ vivado% make CROSS_COMPILE="<SDK PATH>/gnu/aarch64/<lin or nt>/aarch64-linux/bin
 
 ### Copy bl31.elf
 
-```
+```console
 vivado% cp build/zynqmp/release/bl31/bl31.elf ../bl31.elf
 ```
 
@@ -164,22 +164,22 @@ Build U-Boot
 
 #### Clone from u-boot-xlnx.git
 
-```
+```console
 vivado% cd target/UltraZed-EG-IOCC/build
 vivado% git clone https://github.com/Xilinx/u-boot-xlnx.git u-boot-xlnx-v2017.3
 ```
 
 #### Checkout xilinx-v2017.3
 
-```
+```console
 vivado% cd u-boot-xlnx-v2017.3
 vivado% git checkout -b xilinx-v2017.3-ultrazed-eg-iocc refs/tags/xilinx-v2017.3
 ```
 
 ### Patch for UltraZed-EG-IOCC
 
-```
-vivado% patch -p0 < ../../../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc.diff
+```console
+vivado% patch -p0 < ../../../../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc.diff
 vivado% git add arch/arm/dts/zynqmp-uz3eg-iocc.dts
 vivado% git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.c
 vivado% git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.h
@@ -192,8 +192,8 @@ vivado% git tag -a xilinx-v2017.3-ultrazed-eg-iocc-0 -m "release xilinx-v2017.3-
 
 ### Patch fix bug for I2C freeze when reboot
 
-```
-vivado% patch -p0 < ../../../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc-i2c-patch.diff
+```console
+vivado% patch -p0 < ../../../../files/u-boot-xlnx-v2017.3-ultrazed-eg-iocc-i2c-patch.diff
 vivado% git add --update
 vivado% git commit -m "[fix] bug for I2C freeze when reboot"
 vivado% git tag -a xilinx-v2017.3-ultrazed-eg-iocc-1 -m "release xilinx-v2017.3-ultrazed-eg-iocc release 1"
@@ -202,7 +202,7 @@ vivado% git tag -a xilinx-v2017.3-ultrazed-eg-iocc-1 -m "release xilinx-v2017.3-
 
 ### Setup for Build 
 
-```
+```console
 vivado% cd u-boot-xlnx-v2017.3
 vivado% export ARCH=arm
 vivado% export CROSS_COMPILE=aarch64-linux-gnu-
@@ -211,13 +211,13 @@ vivado% make xilinx_zynqmp_uz3eg_iocc_defconfig
 
 ### Build u-boot.elf
 
-```
+```console
 vivado% make
 ```
 
 ### Copy u-boot.elf
 
-```
+```console
 vivado% cp u-boot.elf ../u-boot.elf
 ```
 
@@ -242,7 +242,7 @@ Build boot.bin
 
 ### Build boot.bin
 
-```
+```console
 vivado% cd target/UltraZed-EG-IOCC/build
 vivado% bootgen -arch zynqmp -image boot.bif -w -o ../boot/boot.bin
 ```
