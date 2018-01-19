@@ -36,6 +36,6 @@ make deb-pkg
 
 mkimage -A arm64 -O linux -a 0x80000 -e 0x80000 -n 'Linux-4.9.0-xlnx-v2017.3-fpga' -d arch/arm64/boot/Image.gz ../target/UltraZed-EG-IOCC/boot/uImage-4.9.0-xlnx-v2017.3-zynqmp-fpga
 cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb
-dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb
+./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.9.0-xlnx-v2017.3-zynqmp-fpga-uz3eg-iocc.dtb
 
 cd ..
