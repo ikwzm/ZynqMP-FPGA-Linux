@@ -37,13 +37,21 @@ shell$ git add --update
 shell$ git commit -m "[fix] build wrong architecture debian package when ARCH=arm64 and cross compile."
 ```
 
+#### Patch for linux-xlnx-v2017.3-builddeb2
+
+```console
+shell$ patch -p0 < ../files/linux-xlnx-v2017.3-builddeb2.diff
+shell$ git add --update
+shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package"
+```
+
 ###
 
 ##### Create tag and .version
 
 ```console
 shell$ git tag -a xilinx-v2017.3-zynqmp-fpga -m "release xilinx-v2017.3-zynqmp-fpga"
-shell$ echo 0 > .version
+shell$ echo 1 > .version
 ```
 
 #### Setup for Build 
