@@ -4,7 +4,7 @@
 
 ```
 shell$ cd ./fclkcfg
-shell$ git clone --depth=1 -b v0.0.3 https://github.com/ikwzm/fclkcfg
+shell$ git clone --depth=1 -b v1.0.0 https://github.com/ikwzm/fclkcfg
 ```
 
 #### Build Device Driver debian package

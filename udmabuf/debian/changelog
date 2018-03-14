@@ -1,3 +1,9 @@
+udmabuf-4.9.0-xlnx-v2017.3-zynqmp-fpga (1.1.0-1) unstable; urgency=low
+
+  * Update udmabuf v1.1.0
+
+ -- ikwzm <ichiro_k@ca2.so-net.ne.jp>  Wed, 14 Mar 2018 14:40:00 +0900
+
 udmabuf-4.9.0-xlnx-v2017.3-zynqmp-fpga (0.0.2-1) unstable; urgency=low
 
   * Update udmabuf v0.10.0
