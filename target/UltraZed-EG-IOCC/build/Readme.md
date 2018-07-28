@@ -104,6 +104,13 @@ vivado% cd target/UltraZed-EG-IOCC/build
 vivado% git clone https://github.com/Xilinx/arm-trusted-firmware.git
 ```
 
+#### Checkout xilinx-v2017.3
+
+```console
+vivado% cd arm-trusted-firmware
+vivado% git checkout -b xilinx-v2017.3-ultrazed-eg-iocc refs/tags/xilinx-v2017.3
+```
+
 ### Build
 
 ```console
