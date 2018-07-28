@@ -42,7 +42,7 @@ Install
 Build 
 ------------------------------------------------------------------------------------
 
-* [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build/Readme.md)
+* [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2017.3/Readme.md)
 * [Build Linux Kernel](doc/build/linux-xlnx-v2017.3-zynqmp-fpga.md)
 * [Build Debian9 RootFS](doc/build/debian9-rootfs.md)
 * [Build fclkcfg](fclkcfg/Readme.md)
