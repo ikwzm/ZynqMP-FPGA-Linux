@@ -6,7 +6,7 @@ LINUX_BUILD_DIR=linux-xlnx-v2017.3-zynqmp-fpga
 ### Download Linux Kernel Source
 git clone https://github.com/Xilinx/linux-xlnx.git $LINUX_BUILD_DIR
 cd $LINUX_BUILD_DIR
-git git checkout -b linux-xlnx-v2017.3-zynqmp-fpga refs/tags/xilinx-v2017.3
+git checkout -b linux-xlnx-v2017.3-zynqmp-fpga refs/tags/xilinx-v2017.3
 
 ### Patch for linux-xlnx-v2017.3-zynqmp-fpga
 patch -p0 < ../files/linux-xlnx-v2017.3-zynqmp-fpga.diff
@@ -30,7 +30,7 @@ make xilinx_zynqmp_defconfig
 
 ### Build Linux Kernel and device tree
 export DTC_FLAGS=--symbols
-make deb-pkg
+make deb-pkg -j16
 
 #### Build uImage and devicetree to target/zybo-pynqz1/boot/
 
