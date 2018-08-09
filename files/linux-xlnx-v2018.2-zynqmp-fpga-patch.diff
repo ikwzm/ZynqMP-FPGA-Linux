@@ -1,0 +1,45 @@
+diff --git a/drivers/fpga/zynqmp-fpga.c b/drivers/fpga/zynqmp-fpga.c
+index b0c482f..b16b0e1 100644
+--- a/drivers/fpga/zynqmp-fpga.c
++++ b/drivers/fpga/zynqmp-fpga.c
+@@ -25,6 +25,7 @@
+ /* Constant Definitions */
+ #define IXR_FPGA_DONE_MASK	0X00000008U
+ #define IXR_FPGA_ENCRYPTION_EN	0x00000008U
++#define IXR_FPGA_ONLY_BIN_EN	0x00000020U
+ 
+ struct zynqmp_fpga_priv {
+ 	struct device *dev;
+@@ -58,10 +59,15 @@ static int zynqmp_fpga_ops_write(struct fpga_manager *mgr,
+ 
+ 	priv = mgr->priv;
+ 
+-	if (mgr->flags & IXR_FPGA_ENCRYPTION_EN)
++	if      (mgr->flags & IXR_FPGA_ENCRYPTION_EN) {
+ 		dma_size = size + ENCRYPTED_KEY_LEN;
+-	else
++	}
++	else if (mgr->flags & IXR_FPGA_ONLY_BIN_EN) {
++		dma_size = size + sizeof(u32);
++	}
++	else {
+ 		dma_size = size;
++	}
+ 
+ 	kbuf = dma_alloc_coherent(priv->dev, dma_size, &dma_addr, GFP_KERNEL);
+ 	if (!kbuf)
+@@ -69,8 +75,13 @@ static int zynqmp_fpga_ops_write(struct fpga_manager *mgr,
+ 
+ 	memcpy(kbuf, buf, size);
+ 
+-	if (mgr->flags & IXR_FPGA_ENCRYPTION_EN)
++	if      (mgr->flags & IXR_FPGA_ENCRYPTION_EN) {
+ 		memcpy(kbuf + size, mgr->key, ENCRYPTED_KEY_LEN);
++	}
++	else if (mgr->flags & IXR_FPGA_ONLY_BIN_EN) {
++		u32* size_ptr = (u32*)(kbuf + size);
++		*size_ptr = (u32)size;
++	}
+ 
+ 	__flush_cache_user_range((unsigned long)kbuf,
+ 				 (unsigned long)kbuf + dma_size);
