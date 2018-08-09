@@ -103,7 +103,7 @@ Build ARM Trusted Firmware
 vivado% cd target/UltraZed-EG-IOCC/build-v2018.2
 vivado% git clone https://github.com/Xilinx/arm-trusted-firmware.git
 ```
-### Checkout xilinx-v2017.3
+### Checkout xilinx-v2018.2
 
 ```console
 vivado% cd arm-trusted-firmware

@@ -16,9 +16,9 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + FSBL(First Stage Boot Loader for ZynqMP)
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
-  + U-Boot v2017.01 (customized)
-* Linux Kernel Version v4.9.0
-  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2017.3
+  + U-Boot xilinx-v2018.2 (customized)
+* Linux Kernel Version v4.14.0
+  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2018.2
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
@@ -42,7 +42,7 @@ Install
 Build 
 ------------------------------------------------------------------------------------
 
-* [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2017.3/Readme.md)
-* [Build Linux Kernel](doc/build/linux-xlnx-v2017.3-zynqmp-fpga.md)
+* [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2018.2/Readme.md)
+* [Build Linux Kernel](doc/build/linux-xlnx-v2018.2-zynqmp-fpga.md)
 * [Build Debian9 RootFS](doc/build/debian9-rootfs.md)
 * [Build fclkcfg](fclkcfg/Readme.md)
