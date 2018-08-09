@@ -40,7 +40,7 @@ shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and
 #### Patch for linux-xlnx-v2018.2-zynqmp-fpga-patch
 
 ```console
-shell$ patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-path.diff
+shell$ patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-patch.diff
 shell$ git add --update
 shell$ git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file format"
 ```

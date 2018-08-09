@@ -6,7 +6,7 @@ LINUX_BUILD_DIR=linux-xlnx-v2018.2-zynqmp-fpga
 ### Download Linux Kernel Source
 git clone --depth 1 -b xilinx-v2018.2 https://github.com/Xilinx/linux-xlnx.git $LINUX_BUILD_DIR
 cd $LINUX_BUILD_DIR
-git git checkout -b linux-xlnx-v2018.2-zynqmp-fpga
+git checkout -b linux-xlnx-v2018.2-zynqmp-fpga
 
 ### Patch for linux-xlnx-v2018.2-zynqmp-fpga
 patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga.diff
@@ -21,7 +21,7 @@ git commit -m "[fix] build wrong architecture debian package when ARCH=arm64 and
 
 ### Patch for linux-xlnx-v2018.2-zynqmp-fpga-patch
 
-patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-path.diff
+patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-patch.diff
 git add --update
 git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file format"
 
