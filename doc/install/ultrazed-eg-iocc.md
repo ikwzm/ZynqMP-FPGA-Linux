@@ -21,8 +21,8 @@ shell$ git lfs pull
  * debian9-rootfs-vanilla.tgz                                      : Debian9 Root File System (use Git LFS)
  * linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb   : Linux Image Package      (use Git LFS)
  * linux-headers-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb : Linux Headers Package    (use Git LFS)
- * fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb       : fclkcfg Device Driver and Services Package
- * udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb       : udmabuf Device Driver and Services Package
+ * fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.0.0-1_arm64.deb       : fclkcfg Device Driver and Services Package
+ * udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.2.3-1_arm64.deb       : udmabuf Device Driver and Services Package
  
 ### Format SD-Card
 
@@ -98,28 +98,23 @@ Setting up linux-headers-4.14.0-xlnx-v2018.2-zynqmp-fpga (4.14.0-xlnx-v2018.2-zy
 
 ```
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:~# sudo dpkg -i fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb
+root@debian-fpga:~# dpkg -i fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.0.0-1_arm64.deb
 Selecting previously unselected package fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga.
-(Reading database ... 43458 files and directories currently installed.)
-Preparing to unpack fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb ...
-Unpacking fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga (0.0.1-1) ...
-Setting up fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga (0.0.1-1) ...
-Created symlink /etc/systemd/system/multi-user.target.wants/fpga-clock.service  → /etc/systemd/system/fpga-clock.service.
-[  345.865653] systemd[1]: apt-daily.timer: Adding 1h 45min 592.785ms random time.
-[  345.874409] systemd[1]: apt-daily-upgrade.timer: Adding 28min 35.939743s random time.
+(Reading database ... 63027 files and directories currently installed.)
+Preparing to unpack fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.0.0-1_arm64.deb ...
+Unpacking fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga (1.0.0-1) ...
+Setting up fclkcfg-4.14.0-xlnx-v2018.2-zynqmp-fpga (1.0.0-1) ...
 ```
 
 #### Install udmabuf Device Driver and Services Package
 
 ```
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:~# dpkg -i udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb
+root@debian-fpga:~# dpkg -i udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.2.3-1_arm64.deb
 Selecting previously unselected package udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga.
-(Reading database ... 43465 files and directories currently installed.)
-Preparing to unpack udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb ...
-Unpacking udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga (0.0.1-1) ...
-Setting up udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga (0.0.1-1) ...
-Created symlink /etc/systemd/system/multi-user.target.wants/udmabuf.service → /etc/systemd/system/udmabuf.service.
-[   77.496889] systemd[1]: apt-daily.timer: Adding 8h 53min 37.349217s random time.
+(Reading database ... 63033 files and directories currently installed.)
+Preparing to unpack udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_1.2.3-1_arm64.deb ...
+Unpacking udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga (1.2.3-1) ...
+Setting up udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga (1.2.3-1) ...
 ```
 
