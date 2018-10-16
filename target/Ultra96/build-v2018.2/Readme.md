@@ -175,30 +175,30 @@ Build U-Boot
 vivado% cd target/Ultra96/build-v2018.2
 vivado% git clone --depth=1 -b xilinx-v2018.2 https://github.com/Xilinx/u-boot-xlnx.git u-boot-xlnx-v2018.2
 vivado% cd u-boot-xlnx-v2018.2
-vivado% git checkout -b xilinx-v2018.2-ultrazed-eg-iocc
+vivado% git checkout -b xilinx-v2018.2-ultra96
 ```
 
 ### Patch for Ultra96
 
 ```console
-vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultrazed-eg-iocc.diff
-vivado% git add arch/arm/dts/zynqmp-uz3eg-iocc.dts
-vivado% git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.c
-vivado% git add board/xilinx/zynqmp/zynqmp-uz3eg-iocc/psu_init_gpl.h
-vivado% git add configs/xilinx_zynqmp_uz3eg_iocc_defconfig
-vivado% git add include/configs/xilinx_zynqmp_uz3eg_iocc.h
+vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96.diff
+vivado% git add arch/arm/dts/zynqmp-ultra96.dts
+vivado% git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.c
+vivado% git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.h
+vivado% git add configs/xilinx_zynqmp_ultra96_defconfig
+vivado% git add include/configs/xilinx_zynqmp_ultra96.h
 vivado% git add --update
 vivado% git commit -m "patch for Ultra96"
-vivado% git tag -a xilinx-v2018.2-ultrazed-eg-iocc-0 -m "release xilinx-v2018.2-ultrazed-eg-iocc release 0"
+vivado% git tag -a xilinx-v2018.2-ultra96-0 -m "release xilinx-v2018.2-ultra96 release 0"
 ```
 
 ### Patch for bootmenu
 
 ```console
-vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultrazed-eg-iocc-bootmenu.diff
+vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96-bootmenu.diff
 vivado% git add --update
 vivado% git commit -m "[update] for boot menu command"
-vivado% git tag -a xilinx-v2018.2-ultrazed-eg-iocc-1 -m "release xilinx-v2018.2-ultrazed-eg-iocc release 1"
+vivado% git tag -a xilinx-v2018.2-ultra96-1 -m "release xilinx-v2018.2-ultra96 release 1"
 ```
 
 
@@ -208,7 +208,7 @@ vivado% git tag -a xilinx-v2018.2-ultrazed-eg-iocc-1 -m "release xilinx-v2018.2-
 vivado% cd u-boot-xlnx-v2018.2
 vivado% export ARCH=arm
 vivado% export CROSS_COMPILE=aarch64-linux-gnu-
-vivado% make xilinx_zynqmp_uz3eg_iocc_defconfig
+vivado% make xilinx_zynqmp_ultra96_defconfig
 ```
 
 ### Build u-boot.elf
