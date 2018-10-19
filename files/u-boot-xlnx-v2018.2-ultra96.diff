@@ -295,12 +295,12 @@ index 0000000..0855479
 +
 +	pinctrl_sdhci0_default: sdhci0-default {
 +		mux {
-+			groups = "sdio0_0_grp";
++			groups = "sdio0_3_grp";
 +			function = "sdio0";
 +		};
 +
 +		conf {
-+			groups = "sdio0_0_grp";
++			groups = "sdio0_3_grp";
 +			slew-rate = <SLEW_RATE_SLOW>;
 +			io-standard = <IO_STANDARD_LVCMOS18>;
 +			bias-disable;
@@ -322,12 +322,12 @@ index 0000000..0855479
 +
 +	pinctrl_sdhci1_default: sdhci1-default {
 +		mux {
-+			groups = "sdio1_0_grp";
++			groups = "sdio1_2_grp";
 +			function = "sdio1";
 +		};
 +
 +		conf {
-+			groups = "sdio1_0_grp";
++			groups = "sdio1_2_grp";
 +			slew-rate = <SLEW_RATE_SLOW>;
 +			io-standard = <IO_STANDARD_LVCMOS18>;
 +			bias-disable;
