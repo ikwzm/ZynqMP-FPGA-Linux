@@ -5,10 +5,11 @@ Build Boot Loader for Ultra96
 
 * target/Ultra96/
   - build-v2018.2/
-    + zynqmp_fsbl.elf  (FSBL)
-    + zynqmp_pmufw.elf (PMU Firmware)
-    + bl31.elf         (ARM Trusted Firmware Boot Loader state 3-1)
-    + u-boot.elf       (U-Boot)
+    + zynqmp_fsbl.elf     (FSBL)
+    + zynqmp_pmufw.elf    (PMU Firmware)
+    + bl31.elf            (ARM Trusted Firmware Boot Loader state 3-1)
+    + u-boot.elf          (U-Boot)
+    + design_1_wrapper.bit(FPGA Bitstream File)
   - boot/
     + boot.bin
 
@@ -27,24 +28,34 @@ Build Ultra96 Sample FPGA
     + design_1_bd.tcl
     + implementation.tcl
     + export_hardware.tcl
-
+    + design_1_pin.xdc
 
 ### Create Project
 
 ```console
+vivado% cd target/Ultra96/build-v2018.2/fpga
 vivado% vivado -mode batch -source create_project.tcl
 ```
 
 ### Implementation
 
 ```console
+vivado% cd target/Ultra96/build-v2018.2/fpga
 vivado% vivado -mode batch -source implementation.tcl
 ```
 
 ### Export Hadware to project.sdk
 
 ```console
+vivado% cd target/Ultra96/build-v2018.2/fpga
 vivado% vivado -mode batch -source export_hardware.tcl
+```
+
+### Copy design_1_wrapper.bit
+
+```console
+shell$ cd target/Ultra96/build-v2018.2/fpga
+shell$ cp project.runs/impl_1/design_1_wrapper.bit ../design_1_wrapper.bit
 ```
 
 Build FSBL
@@ -172,55 +183,55 @@ Build U-Boot
 #### Clone from u-boot-xlnx.git and Checkout xilinx-v2018.2
 
 ```console
-vivado% cd target/Ultra96/build-v2018.2
-vivado% git clone --depth=1 -b xilinx-v2018.2 https://github.com/Xilinx/u-boot-xlnx.git u-boot-xlnx-v2018.2
-vivado% cd u-boot-xlnx-v2018.2
-vivado% git checkout -b xilinx-v2018.2-ultra96
+shell$ cd target/Ultra96/build-v2018.2
+shell$ git clone --depth=1 -b xilinx-v2018.2 https://github.com/Xilinx/u-boot-xlnx.git u-boot-xlnx-v2018.2
+shell$ cd u-boot-xlnx-v2018.2
+shell$ git checkout -b xilinx-v2018.2-ultra96
 ```
 
 ### Patch for Ultra96
 
 ```console
-vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96.diff
-vivado% git add arch/arm/dts/zynqmp-ultra96.dts
-vivado% git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.c
-vivado% git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.h
-vivado% git add configs/xilinx_zynqmp_ultra96_defconfig
-vivado% git add include/configs/xilinx_zynqmp_ultra96.h
-vivado% git add --update
-vivado% git commit -m "patch for Ultra96"
-vivado% git tag -a xilinx-v2018.2-ultra96-0 -m "release xilinx-v2018.2-ultra96 release 0"
+shell$ patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96.diff
+shell$ git add arch/arm/dts/zynqmp-ultra96.dts
+shell$ git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.c
+shell$ git add board/xilinx/zynqmp/zynqmp-ultra96/psu_init_gpl.h
+shell$ git add configs/xilinx_zynqmp_ultra96_defconfig
+shell$ git add include/configs/xilinx_zynqmp_ultra96.h
+shell$ git add --update
+shell$ git commit -m "patch for Ultra96"
+shell$ git tag -a xilinx-v2018.2-ultra96-0 -m "release xilinx-v2018.2-ultra96 release 0"
 ```
 
 ### Patch for bootmenu
 
 ```console
-vivado% patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96-bootmenu.diff
-vivado% git add --update
-vivado% git commit -m "[update] for boot menu command"
-vivado% git tag -a xilinx-v2018.2-ultra96-1 -m "release xilinx-v2018.2-ultra96 release 1"
+shell$ patch -p1 < ../../../../files/u-boot-xlnx-v2018.2-ultra96-bootmenu.diff
+shell$ git add --update
+shell$ git commit -m "[update] for boot menu command"
+shell$ git tag -a xilinx-v2018.2-ultra96-1 -m "release xilinx-v2018.2-ultra96 release 1"
 ```
 
 
 ### Setup for Build 
 
 ```console
-vivado% cd u-boot-xlnx-v2018.2
-vivado% export ARCH=arm
-vivado% export CROSS_COMPILE=aarch64-linux-gnu-
-vivado% make xilinx_zynqmp_ultra96_defconfig
+shell$ cd u-boot-xlnx-v2018.2
+shell$ export ARCH=arm
+shell$ export CROSS_COMPILE=aarch64-linux-gnu-
+shell$ make xilinx_zynqmp_ultra96_defconfig
 ```
 
 ### Build u-boot.elf
 
 ```console
-vivado% make
+shell$ make
 ```
 
 ### Copy u-boot.elf
 
 ```console
-vivado% cp u-boot.elf ../u-boot.elf
+shell$ cp u-boot.elf ../u-boot.elf
 ```
 
 Build boot.bin
@@ -234,10 +245,11 @@ Build boot.bin
 
 * target/Ultra96/
   - build-v2018.2/
-    + zynqmp_fsbl.elf  (Built by "Build FSBL")
-    + zynqmp_pmufw.elf (Built by "Build PMU Firmware")
-    + bl31.elf         (Built by "Build ARM Trusted Firmware")  
-    + u-boot.elf       (Built by "Build U-Boot")
+    + zynqmp_fsbl.elf      (Built by "Build FSBL")
+    + zynqmp_pmufw.elf     (Built by "Build PMU Firmware")
+    + bl31.elf             (Built by "Build ARM Trusted Firmware")  
+    + u-boot.elf           (Built by "Build U-Boot")
+    + design_1_wrapper.bit (Build by "Build Ultra96 Sample FPGA")
     + boot.bif
   - boot/
     + boot.bin
@@ -245,7 +257,7 @@ Build boot.bin
 ### Build boot.bin
 
 ```console
-vivado% cd target/Ultra96/build
+vivado% cd target/Ultra96/build-v2018.2
 vivado% bootgen -arch zynqmp -image boot.bif -w -o ../boot/boot.bin
 ```
 
