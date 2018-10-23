@@ -1,7 +1,12 @@
-linux_img_load_cmd=fatload mmc 1 $kernel_addr image-4.14.0-xlnx-v2018.2-zynqmp-fpga
-linux_dtb_load_cmd=fatload mmc 1 $fdt_addr    devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
-linux_set_boot_cmd=setenv bootargs console=ttyPS0,115200 root=/dev/mmcblk1p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
-linux_boot_img_cmd=booti $kernel_addr - $fdt_addr
-uenvcmd=run linux_img_load_cmd && run linux_dtb_load_cmd && run linux_set_boot_cmd && run linux_boot_img_cmd
+linux_kernel_image=image-4.14.0-xlnx-v2018.2-zynqmp-fpga
+linux_fdt_image=devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
+linux_boot_args=console=ttyPS0,115200 root=/dev/mmcblk1p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
+
+linux_img_load_cmd=fatload mmc ${sdbootdev} ${kernel_addr} ${linux_kernel_image}
+linux_fdt_load_cmd=fatload mmc ${sdbootdev} ${fdt_addr}    ${linux_fdt_image}
+linux_load_cmd=run linux_img_load_cmd && run linux_fdt_load_cmd
+linux_boot_cmd=setenv bootargs ${linux_boot_args} && booti ${kernel_addr} - ${fdt_addr}
+
+uenvcmd=run linux_load_cmd && run linux_boot_cmd
 
 bootmenu_0=Boot Default=boot
