@@ -59,8 +59,7 @@ dpkg-reconfigure tzdata
 #### Setup fstab
 
 cat <<EOT > /etc/fstab
-/dev/mmcblk1p1	/boot	auto		defaults	0	0
-none		/config	configfs	defaults	0	0
+none		/config		configfs	defaults	0	0
 EOT
 
 #### Setup Network Interface
@@ -73,13 +72,7 @@ EOT
 #### Setup /lib/firmware
 
 mkdir /lib/firmware
-
-#### Install Wireless tools and firmware
-
-apt-get install -y wireless-tools
-apt-get install -y wpasupplicant
-apt-get install -y firmware-realtek
-apt-get install -y firmware-ralink
+mkdir /lib/firmware/ti-connectivity
 
 #### Install Development applications
 
@@ -101,11 +94,26 @@ apt-get install -y flex bison
 cd root
 mkdir src
 cd src
-git clone https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
+git clone -b v1.4.7 https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
 cd dtc
 make
 make HOME=/usr/local install-bin
 cd /
+
+#### Install Wireless tools and firmware
+
+apt-get install -y wireless-tools
+apt-get install -y wpasupplicant
+apt-get install -y firmware-realtek
+apt-get install -y firmware-ralink
+
+git clone git://git.ti.com/wilink8-wlan/wl18xx_fw.git
+cp wl18xx_fw/wl18xx-fw-4.bin /lib/firmware/ti-connectivity
+rm -rf wl18xx_fw/
+
+git clone git://git.ti.com/wilink8-bt/ti-bt-firmware
+cp ti-bt-firmware/TIInit_11.8.32.bts /lib/firmware/ti-connectivity
+rm -rf ti-bt-firmware
 
 #### Install Other applications
 
@@ -114,15 +122,12 @@ apt-get install -y samba
 
 #### Install Linux Modules
 
-mv    boot boot.org
-mkdir boot
-dpkg -i linux-image-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
-dpkg -i linux-headers-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
-rm    boot/*
-rmdir boot
-mv    boot.org boot
+dpkg -i linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb
 
 #### Clean Cache
 
 apt-get clean
 
+##### Create Debian Package List
+
+dpkg -l > dpkg-list.txt

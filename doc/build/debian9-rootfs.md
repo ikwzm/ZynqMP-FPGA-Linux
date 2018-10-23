@@ -16,8 +16,7 @@ shell$ sudo debootstrap --arch=arm64 --foreign $distro    $targetdir
 shell$ sudo cp /usr/bin/qemu-aarch64-static               $targetdir/usr/bin
 shell$ sudo cp /etc/resolv.conf                           $targetdir/etc
 shell$ sudo cp scripts/build-debian9-rootfs-with-qemu.sh  $targetdir
-shell$ sudo cp linux-image-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb   $targetdir
-shell$ sudo cp linux-headers-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb $targetdir
+shell$ sudo cp linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb $targetdir
 ````
 
 #### Build debian9-rootfs with QEMU
@@ -130,8 +129,7 @@ debian9-rootfs# dpkg-reconfigure -f noninteractive tzdata
 
 ```console
 debian9-rootfs# cat <<EOT > /etc/fstab
-/dev/mmcblk1p1	/boot	auto		defaults	0	0
-none		/config	configfs	defaults	0	0
+none		/config		configfs	defaults	0	0
 EOT
 ````
 
@@ -148,15 +146,7 @@ EOT
 
 ```console
 debian9-rootfs# mkdir /lib/firmware
-```
-
-##### Install Wireless tools and firmware
-
-```console
-debian9-rootfs# apt-get install wireless-tools
-debian9-rootfs# apt-get install wpasupplicant
-debian9-rootfs# apt-get install firmware-realtek
-debian9-rootfs# apt-get install firmware-ralink
+debian9-rootfs# mkdir /lib/firmware/ti-connectivity
 ```
 
 ##### Install Development applications
@@ -180,11 +170,32 @@ debian9-rootfs# apt-get install -y flex bison
 debian9-rootfs# cd root
 debian9-rootfs# mkdir src
 debian9-rootfs# cd src
-debian9-rootfs# git clone https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
+debian9-rootfs# git clone -b v1.4.7 https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
 debian9-rootfs# cd dtc
 debian9-rootfs# make
 debian9-rootfs# make HOME=/usr/local install-bin
 debian9-rootfs# cd /
+```
+
+##### Install Wireless tools and firmware
+
+```console
+debian9-rootfs# apt-get install wireless-tools
+debian9-rootfs# apt-get install wpasupplicant
+debian9-rootfs# apt-get install firmware-realtek
+debian9-rootfs# apt-get install firmware-ralink
+```
+
+```console
+debian9-rootfs# git clone git://git.ti.com/wilink8-wlan/wl18xx_fw.git
+debian9-rootfs# cp wl18xx_fw/wl18xx-fw-4.bin /lib/firmware/ti-connectivity
+debian9-rootfs# rm -rf wl18xx_fw/
+```
+
+```console
+debian9-rootfs# git clone git://git.ti.com/wilink8-bt/ti-bt-firmware
+debian9-rootfs# cp ti-bt-firmware/TIInit_11.8.32.bts /lib/firmware/ti-connectivity
+debian9-rootfs# rm -rf ti-bt-firmware
 ```
 
 ##### Install Other applications
@@ -194,16 +205,10 @@ debian9-rootfs# apt-get install -y samba
 debian9-rootfs# apt-get install -y avahi-daemon
 ```
 
-##### Install Linux Header and Modules
+##### Install Linux Modules
 
 ```console
-debian9-rootfs# mv    boot boot.org
-debian9-rootfs# mkdir boot
-debian9-rootfs# dpkg -i linux-image-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
-debian9-rootfs# dpkg -i linux-headers-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
-debian9-rootfs# rm    boot/*
-debian9-rootfs# rmdir boot
-debian9-rootfs# mv    boot.org boot
+debian9-rootfs# dpkg -i linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb
 ```
 
 ##### Clean Cache
@@ -224,8 +229,7 @@ debian9-rootfs# dpkg -l > dpkg-list.txt
 debian9-rootfs# exit
 shell$ sudo rm -f $targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $targetdir/build-debian9-rootfs-with-qemu.sh
-shell$ sudo rm -f $targetdir/linux-image-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
-shell$ sudo rm -f $targetdir/linux-headers-4.9.0-xlnx-v2017.3-zynqmp-fpga_4.9.0-xlnx-v2017.3-zynqmp-fpga-1_arm64.deb
+shell$ sudo rm -f $targetdir/linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb
 shell$ sudo mv    $targetdir/dpkg-list.txt files/dpkg-list.txt
 ```
 
