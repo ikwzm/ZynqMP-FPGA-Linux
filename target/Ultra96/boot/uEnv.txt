@@ -1,6 +1,6 @@
 linux_kernel_image=image-4.14.0-xlnx-v2018.2-zynqmp-fpga
-linux_fdt_image=devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
-linux_boot_args=console=ttyPS0,115200 root=/dev/mmcblk1p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
+linux_fdt_image=devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dtb
+linux_boot_args=console=ttyPS0,115200 root=/dev/mmcblk0p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
 
 linux_img_load_cmd=fatload mmc ${sdbootdev} ${kernel_addr} ${linux_kernel_image}
 linux_fdt_load_cmd=fatload mmc ${sdbootdev} ${fdt_addr}    ${linux_fdt_image}

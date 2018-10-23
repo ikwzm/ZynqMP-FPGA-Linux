@@ -1,5 +1,0 @@
-#!/bin/sh -e
-
-systemctl stop    udmabuf.service
-systemctl disable udmabuf.service
-
