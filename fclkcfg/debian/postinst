@@ -1,6 +1,0 @@
-#!/bin/sh -e
-
-depmod
-
-systemctl enable  fpga-clock.service
-systemctl start   fpga-clock.service
