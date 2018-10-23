@@ -1,6 +1,0 @@
-#!/bin/sh -e
-
-depmod
-
-systemctl enable  udmabuf.service
-systemctl start   udmabuf.service
