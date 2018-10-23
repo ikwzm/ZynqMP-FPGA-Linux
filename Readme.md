@@ -40,7 +40,7 @@ Install
 
 * Install U-Boot and Linux to SD-Card
   + [UltraZed-EG-IOCC](doc/install/ultrazed-eg-iocc.md)
-  + [Ultra96](doc/install/ultra97.md)
+  + [Ultra96](doc/install/ultra96.md)
 
 Build 
 ------------------------------------------------------------------------------------
