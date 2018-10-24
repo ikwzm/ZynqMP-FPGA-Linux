@@ -1,10 +1,10 @@
 /dts-v1/;
 
 / {
-	compatible = "xlnx,zynqmp-zcu100-revC", "xlnx,zynqmp-zcu100", "xlnx,zynqmp";
+	compatible = "xlnx,zynqmp-ultra96", "xlnx,zynqmp";
 	#address-cells = <0x2>;
 	#size-cells = <0x2>;
-	model = "ZynqMP ZCU100 RevC";
+	model = "ZynqMP Ultra96";
 
 	cpus {
 		#address-cells = <0x1>;
@@ -1928,6 +1928,15 @@
 		reg = <0x0 0x0 0x0 0x80000000>;
 	};
 
+	amba_pl@0 {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		compatible = "simple-bus";
+		ranges;
+		linux,phandle = <0x95>;
+		phandle = <0x95>;
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 		#address-cells = <0x1>;
@@ -1989,8 +1998,8 @@
 		trigger-gpios = <0x17 0x1a 0x1>;
 		watchdog-gpios = <0x17 0x23 0x0>;
 		kill-gpios = <0x17 0x22 0x1>;
-		linux,phandle = <0x95>;
-		phandle = <0x95>;
+		linux,phandle = <0x96>;
+		phandle = <0x96>;
 	};
 
 	fixedregulator-mmcsdio {
@@ -2158,6 +2167,7 @@
 		aux_ref_clk = "/aux_ref_clk";
 		clk = "/clk";
 		dp_aclk = "/dp_aclk";
+		amba_pl = "/amba_pl@0";
 		ltc2954 = "/ltc2954";
 		wmmcsdio_fixed = "/fixedregulator-mmcsdio";
 		sdio_pwrseq = "/sdio_pwrseq";

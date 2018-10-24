@@ -12,6 +12,7 @@ git checkout -b linux-xlnx-v2018.2-zynqmp-fpga
 patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga.diff
 git add --update
 git add arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
+git add arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dts 
 git commit -m "[patch] for linux-xlnx-v2018.2-zynqmp-fpga."
 
 ### Patch for linux-xlnx-v2018.2-builddeb
@@ -43,5 +44,11 @@ make deb-pkg
 cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-4.14.0-xlnx-v2018.2-zynqmp-fpga
 cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
+
+#### Build kernel image and devicetree to target/Ultra96/boot/
+
+cp arch/arm64/boot/Image ../target/Ultra96/boot/image-4.14.0-xlnx-v2018.2-zynqmp-fpga
+cp arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dtb ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dtb
+./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dts ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dtb
 
 cd ..
