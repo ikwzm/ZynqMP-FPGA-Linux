@@ -26,6 +26,7 @@ shell$ git checkout -b linux-xlnx-v2018.2-zynqmp-fpga refs/tags/xilinx-v2018.2
 shell$ patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga.diff
 shell$ git add --update
 shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
+shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dts 
 shell$ git commit -m "[patch] for linux-xlnx-v2018.2-zynqmp-fpga."
 ```
 
@@ -70,10 +71,18 @@ shell$ export DTC_FLAGS=--symbols
 shell$ make deb-pkg
 ````
 
-#### Build uImage and devicetree to target/zybo-pynqz1/boot/
+#### Build kernel image and devicetree to target/UltraZed-EG-IOCC/boot/
 
-```console
+````console
 shell$ cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-4.14.0-xlnx-v2018.2-zynqmp-fpga
-shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-fpga-zynqmp-uz3eg-iocc.dtb
-shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-fpga-zynqmp-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-fpga-zynqmp-uz3eg-iocc.dtb
+shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
+shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-uz3eg-iocc.dtb
+````
+
+#### Build kernel image and devicetree to target/Ultra96/boot/
+
+````console
+shell$ cp arch/arm64/boot/Image ../target/Ultra96/boot/image-4.14.0-xlnx-v2018.2-zynqmp-fpga
+shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dtb ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dtb
+shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dts ../target/Ultra96/boot/devicetree-4.14.0-xlnx-v2018.2-zynqmp-fpga-ultra96.dtb
 ```
