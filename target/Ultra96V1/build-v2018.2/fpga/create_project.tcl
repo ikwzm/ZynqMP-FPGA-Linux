@@ -5,9 +5,6 @@
 set project_directory       [file dirname [info script]]
 set project_name            "project"
 set board_part              [get_board_parts -quiet -latest_file_version "*ultra96v1*"]
-if {[string equal $board_part  "" ] == 1} {
-  set board_part            [get_board_parts -quiet -latest_file_version "*ultra96*"]
-}    
 set design_bd_tcl_file      [file join $project_directory "design_1_bd.tcl"  ]
 lappend constrs_file_list   [file join $project_directory "design_1_pin.xdc" ]
 #
