@@ -56,7 +56,7 @@ shell# cp udmabuf-4.14.0-xlnx-v2018.2-zynqmp-fpga_0.0.1-1_arm64.deb       /mnt/u
 ```console
 shell# mkdir /mnt/usb2/mnt/boot
 shell# cat <<EOT >> /mnt/usb2/etc/fstab
-/dev/mmcblk1p1	/mnt/boot	defaults	0	0
+/dev/mmcblk1p1	/mnt/boot	auto	defaults	0	0
 EOT
 ```
 
