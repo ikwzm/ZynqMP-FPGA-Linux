@@ -261,3 +261,10 @@ vivado% cd target/Ultra96/build-v2018.2
 vivado% bootgen -arch zynqmp -image boot.bif -w -o ../boot/boot.bin
 ```
 
+### Build boot_outer_sharable.bin
+
+```console
+vivado% cd target/Ultra96/build-v2018.2
+vivado% bootgen -arch zynqmp -image boot_outer_shareable.bif -w -o ../boot/boot_outer_shareable.bin
+```
+
