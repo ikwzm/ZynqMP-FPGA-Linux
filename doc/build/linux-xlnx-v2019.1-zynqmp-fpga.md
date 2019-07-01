@@ -42,7 +42,7 @@ shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and
 ##### Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2019.1-zynqmp-fpga -m "release xilinx-v2019.1-zynqmp-fpga"
+shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-0 -m "release xilinx-v2019.1-zynqmp-fpga-0"
 shell$ echo 0 > .version
 ```
 
