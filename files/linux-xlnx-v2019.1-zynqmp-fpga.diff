@@ -8,17 +8,13 @@ index bec4746..a8f1d7e 100644
  dtb-$(CONFIG_ARCH_ZYNQMP) += zynqmp-zcu1285-revA.dtb
 +dtb-$(CONFIG_ARCH_ZYNQMP) += zynqmp-uz3eg-iocc.dtb
 diff --git a/arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dts b/arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dts
-index 88aa06f..593a474 100644
+index 88aa06f..06636c1 100644
 --- a/arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dts
 +++ b/arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dts
-@@ -16,4 +16,15 @@
+@@ -16,4 +16,11 @@
  	compatible = "avnet,ultra96-rev1", "avnet,ultra96",
  		     "xlnx,zynqmp-zcu100-revC", "xlnx,zynqmp-zcu100",
  		     "xlnx,zynqmp";
-+
-+	aliases {
-+		clk = &zynqmp_clk;
-+	};
 +
 +	amba_pl: amba_pl@0 {
 +		#address-cells = <2>;
@@ -29,10 +25,10 @@ index 88aa06f..593a474 100644
  };
 diff --git a/arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts b/arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
 new file mode 100644
-index 0000000..20e52e2
+index 0000000..dcb24ae
 --- /dev/null
 +++ b/arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
-@@ -0,0 +1,514 @@
+@@ -0,0 +1,513 @@
 +/dts-v1/;
 +
 +#include "zynqmp.dtsi"
@@ -51,7 +47,6 @@ index 0000000..20e52e2
 +		serial0 = &uart0;
 +		serial1 = &uart1;
 +		spi0 = &qspi;
-+		clk = &zynqmp_clk;
 +	};
 +
 +	chosen {
