@@ -37,13 +37,21 @@ shell$ git add --update
 shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package"
 ```
 
+#### Patch for linux-xlnx-v2019.1-zynqmp-fpga-clk-divider
+
+```console
+shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-clk-divider.diff
+shell$ git add --update
+shell$ git commit -m "[fix] a bug where 0 was specified for clock divider settings"
+```
+
 ###
 
 ##### Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-0 -m "release xilinx-v2019.1-zynqmp-fpga-0"
-shell$ echo 0 > .version
+shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-1 -m "release xilinx-v2019.1-zynqmp-fpga-1"
+shell$ echo 1 > .version
 ```
 
 #### Setup for Build 
