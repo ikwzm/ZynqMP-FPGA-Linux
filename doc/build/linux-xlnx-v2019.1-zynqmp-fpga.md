@@ -26,7 +26,6 @@ shell$ git checkout -b linux-xlnx-v2019.1-zynqmp-fpga refs/tags/xilinx-v2019.1
 shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga.diff
 shell$ git add --update
 shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
-shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dts 
 shell$ git commit -m "[patch] for linux-xlnx-v2019.1-zynqmp-fpga."
 ```
 
@@ -36,14 +35,6 @@ shell$ git commit -m "[patch] for linux-xlnx-v2019.1-zynqmp-fpga."
 shell$ patch -p1 < ../files/linux-xlnx-v2019.1-builddeb.diff
 shell$ git add --update
 shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package"
-```
-
-#### Patch for linux-xlnx-v2019.1-zynqmp-fpga-patch
-
-```console
-shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-patch.diff
-shell$ git add --update
-shell$ git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file format"
 ```
 
 ###
