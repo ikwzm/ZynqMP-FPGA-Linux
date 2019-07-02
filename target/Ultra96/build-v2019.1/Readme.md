@@ -126,7 +126,7 @@ vivado% git checkout -b xilinx-v2019.1-ultra96 refs/tags/xilinx-v2019.1
 
 ```console
 vivado% cd arm-trusted-firmware
-vivado% make ERROR_DEPRECATED=1 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu- PLAT=zynqmp bl31
+vivado% make ERROR_DEPRECATED=1 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu- PLAT=zynqmp ZYNQMP_CONSOLE=cadence1 bl31
 ```
 
 If you get the following error and you can not compile
