@@ -26,7 +26,6 @@ shell$ git checkout -b linux-xlnx-v2019.1-zynqmp-fpga refs/tags/xilinx-v2019.1
 shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga.diff
 shell$ git add --update
 shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dts
-shell$ git add arch/arm64/boot/dts/xilinx/zynqmp-ultra96.dts 
 shell$ git commit -m "[patch] for linux-xlnx-v2019.1-zynqmp-fpga."
 ```
 
@@ -38,12 +37,12 @@ shell$ git add --update
 shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package"
 ```
 
-#### Patch for linux-xlnx-v2019.1-zynqmp-fpga-patch
+#### Patch for linux-xlnx-v2019.1-zynqmp-fpga-clk-divider
 
 ```console
-shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-patch.diff
+shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-clk-divider.diff
 shell$ git add --update
-shell$ git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file format"
+shell$ git commit -m "[fix] a bug where 0 was specified for clock divider settings"
 ```
 
 ###
@@ -51,8 +50,8 @@ shell$ git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file forma
 ##### Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2019.1-zynqmp-fpga -m "release xilinx-v2019.1-zynqmp-fpga"
-shell$ echo 0 > .version
+shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-1 -m "release xilinx-v2019.1-zynqmp-fpga-1"
+shell$ echo 1 > .version
 ```
 
 #### Setup for Build 
