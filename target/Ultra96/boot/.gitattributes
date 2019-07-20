@@ -2,4 +2,4 @@ boot.bin filter=lfs diff=lfs merge=lfs -text
 boot_outer_shareable.bin filter=lfs diff=lfs merge=lfs -text
 image-4.9.0-xlnx-v2017.3-fpga filter=lfs diff=lfs merge=lfs -text
 image-4.14.0-xlnx-v2018.2-zynqmp-fpga filter=lfs diff=lfs merge=lfs -text
-
+image-4.19.0-xlnx-v2019.1-zynqmp-fpga filter=lfs diff=lfs merge=lfs -text
