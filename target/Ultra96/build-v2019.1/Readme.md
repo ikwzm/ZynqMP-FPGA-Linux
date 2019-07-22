@@ -132,7 +132,7 @@ vivado% make ERROR_DEPRECATED=1 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu-
 If you get the following error and you can not compile
 
 ```console
-make ERROR_DEPRECATED=1 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu- PLAT=zynqmp bl31
+vivado% make ERROR_DEPRECATED=1 RESET_TO_BL31=1 CROSS_COMPILE=aarch64-linux-gnu- PLAT=zynqmp ZYNQMP_CONSOLE=cadence1 bl31
    :
    :
    :
@@ -142,7 +142,6 @@ drivers/console/aarch64/deprecated_console.S:12:2: error: #warning "Using deprec
   ^
 cc1: all warnings being treated as errors
 ```
-
 Please comment out the following line in drivers/console/aarch64/deprecated_console.S
 
 ```diff
@@ -159,6 +158,10 @@ Please comment out the following line in drivers/console/aarch64/deprecated_cons
         .globl  console_uninit
 ```
 
+```console
+vivado% git add --update
+vivado% git commit -m "[remove] warning in drivers/console/aarch64/deprecated_console.S"
+```
 If you get the following error and you can not compile
 
 ```console
