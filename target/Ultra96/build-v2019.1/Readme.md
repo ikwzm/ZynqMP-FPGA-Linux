@@ -161,6 +161,7 @@ Please comment out the following line in drivers/console/aarch64/deprecated_cons
 ```console
 vivado% git add --update
 vivado% git commit -m "[remove] warning in drivers/console/aarch64/deprecated_console.S"
+vivado% git tag -a xilinx-v2019.1-ultra96-1 -m "release xilinx-v2019.1-ultra96-1"
 ```
 If you get the following error and you can not compile
 
