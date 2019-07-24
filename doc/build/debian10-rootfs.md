@@ -16,7 +16,7 @@ shell$ sudo debootstrap --arch=arm64 --foreign $distro     $targetdir
 shell$ sudo cp /usr/bin/qemu-aarch64-static                $targetdir/usr/bin
 shell$ sudo cp /etc/resolv.conf                            $targetdir/etc
 shell$ sudo cp scripts/build-debian10-rootfs-with-qemu.sh  $targetdir
-shell$ sudo cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-1_arm64.deb $targetdir
+shell$ sudo cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb $targetdir
 ````
 
 #### Build debian10-rootfs with QEMU
@@ -147,6 +147,7 @@ EOT
 ```console
 debian10-rootfs# mkdir /lib/firmware
 debian10-rootfs# mkdir /lib/firmware/ti-connectivity
+debian10-rootfs# mkdir /lib/firmware/mchp
 ```
 
 ##### Install Development applications
@@ -200,6 +201,12 @@ debian10-rootfs# cp ti-bt-firmware/TIInit_11.8.32.bts /lib/firmware/ti-connectiv
 debian10-rootfs# rm -rf ti-bt-firmware
 ```
 
+```console
+debian10-rootfs# git clone git://github.com/linux4wilc/firmware  linux4wilc-firmware  
+debian10-rootfs# cp linux4wilc-firmware/*.bin /lib/firmware/mchp
+debian10-rootfs# rm -rf linux4wilc-firmware  
+```
+
 ##### Install Other applications
 
 ```console
@@ -237,7 +244,7 @@ debian10-rootfs# dpkg -l > dpkg-list.txt
 debian10-rootfs# exit
 shell$ sudo rm -f $targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $targetdir/build-debian10-rootfs-with-qemu.sh
-shell$ sudo rm -f $targetdir/linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-1_arm64.deb
+shell$ sudo rm -f $targetdir/linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-2_arm64.deb
 shell$ sudo mv    $targetdir/dpkg-list.txt files/dpkg-list.txt
 ```
 

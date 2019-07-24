@@ -73,6 +73,7 @@ EOT
 
 mkdir /lib/firmware
 mkdir /lib/firmware/ti-connectivity
+mkdir /lib/firmware/mchp
 
 #### Install Development applications
 
@@ -115,6 +116,10 @@ git clone git://git.ti.com/wilink8-bt/ti-bt-firmware
 cp ti-bt-firmware/TIInit_11.8.32.bts /lib/firmware/ti-connectivity
 rm -rf ti-bt-firmware
 
+git clone git://github.com/linux4wilc/firmware  linux4wilc-firmware  
+cp linux4wilc-firmware/*.bin /lib/firmware/mchp
+rm -rf linux4wilc-firmware  
+
 #### Install Other applications
 
 apt-get install -y avahi-daemon
@@ -126,7 +131,7 @@ apt-get install -y haveged
 
 #### Install Linux Modules
 
-dpkg -i linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-1_arm64.deb
+dpkg -i linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb
 
 #### Clean Cache
 
