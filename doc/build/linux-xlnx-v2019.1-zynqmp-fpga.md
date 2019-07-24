@@ -5,6 +5,11 @@ There are two ways
 1. run scripts/build-linux-xlnx-v2019.1-zynqmp-fpga.sh (easy)
 2. run this chapter step-by-step (annoying)
 
+#### Download ATWILC3000 Linux Driver for Ultra96-V2
+
+```console
+shell$ git clone https://github.com/Avnet/u96v2-wilc-driver.git
+```
 #### Download Linux Kernel Source
 
 ##### Clone from linux-xlnx.git
@@ -34,7 +39,7 @@ shell$ git commit -m "[patch] for linux-xlnx-v2019.1-zynqmp-fpga."
 ```console
 shell$ patch -p1 < ../files/linux-xlnx-v2019.1-builddeb.diff
 shell$ git add --update
-shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package"
+shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package."
 ```
 
 #### Patch for linux-xlnx-v2019.1-zynqmp-fpga-clk-divider
@@ -45,13 +50,30 @@ shell$ git add --update
 shell$ git commit -m "[fix] a bug where 0 was specified for clock divider settings"
 ```
 
-###
-
-##### Create tag and .version
+#### Add ATWILC3000 Linux Driver for Ultra96-V2
 
 ```console
-shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-1 -m "release xilinx-v2019.1-zynqmp-fpga-1"
-shell$ echo 1 > .version
+shell$ cp -r ../u96v2-wilc-driver/wilc drivers/staging/wilc3000/
+shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-wilc3000.diff
+shell$ git add --update
+shell$ git add drivers/staging/wilc3000
+shell$ git commit -m "[add] drivers/staging/wilc3000"
+```
+
+#### Patch for Ultra96-V2
+
+```console
+shell$ patch -p1 < ../files/linux-xlnx-v2019.1-zynqmp-fpga-ultra96v2.diff
+shell$ git add --update
+shell$ git add arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts 
+shell$ git commit -m "[add] devicetree for Ultra96-V2."
+```
+
+#### Create tag and .version
+
+```console
+shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-2 -m "release xilinx-v2019.1-zynqmp-fpga-2"
+shell$ echo 2 > .version
 ```
 
 #### Setup for Build 
@@ -85,3 +107,13 @@ shell$ cp arch/arm64/boot/Image ../target/Ultra96/boot/image-4.19.0-xlnx-v2019.1
 shell$ cp arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dtb ../target/Ultra96/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96.dtb
 shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96.dts ../target/Ultra96/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96.dtb
 ```
+
+#### Build kernel image and devicetree to target/Ultra96-V2/boot/
+
+````console
+shell$ cp arch/arm64/boot/Image ../target/Ultra96-V2/boot/image-4.19.0-xlnx-v2019.1-zynqmp-fpga
+shell$ cp arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dtb ../target/Ultra96-V2/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dtb
+shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96-V2/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dts ../target/Ultra96-V2/boot/devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dtb
+```
+
+

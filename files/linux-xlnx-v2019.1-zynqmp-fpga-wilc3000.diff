@@ -1,0 +1,25 @@
+diff --git a/drivers/staging/Kconfig b/drivers/staging/Kconfig
+index b66275191..05a605794 100644
+--- a/drivers/staging/Kconfig
++++ b/drivers/staging/Kconfig
+@@ -96,6 +96,8 @@ source "drivers/staging/fsl-dpaa2/Kconfig"
+ 
+ source "drivers/staging/wilc1000/Kconfig"
+ 
++source "drivers/staging/wilc3000/Kconfig"
++
+ source "drivers/staging/most/Kconfig"
+ 
+ source "drivers/staging/ks7010/Kconfig"
+diff --git a/drivers/staging/Makefile b/drivers/staging/Makefile
+index 9ee2eff76..0ff264844 100644
+--- a/drivers/staging/Makefile
++++ b/drivers/staging/Makefile
+@@ -39,6 +39,7 @@ obj-$(CONFIG_XILINX_FCLK)	+= fclk/
+ obj-$(CONFIG_FB_TFT)		+= fbtft/
+ obj-$(CONFIG_FSL_DPAA2)		+= fsl-dpaa2/
+ obj-$(CONFIG_WILC1000)		+= wilc1000/
++obj-$(CONFIG_WILC)		+= wilc3000/
+ obj-$(CONFIG_MOST)		+= most/
+ obj-$(CONFIG_KS7010)		+= ks7010/
+ obj-$(CONFIG_GREYBUS)		+= greybus/
