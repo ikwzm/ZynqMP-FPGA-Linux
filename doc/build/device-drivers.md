@@ -1,11 +1,11 @@
 ### Build Device Drivers and Services Package
 
-#### udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.3.2-1_arm64.deb
+#### udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb
 
 ##### Download repository
 
 ```console
-shell$ git clone --recursive --depth=1 -b v1.3.2 git://github.com/ikwzm/udmabuf-kmod-dpkg
+shell$ git clone --recursive --depth=1 -b v1.4.2 git://github.com/ikwzm/udmabuf-kmod-dpkg
 shell$ cd udmabuf-kmod-dpkg
 ```
 
@@ -16,8 +16,8 @@ shell$ sudo debian/rules arch=arm64 deb_arch=arm64 kernel_release=4.19.0-xlnx-v2
     :
     :
     :
-shell$ file ../udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.3.2-1_arm64.deb
-../udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.3.2-1_arm64.deb: Debian binary package (format 2.0)
+shell$ file ../udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb
+../udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb: Debian binary package (format 2.0)
 ```
 
 #### fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.1.0-1_arm64.deb

@@ -1,4 +1,4 @@
-## UltraZed EG IOCC
+## Ultra96-V2
 
 ### Downlowd from github
 
@@ -11,7 +11,7 @@ shell$ git lfs pull
 
 ### File Description
 
- * target/UltraZed-EG-IOCC/
+ * target/Ultra96-V2
    + boot/
      - boot.bin                                                    : Stage 1 Boot Loader
      - uEnv.txt                                                    : U-Boot environment variables for linux boot
@@ -28,6 +28,8 @@ shell$ git lfs pull
 
 [./doc/install/format-disk-zynq.md](format-disk-zynq.md)
 
+### Write to SD-Card
+
 #### Mount SD-Card
 
 ```console
@@ -37,7 +39,7 @@ shell# mount /dev/sdc2 /mnt/usb2
 #### Make Boot Partition
 
 ```console
-shell# cp target/UltraZed-EG-IOCC/boot/*                                  /mnt/usb1
+shell# cp target/Ultra96-V2/boot/*                                        /mnt/usb1
 ```
 
 #### Make RootFS Partition
@@ -56,7 +58,32 @@ shell# cp udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb       /mnt/u
 ```console
 shell# mkdir /mnt/usb2/mnt/boot
 shell# cat <<EOT >> /mnt/usb2/etc/fstab
-/dev/mmcblk1p1	/mnt/boot	auto	defaults	0	0
+/dev/mmcblk0p1	/mnt/boot	auto	defaults	0	0
+EOT
+```
+
+#### Setup WiFi
+
+  * ssid: ssssssss
+  * passphrase: ppppppppp
+  * psk: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+```console
+shell# wpa_passphrase ssssssss ppppppppp
+network={
+	ssid="ssssssss"
+	#psk="ppppppppp"
+	psk=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+}
+```
+
+```console
+shell# cat <<EOT > /mnt/usb2/etc/network/interfaces.d/wlan0
+
+auto  wlan0
+iface wlan0 inet dhcp
+        wpa-ssid ssssssss
+	wpa-psk  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EOT
 ```
 
@@ -69,7 +96,7 @@ shell# umount /mnt/usb2
 
 ### Install Debian Packages
 
-#### Boot UltraZed-EG-IOCC and login fpga or root user
+#### Boot Ultra96 and login fpga or root user
 
 fpga'password is "fpga".
 
