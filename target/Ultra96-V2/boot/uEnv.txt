@@ -1,0 +1,12 @@
+linux_kernel_image=image-4.19.0-xlnx-v2019.1-zynqmp-fpga
+linux_fdt_image=devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dtb
+linux_boot_args=console=ttyPS0,115200 root=/dev/mmcblk0p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
+
+linux_img_load_cmd=fatload mmc ${sdbootdev} ${kernel_addr} ${linux_kernel_image}
+linux_fdt_load_cmd=fatload mmc ${sdbootdev} ${fdt_addr}    ${linux_fdt_image}
+linux_load_cmd=run linux_img_load_cmd && run linux_fdt_load_cmd
+linux_boot_cmd=setenv bootargs ${linux_boot_args} && booti ${kernel_addr} - ${fdt_addr}
+
+uenvcmd=run linux_load_cmd && run linux_boot_cmd
+
+bootmenu_0=Boot Default=boot
