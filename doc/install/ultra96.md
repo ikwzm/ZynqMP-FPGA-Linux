@@ -5,7 +5,7 @@
 ```console
 shell$ git clone git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
-shell$ git checkout v2019.1.0
+shell$ git checkout v2019.1.1
 shell$ git lfs pull
 ```
 
@@ -21,7 +21,7 @@ shell$ git lfs pull
  * debian10-rootfs-vanilla.tgz                                     : Debian10 Root File System (use Git LFS)
  * linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb   : Linux Image Package      (use Git LFS)
  * linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb : Linux Headers Package    (use Git LFS)
- * fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.1.0-1_arm64.deb       : fclkcfg Device Driver and Services Package
+ * fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb       : fclkcfg Device Driver and Services Package
  * udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb       : udmabuf Device Driver and Services Package
  
 ### Format SD-Card
@@ -49,7 +49,7 @@ shell# tar xfz debian10-rootfs-vanilla.tgz -C                             /mnt/u
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
 shell# cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb   /mnt/usb2/home/fpga/debian
 shell# cp linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb /mnt/usb2/home/fpga/debian
-shell# cp fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.1.0-1_arm64.deb       /mnt/usb2/home/fpga/debian
+shell# cp fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb       /mnt/usb2/home/fpga/debian
 shell# cp udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb       /mnt/usb2/home/fpga/debian
 ```
 
@@ -165,12 +165,12 @@ make: Leaving directory '/usr/src/linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga'
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.1.0-1_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb
 Selecting previously unselected package fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga.
 (Reading database ... 45308 files and directories currently installed.)
-Preparing to unpack fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.1.0-1_arm64.deb ...
-Unpacking fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga (1.1.0-1) ...
-Setting up fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga (1.1.0-1) ...
+Preparing to unpack fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb ...
+Unpacking fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga (1.2.0-1) ...
+Setting up fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga (1.2.0-1) ...
 ```
 
 #### Install udmabuf Device Driver and Services Package
