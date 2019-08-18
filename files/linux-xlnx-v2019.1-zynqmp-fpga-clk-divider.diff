@@ -1,0 +1,151 @@
+diff --git a/drivers/clk/zynqmp/divider.c b/drivers/clk/zynqmp/divider.c
+index b355d6309..387199de9 100644
+--- a/drivers/clk/zynqmp/divider.c
++++ b/drivers/clk/zynqmp/divider.c
+@@ -209,10 +209,136 @@ static int zynqmp_clk_divider_set_rate(struct clk_hw *hw, unsigned long rate,
+ 	return ret;
+ }
+ 
+-static const struct clk_ops zynqmp_clk_divider_ops = {
++/**
++ * zynqmp_clk_divider2_determine_rate() - Determine rate of divider clock
++ * @div2_hw:		handle between common and hardware-specific interfaces
++ * @req:		clock request 
++ *
++ * Return: 0 on success else error+reason
++ */
++static int zynqmp_clk_divider2_determine_rate(struct clk_hw *div2_hw,
++					      struct clk_rate_request *req)
++{
++	const char   * clk_name = clk_hw_get_name(div2_hw);
++	struct clk_hw* div1_hw  = NULL;
++	struct clk_hw* parent_hw= NULL;
++	struct zynqmp_clk_divider *divider1 = NULL;
++	struct zynqmp_clk_divider *divider2 = to_zynqmp_clk_divider(div2_hw);
++	const struct zynqmp_eemi_ops *eemi_ops = zynqmp_pm_get_eemi_ops();
++
++	unsigned long  parent_rate = req->best_parent_rate;
++	u32 min_div1 = 1;
++	u32 max_div1 = 1;
++	u32 min_div2 = 1;
++	u32 max_div2 = 1;
++	int ret      = 0;
++
++        pr_debug("%s(%s,%lu) start\n", __func__, clk_name, req->rate);
++
++	if ((clk_hw_get_flags(div2_hw) & CLK_SET_RATE_PARENT) &&
++	    (divider2->flags & CLK_FRAC) &&
++	    (req->rate % req->best_parent_rate)) {
++		req->best_parent_rate = req->rate;
++		goto done;
++        }
++		
++	if (!(clk_hw_get_flags(div2_hw) & CLK_SET_RATE_PARENT))
++		goto compute;
++
++	if (!(div1_hw = clk_hw_get_parent(div2_hw)))
++		goto compute;
++
++        if (!(divider1 = to_zynqmp_clk_divider(div1_hw))) 
++		goto compute;
++
++        if (divider1->div_type != TYPE_DIV1) 
++		goto compute;
++        
++	if (!(parent_hw = clk_hw_get_parent(div1_hw))) {
++		goto compute;
++	} else {
++		unsigned long new_parent_rate = clk_hw_get_rate(parent_hw);
++		if (!new_parent_rate)
++			goto compute;
++                parent_rate = new_parent_rate;
++	}
++
++	if (divider1->flags & CLK_DIVIDER_READ_ONLY) {
++		u32 clk_id = divider1->clk_id;
++		u32 value;
++		ret = eemi_ops->clock_getdivider(clk_id, &value);
++		if (ret) {
++			pr_warn_once("%s() get divider failed for %s, ret = %d\n", 
++				     __func__, clk_hw_get_name(div1_hw), ret);
++			goto compute;
++		}
++		min_div1 = value & 0xFFFF;
++		max_div1 = value & 0xFFFF;
++	} else {
++		min_div1 = 1;
++		max_div1 = divider1->max_div;
++	}
++
++    compute:
++	if (divider2->flags & CLK_DIVIDER_READ_ONLY) {
++		u32 clk_id = divider2->clk_id;
++		u32 value;
++		ret = eemi_ops->clock_getdivider(clk_id, &value);
++		if (ret) {
++			pr_warn_once("%s() get divider failed for %s, ret = %d\n",
++				     __func__, clk_name, ret);
++			return ret;
++		}
++		min_div2 = value >> 16;
++		max_div2 = value >> 16;
++	} else {
++		min_div2 = 1;
++		max_div2 = divider2->max_div;
++	}
++
++        {
++		long error = LONG_MAX;
++		u32 bestdiv1 = 1;
++		u32 bestdiv2 = 1;
++		u32 div1;
++		u32 div2;
++		for (div1 = min_div1; div1 <= max_div1; div1++) {
++			long div1_rate = DIV_ROUND_UP_ULL((u64)parent_rate,div1);
++			for (div2 = min_div2; div2 <= max_div2; div2++) {
++				long div2_rate = DIV_ROUND_UP_ULL((u64)div1_rate, div2);
++				long new_error = div2_rate - req->rate;
++
++				if (abs(new_error) < abs(error)) {
++					bestdiv1 = div1;
++					bestdiv2 = div2;
++					error = new_error;
++				}
++			}
++		}
++		req->best_parent_hw   = div1_hw;
++		req->best_parent_rate = req->rate * bestdiv2;
++                pr_debug("%s(%s) min_div1 = %d, max_div1 = %d, bestdiv1 = %d\n", __func__, clk_name, min_div1, max_div1, bestdiv1);
++                pr_debug("%s(%s) min_div2 = %d, max_div2 = %d, bestdiv2 = %d\n", __func__, clk_name, min_div2, max_div2, bestdiv2);
++	}
++    done:
++        pr_debug("%s(%s) rate = %lu\n"            , __func__, clk_name, req->rate);
++        pr_debug("%s(%s) best_parent_rate = %lu\n", __func__, clk_name, req->best_parent_rate);
++        pr_debug("%s(%s) parent_rate = %lu\n"     , __func__, clk_name, parent_rate);
++        pr_debug("%s(%s) done(%d)\n", __func__, clk_name, ret);
++	return ret;
++}
++
++static const struct clk_ops zynqmp_clk_divider1_ops = {
++	.recalc_rate = zynqmp_clk_divider_recalc_rate,
++	.round_rate = zynqmp_clk_divider_round_rate,
++	.set_rate = zynqmp_clk_divider_set_rate,
++};
++
++static const struct clk_ops zynqmp_clk_divider2_ops = {
+ 	.recalc_rate = zynqmp_clk_divider_recalc_rate,
+ 	.round_rate = zynqmp_clk_divider_round_rate,
+ 	.set_rate = zynqmp_clk_divider_set_rate,
++        .determine_rate = zynqmp_clk_divider2_determine_rate,
+ };
+ 
+ /**
+@@ -245,7 +371,7 @@ struct clk_hw *zynqmp_clk_register_divider(const char *name,
+ 		return ERR_PTR(-ENOMEM);
+ 
+ 	init.name = name;
+-	init.ops = &zynqmp_clk_divider_ops;
++	init.ops = (nodes->type == TYPE_DIV2) ? &zynqmp_clk_divider2_ops : &zynqmp_clk_divider1_ops;
+ 	init.flags = nodes->flag;
+ 	init.parent_names = parents;
+ 	init.num_parents = 1;
