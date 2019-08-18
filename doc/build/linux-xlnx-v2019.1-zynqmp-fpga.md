@@ -72,8 +72,8 @@ shell$ git commit -m "[add] devicetree for Ultra96-V2."
 #### Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-2 -m "release xilinx-v2019.1-zynqmp-fpga-2"
-shell$ echo 2 > .version
+shell$ git tag -a xilinx-v2019.1-zynqmp-fpga-3 -m "release xilinx-v2019.1-zynqmp-fpga-3"
+shell$ echo 3 > .version
 ```
 
 #### Setup for Build 

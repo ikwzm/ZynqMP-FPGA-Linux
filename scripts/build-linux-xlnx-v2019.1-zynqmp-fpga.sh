@@ -45,8 +45,8 @@ git add arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 git commit -m "[add] devicetree for Ultra96-V2."
 
 ### Create tag and .version
-git tag -a xilinx-v2019.1-zynqmp-fpga-2 -m "release xilinx-v2019.1-zynqmp-fpga-2"
-echo 2 > .version
+git tag -a xilinx-v2019.1-zynqmp-fpga-3 -m "release xilinx-v2019.1-zynqmp-fpga-3"
+echo 3 > .version
 
 ### Setup for Build 
 export ARCH=arm64
