@@ -5,7 +5,7 @@
 ```console
 shell$ git clone git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
-shell$ git checkout v2019.1.1
+shell$ git checkout v2019.1.2
 shell$ git lfs pull
 ```
 
@@ -19,8 +19,8 @@ shell$ git lfs pull
      - devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dtb    : Linux Device Tree Blob   
      - devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dts    : Linux Device Tree Source
  * debian10-rootfs-vanilla.tgz                                     : Debian10 Root File System (use Git LFS)
- * linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb   : Linux Image Package      (use Git LFS)
- * linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb : Linux Headers Package    (use Git LFS)
+ * linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb   : Linux Image Package      (use Git LFS)
+ * linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb : Linux Headers Package    (use Git LFS)
  * fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb       : fclkcfg Device Driver and Services Package
  * udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb       : udmabuf Device Driver and Services Package
  
@@ -45,8 +45,8 @@ shell# cp target/UltraZed-EG-IOCC/boot/*                                  /mnt/u
 ```console
 shell# tar xfz debian10-rootfs-vanilla.tgz -C                             /mnt/usb2
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
-shell# cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb /mnt/usb2/home/fpga/debian
+shell# cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb   /mnt/usb2/home/fpga/debian
+shell# cp linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb /mnt/usb2/home/fpga/debian
 shell# cp fclkcfg-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.2.0-1_arm64.deb       /mnt/usb2/home/fpga/debian
 shell# cp udmabuf-4.19.0-xlnx-v2019.1-zynqmp-fpga_1.4.2-0_arm64.deb       /mnt/usb2/home/fpga/debian
 ```
@@ -87,16 +87,27 @@ Password:
 root@debian-fpga:~#
 ```
 
+#### Install Linux Image Package
+
+```console
+root@debian-fpga:~# cd /home/fpga/debian
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb
+(Reading database ... 48216 files and directories currently installed.)
+Preparing to unpack linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb ...
+Unpacking linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-3) over (4.19.0-xlnx-v2019.1-zynqmp-fpga-2) ...
+Setting up linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-3) ...
+```
+
 #### Install Linux Headers Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb
 Selecting previously unselected package linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga.
 (Reading database ... 26341 files and directories currently installed.)
-Preparing to unpack linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb ...
-Unpacking linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-2) ...
-Setting up linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-2) ...
+Preparing to unpack linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-3_arm64.deb ...
+Unpacking linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-3) ...
+Setting up linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga (4.19.0-xlnx-v2019.1-zynqmp-fpga-3) ...
 make: Entering directory '/usr/src/linux-headers-4.19.0-xlnx-v2019.1-zynqmp-fpga'
   HOSTCC  scripts/basic/fixdep
   HOSTCC  scripts/kconfig/conf.o
