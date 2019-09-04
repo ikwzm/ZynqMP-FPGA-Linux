@@ -26,9 +26,15 @@ patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-patch.diff
 git add --update
 git commit -m "[patch] drivers/fpga/zynqmp-fpga.c for load raw file format"
 
+### Patch for linux-xlnx-v2018.2-zynqmp-fpga-clk-divider
+
+patch -p1 < ../files/linux-xlnx-v2018.2-zynqmp-fpga-clk-divider.diff
+git add --update
+git commit -m "[fix] a bug where 0 was specified for clock divider settings"
+
 ### Create tag and .version
-git tag -a xilinx-v2018.2-zynqmp-fpga -m "release xilinx-v2018.2-zynqmp-fpga"
-echo 0 > .version
+git tag -a xilinx-v2018.2-zynqmp-fpga-1 -m "release xilinx-v2018.2-zynqmp-fpga-1"
+echo 1 > .version
 
 ### Setup for Build 
 export ARCH=arm64
