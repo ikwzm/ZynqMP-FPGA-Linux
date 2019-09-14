@@ -21,8 +21,8 @@ shell#
 There are tree ways
 
 1. run scripts/format-disk-zynq.sh
-2. run fdisk step-by-step (not discussed hear)
-3. run other tools(not discussed hear)
+2. run fdisk step-by-step (not discussed here)
+3. run other tools(not discussed here)
 
 
 ###### scripts/format-disk-zynq.sh
