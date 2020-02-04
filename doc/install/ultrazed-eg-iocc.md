@@ -15,7 +15,7 @@ shell$ git lfs pull
    + boot/
      - boot.bin                                                    : Stage 1 Boot Loader
      - uEnv.txt                                                    : U-Boot environment variables for linux boot
-     - image-4.19.0-xlnx-v2019.1-zynqmp-fpga                       : Linux Kernel Image       (use Git LFS)
+     - image-4.19.0-xlnx-v2019.2-zynqmp-fpga                       : Linux Kernel Image       (use Git LFS)
      - devicetree-4.19.0-xlnx-v2019.2-zynqmp-fpga-ultra96v2.dtb    : Linux Device Tree Blob   
      - devicetree-4.19.0-xlnx-v2019.2-zynqmp-fpga-ultra96v2.dts    : Linux Device Tree Source
  * debian10-rootfs-vanilla.tgz                                     : Debian10 Root File System (use Git LFS)
