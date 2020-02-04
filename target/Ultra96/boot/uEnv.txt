@@ -13,7 +13,7 @@ linux_fdt_image=devicetree-4.19.0-xlnx-v2019.2-zynqmp-fpga-ultra96.dtb
 #  * linux_boot_args_rootfs  : ex) root=/dev/mmcblk0p2 rw rootwait
 #  * linux_boot_args_systemd : ex) systemd.unit=graphical.target
 #                                  systemd.unit=multi-user.target
-#  * linux_boot_args_cpuidle : ex) cpuidle=1
+#  * linux_boot_args_cpuidle : ex) cpuidle.off=1
 #  * linux_boot_args_cma     : ex) cma=256M
 #  * linux_boot_args_uio     : ex) uio=uio_pdrv_genirq.of_id=generic-uio
 #  * linux_boot_args_other   :
@@ -21,7 +21,7 @@ linux_fdt_image=devicetree-4.19.0-xlnx-v2019.2-zynqmp-fpga-ultra96.dtb
 linux_boot_args_console=console=ttyPS0,115200
 linux_boot_args_rootfs=root=/dev/mmcblk0p2 rw rootwait
 linux_boot_args_systemd=
-linux_boot_args_cpuidle=cpuidle=1
+linux_boot_args_cpuidle=cpuidle.off=1
 linux_boot_args_cma=
 linux_boot_args_uio=uio_pdrv_genirq.of_id=generic-uio
 linux_boot_args_other=
