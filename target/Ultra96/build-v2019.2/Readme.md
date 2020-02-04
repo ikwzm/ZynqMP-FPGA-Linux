@@ -14,3 +14,7 @@ shell$ cp ZynqMP-U-Boot-Ultra96/boot.bin                 ../boot/
 shell$ cp ZynqMP-U-Boot-Ultra96/boot_outer_shareable.bin ../boot/
 ```
 
+## Reference
+
+* https://github.com/ikwzm/ZynqMP-U-Boot-Ultra96.git
+

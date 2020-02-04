@@ -14,3 +14,7 @@ shell$ cp ZynqMP-U-Boot-UltraZed-EG-IOCC/boot.bin                 ../boot/
 shell$ cp ZynqMP-U-Boot-UltraZed-EG-IOCC/boot_outer_shareable.bin ../boot/
 ```
 
+## Reference
+
+* https://github.com/ikwzm/ZynqMP-U-Boot-UltraZed-EG-IOCC.git
+
