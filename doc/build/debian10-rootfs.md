@@ -1,6 +1,7 @@
-### Build Debian10 RootFS
+Build Debian10 RootFS
+====================================================================================
 
-#### Setup parameters 
+## Setup parameters 
 
 ```console
 shell$ apt-get install qemu-user-static debootstrap binfmt-support
@@ -8,7 +9,7 @@ shell$ export targetdir=debian10-rootfs
 shell$ export distro=buster
 ```
 
-#### Build the root file system in $targetdir(=debian10-rootfs)
+## Build the root file system in $targetdir(=debian10-rootfs)
 
 ```console
 shell$ mkdir $targetdir
@@ -19,9 +20,9 @@ shell$ sudo cp scripts/build-debian10-rootfs-with-qemu.sh  $targetdir
 shell$ sudo cp linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb $targetdir
 ````
 
-#### Build debian10-rootfs with QEMU
+## Build debian10-rootfs with QEMU
 
-##### Change Root to debian10-rootfs
+### Change Root to debian10-rootfs
 
 ```console
 shell$ sudo chroot $targetdir
@@ -32,7 +33,7 @@ There are two ways
 1. run build-debian10-rootfs-with-qemu.sh (easy)
 2. run this chapter step-by-step (annoying)
 
-##### Setup APT
+### Setup APT
 
 ````console
 debian10-rootfs# distro=buster
@@ -62,7 +63,7 @@ EOT
 debian10-rootfs# apt-get update
 ```
 
-##### Install applications
+### Install applications
 
 ```console
 debian10-rootfs# apt-get install -y locales dialog
@@ -70,13 +71,13 @@ debian10-rootfs# dpkg-reconfigure locales
 debian10-rootfs# apt-get install -y net-tools openssh-server ntpdate resolvconf sudo less hwinfo ntp tcsh zsh file
 ```
 
-##### Setup hostname
+### Setup hostname
 
 ```console
 debian10-rootfs# echo debian-fpga > /etc/hostname
 ```
 
-##### Setup root password
+### Setup root password
 
 ```console
 debian10-rootfs# passwd
@@ -93,7 +94,7 @@ ttyPS0
 EOT
 ```
 
-##### Add a new guest user
+### Add a new guest user
 
 ```console
 debian10-rootfs# adduser fpga
@@ -105,13 +106,13 @@ This time, we set the "fpga" at the fpga'password.
 debian10-rootfs# echo "fpga ALL=(ALL:ALL) ALL" > /etc/sudoers.d/fpga
 ```
 
-##### Setup sshd config
+### Setup sshd config
 
 ```console
 debian10-rootfs# sed -i -e 's/#PasswordAuthentication/PasswordAuthentication/g' /etc/ssh/sshd_config
 ```
 
-##### Setup Time Zone
+### Setup Time Zone
 
 ```console
 debian10-rootfs# dpkg-reconfigure tzdata
@@ -125,7 +126,7 @@ debian10-rootfs# dpkg-reconfigure -f noninteractive tzdata
 ```
 
 
-##### Setup fstab
+### Setup fstab
 
 ```console
 debian10-rootfs# cat <<EOT > /etc/fstab
@@ -133,7 +134,7 @@ none		/config		configfs	defaults	0	0
 EOT
 ````
 
-##### Setup Network Interface
+### Setup Network Interface
 
 ```console
 debian10-rootfs# cat <<EOT > /etc/network/interfaces.d/eth0
@@ -142,7 +143,7 @@ iface eth0 inet dhcp
 EOT
 ````
 
-##### Setup /lib/firmware
+### Setup /lib/firmware
 
 ```console
 debian10-rootfs# mkdir /lib/firmware
@@ -150,7 +151,7 @@ debian10-rootfs# mkdir /lib/firmware/ti-connectivity
 debian10-rootfs# mkdir /lib/firmware/mchp
 ```
 
-##### Install Development applications
+### Install Development applications
 
 ```console
 debian10-rootfs# apt-get install -y build-essential
@@ -168,7 +169,7 @@ debian10-rootfs# apt-get install -y flex bison
 debian10-rootfs# apt-get install -y device-tree-compiler
 ```
 
-##### Install Wireless tools and firmware
+### Install Wireless tools and firmware
 
 ```console
 debian10-rootfs# apt-get install -y wireless-tools
@@ -195,38 +196,38 @@ debian10-rootfs# cp linux4wilc-firmware/*.bin /lib/firmware/mchp
 debian10-rootfs# rm -rf linux4wilc-firmware  
 ```
 
-##### Install Other applications
+### Install Other applications
 
 ```console
 debian10-rootfs# apt-get install -y samba
 debian10-rootfs# apt-get install -y avahi-daemon
 ```
 
-##### Install haveged for Linux Kernel 4.19
+### Install haveged for Linux Kernel 4.19
 
 ```console
 debian10-rootfs# apt-get install -y haveged
 ```
 
-##### Install Linux Modules
+### Install Linux Modules
 
 ```console
 debian10-rootfs# dpkg -i linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
 ```
 
-##### Clean Cache
+### Clean Cache
 
 ```console
 debian10-rootfs# apt-get clean
 ```
 
-##### Create Debian Package List
+### Create Debian Package List
 
 ```console
 debian10-rootfs# dpkg -l > dpkg-list.txt
 ```
 
-##### Finish
+### Finish
 
 ```console
 debian10-rootfs# exit
@@ -236,7 +237,7 @@ shell$ sudo rm -f $targetdir/linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-
 shell$ sudo mv    $targetdir/dpkg-list.txt files/debian10-dpkg-list.txt
 ```
 
-#### Build debian10-rootfs-vanilla.tgz
+## Build debian10-rootfs-vanilla.tgz
 
 ```console
 shell$ cd $targetdir
