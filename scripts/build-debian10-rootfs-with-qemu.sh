@@ -88,18 +88,8 @@ apt-get install -y python  python-dev  python-setuptools  python-wheel  python-p
 apt-get install -y python3 python3-dev python3-setuptools python3-wheel python3-pip
 apt-get install -y python-numpy python3-numpy
 pip3 install msgpack-rpc-python
-
-#### Install Device Tree Compiler (supported symbol version)
-
 apt-get install -y flex bison
-cd root
-mkdir src
-cd src
-git clone -b v1.4.7 https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
-cd dtc
-make
-make HOME=/usr/local install-bin
-cd /
+apt-get install -y device-tree-compiler
 
 #### Install Wireless tools and firmware
 
@@ -131,7 +121,7 @@ apt-get install -y haveged
 
 #### Install Linux Modules
 
-dpkg -i linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb
+dpkg -i linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
 
 #### Clean Cache
 

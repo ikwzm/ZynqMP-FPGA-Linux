@@ -1,12 +1,64 @@
-linux_kernel_image=image-4.19.0-xlnx-v2019.1-zynqmp-fpga
-linux_fdt_image=devicetree-4.19.0-xlnx-v2019.1-zynqmp-fpga-ultra96v2.dtb
-linux_boot_args=console=ttyPS0,115200 root=/dev/mmcblk0p2 rw rootwait uio_pdrv_genirq.of_id=generic-uio
+########################################################################
+# Linux Kernel Files
+#  * linux_kernel_image : Linux Kernel Image File Name
+#  * linux_fdt_image    : Linux Device Tree Blob File Name
+########################################################################
+linux_kernel_image=image-4.19.0-xlnx-v2019.2-zynqmp-fpga
+linux_fdt_image=devicetree-4.19.0-xlnx-v2019.2-zynqmp-fpga-ultra96v2.dtb
 
-linux_img_load_cmd=fatload mmc ${sdbootdev} ${kernel_addr} ${linux_kernel_image}
-linux_fdt_load_cmd=fatload mmc ${sdbootdev} ${fdt_addr}    ${linux_fdt_image}
-linux_load_cmd=run linux_img_load_cmd && run linux_fdt_load_cmd
-linux_boot_cmd=setenv bootargs ${linux_boot_args} && booti ${kernel_addr} - ${fdt_addr}
+########################################################################
+# Linux Boot Argments
+#  * linux_boot_args_console : ex) console=tty1
+#                                  console=ttyPS0,115200
+#  * linux_boot_args_rootfs  : ex) root=/dev/mmcblk0p2 rw rootwait
+#  * linux_boot_args_systemd : ex) systemd.unit=graphical.target
+#                                  systemd.unit=multi-user.target
+#  * linux_boot_args_cpuidle : ex) cpuidle.off=1
+#  * linux_boot_args_cma     : ex) cma=256M
+#  * linux_boot_args_uio     : ex) uio=uio_pdrv_genirq.of_id=generic-uio
+#  * linux_boot_args_other   :
+########################################################################
+linux_boot_args_console=console=ttyPS0,115200
+linux_boot_args_rootfs=root=/dev/mmcblk0p2 rw rootwait
+linux_boot_args_systemd=
+linux_boot_args_cpuidle=cpuidle.off=1
+linux_boot_args_cma=
+linux_boot_args_uio=uio_pdrv_genirq.of_id=generic-uio
+linux_boot_args_other=
 
-uenvcmd=run linux_load_cmd && run linux_boot_cmd
+########################################################################
+# uenvcmd : During sdboot, if uenvcmd is set, uenvcmd will be executed.
+########################################################################
+linux_img_load_cmd=fatload mmc ${sdbootdev}:${partid} ${kernel_addr} ${linux_kernel_image}
+linux_fdt_load_cmd=fatload mmc ${sdbootdev}:${partid} ${fdt_addr}    ${linux_fdt_image}
+linux_load_cmd=env run linux_img_load_cmd && env run linux_fdt_load_cmd
+linux_boot_cmd=booti ${kernel_addr} - ${fdt_addr}
+linux_args_cmd=if env exists linux_boot_args; then; setenv bootargs ${linux_boot_args}; else; setenv bootargs ${linux_boot_args_console} ${linux_boot_args_rootfs} ${linux_boot_args_systemd} ${linux_boot_args_cpuidle} ${linux_boot_args_cma} ${linux_boot_args_uio} ${linux_boot_args_other}; fi
+uenvcmd=env run linux_args_cmd && env run linux_load_cmd && env run linux_boot_cmd
 
+########################################################################
+# external_env_file : external environment file.
+# external_env_boot : import external_env_file and boot.
+########################################################################
+external_env_existence_test=test -e mmc ${sdbootdev}:${partid} ${external_env_file}
+external_env_load=fatload mmc ${sdbootdev}:${partid} ${loadbootenv_addr} ${external_env_file}
+external_env_import=env import -t ${loadbootenv_addr} $filesize
+external_env_set=env run external_env_existence_test && env run external_env_load && env run external_env_import
+external_env_boot=if env run external_env_set; then; boot; else; echo "## Error Read fail " ${external_env_file}; fi
+
+########################################################################
+# Select bootcmd_????
+#   * jtag   : bootcmd_jtag   = source $scriptaddr; echo SCRIPT FAILED: continuiing...;
+#   * mmc0   : bootcmd_mmc0   = setenv devnum 0; run mmc_boot
+#   * mmc1   : bootcmd_mmc1   = setenv devnum 1; run mmc_boot
+#   * pxe    : bootcmd_pxe    = setenv run boot_net_usb_start; dhcp ; if pxe get; then pxe boot; fi
+#   * usb0   : bootcmd_usb0   = setenv devnum 0; run usb_boot
+#   * usb1   : bootcmd_usb1   = setenv devnum 1; run usb_boot
+#   * xilinx : bootcmd_xilinx = run $modeboot (modeboot=sdboot)
+########################################################################
+boot_targets=xilinx
+
+########################################################################
+# Boot Menu
+########################################################################
 bootmenu_0=Boot Default=boot
