@@ -16,7 +16,7 @@ shell$ sudo debootstrap --arch=arm64 --foreign $distro     $targetdir
 shell$ sudo cp /usr/bin/qemu-aarch64-static                $targetdir/usr/bin
 shell$ sudo cp /etc/resolv.conf                            $targetdir/etc
 shell$ sudo cp scripts/build-debian10-rootfs-with-qemu.sh  $targetdir
-shell$ sudo cp linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-2_arm64.deb $targetdir
+shell$ sudo cp linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb $targetdir
 ````
 
 #### Build debian10-rootfs with QEMU
@@ -164,20 +164,8 @@ debian10-rootfs# apt-get install -y python  python-dev  python-setuptools  pytho
 debian10-rootfs# apt-get install -y python3 python3-dev python3-setuptools python3-wheel python3-pip
 debian10-rootfs# apt-get install -y python-numpy python3-numpy
 debian10-rootfs# pip3 install msgpack-rpc-python
-```
-
-##### Install Device Tree Compiler (supported symbol version)
-
-```console
 debian10-rootfs# apt-get install -y flex bison
-debian10-rootfs# cd root
-debian10-rootfs# mkdir src
-debian10-rootfs# cd src
-debian10-rootfs# git clone -b v1.4.7 https://git.kernel.org/pub/scm/utils/dtc/dtc.git dtc
-debian10-rootfs# cd dtc
-debian10-rootfs# make
-debian10-rootfs# make HOME=/usr/local install-bin
-debian10-rootfs# cd /
+debian10-rootfs# apt-get install -y device-tree-compiler
 ```
 
 ##### Install Wireless tools and firmware
@@ -223,7 +211,7 @@ debian10-rootfs# apt-get install -y haveged
 ##### Install Linux Modules
 
 ```console
-debian10-rootfs# dpkg -i linux-image-4.19.0-xlnx-v2019.1-zynqmp-fpga_4.19.0-xlnx-v2019.1-zynqmp-fpga-1_arm64.deb
+debian10-rootfs# dpkg -i linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
 ```
 
 ##### Clean Cache
@@ -244,14 +232,16 @@ debian10-rootfs# dpkg -l > dpkg-list.txt
 debian10-rootfs# exit
 shell$ sudo rm -f $targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $targetdir/build-debian10-rootfs-with-qemu.sh
-shell$ sudo rm -f $targetdir/linux-image-4.14.0-xlnx-v2018.2-zynqmp-fpga_4.14.0-xlnx-v2018.2-zynqmp-fpga-2_arm64.deb
-shell$ sudo mv    $targetdir/dpkg-list.txt files/dpkg-list.txt
+shell$ sudo rm -f $targetdir/linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
+shell$ sudo mv    $targetdir/dpkg-list.txt files/debian10-dpkg-list.txt
 ```
 
 #### Build debian10-rootfs-vanilla.tgz
 
 ```console
 shell$ cd $targetdir
-shell$ sudo tar cfz ../debian10-rootfs-vanilla.tgz *
+shell$ sudo find . -type s | sed 's/^\.\///' > ../sockets-to-exclude
+shell$ sudo tar cfz ../debian10-rootfs-vanilla.tgz -X ../sockets-to-exclude *
 ```
+
 
