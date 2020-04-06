@@ -54,3 +54,28 @@ Build
 * [Build Linux Kernel](doc/build/linux-xlnx-v2019.2-zynqmp-fpga.md)
 * [Build Debian10 RootFS](doc/build/debian10-rootfs.md)
 * [Build Device Drivers](doc/build/device-drivers.md)
+
+Other Projects
+------------------------------------------------------------------------------------
+
+* https://github.com/ikwzm/ZynqMP-FPGA-Ubuntu18.04-Ultra96
+  + Linux Boot Image(U-boot, Kernel, Ubuntu 18.04 Desktop) for Ultra96/Ultra96-V2
+* https://github.com/ikwzm/ZynqMP-FPGA-Xserver
+  + The X-Window server Debian Package for ZynqMP-FPGA-Linux
+* https://github.com/ikwzm/ZynqMP-FPGA-XRT
+  + The XRT(Xilinx Runtime) Debian Package for ZynqMP-FPGA-Linux
+
+
+Examples
+------------------------------------------------------------------------------------
+
+* https://github.com/ikwzm/ZynqMP-FPGA-XRT-Example-1-Ultra96
+  + Example for ZynqMP-FPGA-XRT
+* https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-2-Ultra96
+  + ZynqMP-FPGA-Linux Example (2) binary and test code for Ultra96
+* https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-0-UltraZed
+  + ZynqMP-FPGA-Linux Example (0) binary and test code for UltraZed-EG-IOCC
+* https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-2-UltraZed
+  + ZynqMP-FPGA-Linux Example (2) binary and test code for UltraZed-EG-IOCC
+* https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-3-UltraZed
+  + ZynqMP-FPGA-Linux Example (3) binary and test code for UltraZed-EG-IOCC
