@@ -22,7 +22,7 @@ index c4c580f54..133f4f034 100755
 +cat <<EOF >> $kernel_headers_dir/DEBIAN/postinst
 +#!/bin/sh -e
 +
-+make -C /usr/src/linux-headers-$version prepare
++make -C /usr/src/linux-headers-$version prepare0
 +
 +EOF
 +
