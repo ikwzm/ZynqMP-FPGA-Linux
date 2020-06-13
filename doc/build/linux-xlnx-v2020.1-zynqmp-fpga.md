@@ -42,6 +42,14 @@ shell$ git add --update
 shell$ git commit -m "[update] scripts/package/builddeb to add tools/include and postinst script to header package."
 ```
 
+## Patch for drivers/drivers/tty/serial/xilinx_uartps.c
+
+```console
+shell$ patch -p1 < ../files/linux-xlnx-v2020.1-zynqmp-fpga-xilinx_uartps.diff
+shell$ git add --update
+shell$ git commit -m "[fix] the problem that only the first port that xilinx_uartps.c found was the console."
+```
+
 ## Add ATWILC3000 Linux Driver for Ultra96-V2
 
 ```console
