@@ -5,7 +5,7 @@
 ```console
 shell$ git clone git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
-shell$ git checkout v2020.1.1-rc3
+shell$ git checkout v2020.1.1
 shell$ git lfs pull
 ```
 
