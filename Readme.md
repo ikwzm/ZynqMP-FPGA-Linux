@@ -26,6 +26,8 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + Enable FPGA Bridge
   + Enable FPGA Reagion
   + Enable ATWILC3000 Linux Driver for Ultra96-V2
+  + Enable Xilinx APF Accelerator driver
+  + Enable Xilinx APF DMA engines support
 * Debian10(buster) Root File System
   + Installed build-essential
   + Installed device-tree-compiler
