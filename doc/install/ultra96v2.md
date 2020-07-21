@@ -2,13 +2,13 @@
 
 ### Downlowd from github
 
+**Note: Downloading the entire repository is time consuming, so download only the branch you need.**
+
 ```console
-shell$ git clone git://github.com/ikwzm/ZynqMP-FPGA-Linux
+shell$ git clone --depth=1 --branch v2020.1.1 git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
-shell$ git checkout v2020.1.1-rc3
 shell$ git lfs pull
 ```
-
 ### File Description
 
  * target/Ultra96-V2
