@@ -77,6 +77,14 @@ shell$ git add --update
 shell$ git commit -m "[add] Xilinx APF driver."
 ```
 
+## Patch for Lima Driver
+
+```console
+shell$ patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-lima.diff
+shell$ git add --update
+shell$ git commit -m "[add] Lima driver."
+```
+
 ## Create tag and .version
 
 ```console

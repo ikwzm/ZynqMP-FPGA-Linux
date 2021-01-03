@@ -52,6 +52,12 @@ patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-apf.diff
 git add --update
 git commit -m "[add] Xilinx APF driver."
 
+## Patch for Lima Driver
+
+patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-lima.diff
+git add --update
+git commit -m "[add] Lima driver."
+
 ## Create tag and .version
 git tag -a xilinx-v2020.2-zynqmp-fpga-1 -m "release xilinx-v2020.2-zynqmp-fpga-1"
 echo 1 > .version
