@@ -61,6 +61,14 @@ shell$ git add arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 shell$ git commit -m "[add] devicetree for Ultra96-V2."
 ```
 
+## Patch for SMB3 and CIFS
+
+```console
+shell$ patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-cifs.diff
+shell$ git add --update
+shell$ git commit -m "[add] SMB3 and CIFS."
+```
+
 ## Patch for Xilinx APF Driver
 
 ```console
