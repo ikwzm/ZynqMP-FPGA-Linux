@@ -20,12 +20,14 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
 * Linux Kernel Version v5.4.0
-  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.1
+  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.2
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
   + Enable FPGA Reagion
   + Enable ATWILC3000 Linux Driver for Ultra96-V2
+  + Enable CIFS (Common Internet File System)
+  + Enable Lima (Open-source reverse-engineered driver for Mali-4xx GPUs)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
 * Debian10(buster) Root File System
@@ -53,7 +55,7 @@ Build
 * [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96](target/Ultra96/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96-V2](target/Ultra96-V2/build-v2019.2/Readme.md)
-* [Build Linux Kernel](doc/build/linux-xlnx-v2020.1-zynqmp-fpga.md)
+* [Build Linux Kernel](doc/build/linux-xlnx-v2020.2-zynqmp-fpga.md)
 * [Build Debian10 RootFS](doc/build/debian10-rootfs.md)
 * [Build Device Drivers](doc/build/device-drivers.md)
 
