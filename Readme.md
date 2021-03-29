@@ -74,6 +74,8 @@ Examples
 
 * https://github.com/ikwzm/ZynqMP-FPGA-XRT-Example-1-Ultra96
   + Example for ZynqMP-FPGA-XRT
+* https://github.com/ikwzm/ArgSort-Ultra96
+  + ArgSort for Ultra96
 * https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-2-Ultra96
   + ZynqMP-FPGA-Linux Example (2) binary and test code for Ultra96
 * https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-0-UltraZed

@@ -5,7 +5,7 @@
 **Note: Downloading the entire repository is time consuming, so download only the branch you need.**
 
 ```console
-shell$ git clone --depth=1 --branch v2020.2.1-rc3 git://github.com/ikwzm/ZynqMP-FPGA-Linux
+shell$ git clone --depth=1 --branch v2020.2.1 git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
 shell$ git lfs pull
 ```
