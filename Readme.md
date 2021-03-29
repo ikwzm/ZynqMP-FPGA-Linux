@@ -29,7 +29,7 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + Enable CIFS (Common Internet File System)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
-* Debian10(buster) Root File System
+* Debian10.9(buster) Root File System
   + Installed build-essential
   + Installed device-tree-compiler
   + Installed ruby ruby-msgpack ruby-serialport
