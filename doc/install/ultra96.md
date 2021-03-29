@@ -5,7 +5,7 @@
 **Note: Downloading the entire repository is time consuming, so download only the branch you need.**
 
 ```console
-shell$ git clone --depth=1 --branch v2020.2.1-rc1 git://github.com/ikwzm/ZynqMP-FPGA-Linux
+shell$ git clone --depth=1 --branch v2020.2.1-rc2 git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
 shell$ git lfs pull
 ```
@@ -20,8 +20,8 @@ shell$ git lfs pull
      - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96.dtb       : Linux Device Tree Blob   
      - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96.dts       : Linux Device Tree Source
  * debian10-rootfs-vanilla.tgz                                     : Debian10 Root File System (use Git LFS)
- * linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb   : Linux Image Package      (use Git LFS)
- * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb : Linux Headers Package    (use Git LFS)
+ * linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb   : Linux Image Package      (use Git LFS)
+ * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb : Linux Headers Package    (use Git LFS)
  * fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        : fclkcfg(1.7.2) Device Driver and Services Package
  * u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb      : u-dma-buf(3.2.4) Device Driver and Services Package
  
@@ -48,8 +48,8 @@ shell# cp target/Ultra96/boot/*                                           /mnt/u
 ```console
 shell# tar xfz debian10-rootfs-vanilla.tgz -C                             /mnt/usb2
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
-shell# cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb /mnt/usb2/home/fpga/debian
+shell# cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb   /mnt/usb2/home/fpga/debian
+shell# cp linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb /mnt/usb2/home/fpga/debian
 shell# cp fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb       /mnt/usb2/home/fpga/debian
 shell# cp u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb     /mnt/usb2/home/fpga/debian
 ```
@@ -119,24 +119,24 @@ root@debian-fpga:~#
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb
 Selecting previously unselected package linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga.
 (Reading database ... 181094 files and directories currently installed.)
-Preparing to unpack linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb ...
-Unpacking linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-1) ...
-Setting up linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-1) ...
+Preparing to unpack linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb ...
+Unpacking linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-2) ...
+Setting up linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-2) ...
 ```
 
 #### Install Linux Headers Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb
 Selecting previously unselected package linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga.
 (Reading database ... 181094 files and directories currently installed.)
-Preparing to unpack linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-1_arm64.deb ...
-Unpacking linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-1) ...
-Setting up linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-1) ...
+Preparing to unpack linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-2_arm64.deb ...
+Unpacking linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-2) ...
+Setting up linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga (5.4.0-xlnx-v2020.2-zynqmp-fpga-2) ...
 make: Entering directory '/usr/src/linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga'
   HOSTCC  scripts/basic/fixdep
   HOSTCC  scripts/kconfig/conf.o
