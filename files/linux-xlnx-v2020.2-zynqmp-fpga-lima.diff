@@ -1,0 +1,27 @@
+diff --git a/arch/arm64/boot/dts/xilinx/zynqmp.dtsi b/arch/arm64/boot/dts/xilinx/zynqmp.dtsi
+index b0b306ed7..112f502c0 100644
+--- a/arch/arm64/boot/dts/xilinx/zynqmp.dtsi
++++ b/arch/arm64/boot/dts/xilinx/zynqmp.dtsi
+@@ -462,8 +462,8 @@
+ 			reg = <0x0 0xfd4b0000 0x0 0x10000>;
+ 			interrupt-parent = <&gic>;
+ 			interrupts = <0 132 4>, <0 132 4>, <0 132 4>, <0 132 4>, <0 132 4>, <0 132 4>;
+-			interrupt-names = "IRQGP", "IRQGPMMU", "IRQPP0", "IRQPPMMU0", "IRQPP1", "IRQPPMMU1";
+-			clock-names = "gpu", "gpu_pp0", "gpu_pp1";
++			interrupt-names = "gp", "gpmmu", "pp0", "ppmmu0", "pp1", "ppmmu1";
++			clock-names = "gpu", "core", "bus";
+ 			power-domains = <&zynqmp_firmware PD_GPU>;
+ 		};
+ 
+diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
+index 7071830ee..ccfd1280e 100644
+--- a/arch/arm64/configs/xilinx_zynqmp_defconfig
++++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
+@@ -263,6 +263,7 @@ CONFIG_DRM_XLNX_SDI=y
+ CONFIG_DRM_XLNX_BRIDGE_CSC=y
+ CONFIG_DRM_XLNX_BRIDGE_SCALER=y
+ CONFIG_FB_XILINX=y
++CONFIG_DRM_LIMA=m
+ CONFIG_FRAMEBUFFER_CONSOLE=y
+ CONFIG_SOUND=y
+ CONFIG_SND=y

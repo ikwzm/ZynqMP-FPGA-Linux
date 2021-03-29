@@ -1295,7 +1295,7 @@
 			disable-wp;
 			pinctrl-names = "default";
 			pinctrl-0 = <0x15>;
-			xlnx,mio_bank = <0x00>;
+			xlnx,mio-bank = <0x00>;
 			phandle = <0x75>;
 		};
 
@@ -1319,7 +1319,7 @@
 			bus-width = <0x04>;
 			pinctrl-names = "default";
 			pinctrl-0 = <0x16>;
-			xlnx,mio_bank = <0x00>;
+			xlnx,mio-bank = <0x00>;
 			non-removable;
 			disable-wp;
 			cap-power-off-card;

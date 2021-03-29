@@ -17,7 +17,7 @@ shell$ sudo debootstrap --arch=arm64 --foreign $distro     $targetdir
 shell$ sudo cp /usr/bin/qemu-aarch64-static                $targetdir/usr/bin
 shell$ sudo cp /etc/resolv.conf                            $targetdir/etc
 shell$ sudo cp scripts/build-debian10-rootfs-with-qemu.sh  $targetdir
-shell$ sudo cp linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb $targetdir
+shell$ sudo cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb $targetdir
 ````
 
 ## Build debian10-rootfs with QEMU
@@ -212,7 +212,7 @@ debian10-rootfs# apt-get install -y haveged
 ### Install Linux Modules
 
 ```console
-debian10-rootfs# dpkg -i linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
+debian10-rootfs# dpkg -i linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
 ```
 
 ### Clean Cache
@@ -233,7 +233,7 @@ debian10-rootfs# dpkg -l > dpkg-list.txt
 debian10-rootfs# exit
 shell$ sudo rm -f $targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $targetdir/build-debian10-rootfs-with-qemu.sh
-shell$ sudo rm -f $targetdir/linux-image-4.19.0-xlnx-v2019.2-zynqmp-fpga_4.19.0-xlnx-v2019.2-zynqmp-fpga-2_arm64.deb
+shell$ sudo rm -f $targetdir/linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
 shell$ sudo mv    $targetdir/dpkg-list.txt files/debian10-dpkg-list.txt
 ```
 

@@ -20,15 +20,16 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
 * Linux Kernel Version v5.4.0
-  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.1
+  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.2
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
   + Enable FPGA Reagion
   + Enable ATWILC3000 Linux Driver for Ultra96-V2
+  + Enable CIFS (Common Internet File System)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
-* Debian10(buster) Root File System
+* Debian10.9(buster) Root File System
   + Installed build-essential
   + Installed device-tree-compiler
   + Installed ruby ruby-msgpack ruby-serialport
@@ -53,7 +54,7 @@ Build
 * [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96](target/Ultra96/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96-V2](target/Ultra96-V2/build-v2019.2/Readme.md)
-* [Build Linux Kernel](doc/build/linux-xlnx-v2020.1-zynqmp-fpga.md)
+* [Build Linux Kernel](doc/build/linux-xlnx-v2020.2-zynqmp-fpga.md)
 * [Build Debian10 RootFS](doc/build/debian10-rootfs.md)
 * [Build Device Drivers](doc/build/device-drivers.md)
 
@@ -73,6 +74,8 @@ Examples
 
 * https://github.com/ikwzm/ZynqMP-FPGA-XRT-Example-1-Ultra96
   + Example for ZynqMP-FPGA-XRT
+* https://github.com/ikwzm/ArgSort-Ultra96
+  + ArgSort for Ultra96
 * https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-2-Ultra96
   + ZynqMP-FPGA-Linux Example (2) binary and test code for Ultra96
 * https://github.com/ikwzm/ZynqMP-FPGA-Linux-Example-0-UltraZed
