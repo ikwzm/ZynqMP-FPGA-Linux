@@ -1,0 +1,40 @@
+diff --git a/drivers/gpu/drm/xlnx/xlnx_gem.c b/drivers/gpu/drm/xlnx/xlnx_gem.c
+index 4a5d533ec..30be51700 100644
+--- a/drivers/gpu/drm/xlnx/xlnx_gem.c
++++ b/drivers/gpu/drm/xlnx/xlnx_gem.c
+@@ -22,6 +22,13 @@
+ #include "xlnx_drv.h"
+ #include "xlnx_gem.h"
+ 
++/*
++ * gem_alignment_size module parameter
++ */
++static int        gem_alignment_size = 0;
++module_param(     gem_alignment_size , int, S_IRUGO);
++MODULE_PARM_DESC( gem_alignment_size , "xlnx gem alignment size");
++
+ /*
+  * xlnx_gem_cma_dumb_create - (struct drm_driver)->dumb_create callback
+  * @file_priv: drm_file object
+@@ -37,11 +44,18 @@
+ int xlnx_gem_cma_dumb_create(struct drm_file *file_priv, struct drm_device *drm,
+ 			     struct drm_mode_create_dumb *args)
+ {
+-	int pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
+-	unsigned int align = xlnx_get_align(drm);
++	unsigned int align;
+ 
++	if (gem_alignment_size == 0)
++		align = xlnx_get_align(drm);
++	else
++		align = gem_alignment_size;
++            
+ 	if (!args->pitch || !IS_ALIGNED(args->pitch, align))
+-		args->pitch = ALIGN(pitch, align);
++		args->pitch = ALIGN(DIV_ROUND_UP(args->width * args->bpp, 8), align);
+ 
++	DRM_DEBUG("width=%d, height=%d, bpp=%d, pitch=%d, align=%d\n",
++                  args->width, args->height, args->bpp, args->pitch, align);
++                  
+ 	return drm_gem_cma_dumb_create_internal(file_priv, drm, args);
+ }

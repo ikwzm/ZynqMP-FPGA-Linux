@@ -58,9 +58,15 @@ patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-lima.diff
 git add --update
 git commit -m "[add] Lima driver."
 
+## Patch for Xilinx DRM KMS Driver for Lima
+
+patch -p1 < ../files/linux-xlnx-v2020.2-zynqmp-fpga-xlnx_gem_alignment_size.diff
+git add --update
+git commit -m "[add] module_param(gem_alignment_size) to Xilinx DRM KMS Driver for Lima."
+
 ## Create tag and .version
-git tag -a xilinx-v2020.2-zynqmp-fpga-1 -m "release xilinx-v2020.2-zynqmp-fpga-1"
-echo 1 > .version
+git tag -a xilinx-v2020.2-zynqmp-fpga-2 -m "release xilinx-v2020.2-zynqmp-fpga-2"
+echo 2 > .version
 
 ## Setup for Build 
 export ARCH=arm64

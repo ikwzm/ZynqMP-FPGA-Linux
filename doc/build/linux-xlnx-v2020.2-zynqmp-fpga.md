@@ -85,11 +85,19 @@ shell$ git add --update
 shell$ git commit -m "[add] Lima driver."
 ```
 
+## Patch for Xilinx DRM KMS Driver for Lima
+
+```console
+shell$ patch -p1 < ../linux-xlnx-v2020.2-zynqmp-fpga-xlnx_gem_alignment_size.diff
+shell$ git add --update
+shell$ git commit -m "[add] module_param(gem_alignment_size) to Xilinx DRM KMS Driver for Lima."
+```
+
 ## Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2020.2-zynqmp-fpga-1 -m "release xilinx-v2020.2-zynqmp-fpga-1"
-shell$ echo 1 > .version
+shell$ git tag -a xilinx-v2020.2-zynqmp-fpga-2 -m "release xilinx-v2020.2-zynqmp-fpga-2"
+shell$ echo 2 > .version
 ```
 
 ## Setup for Build 
