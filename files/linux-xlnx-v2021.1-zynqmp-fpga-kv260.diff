@@ -186,10 +186,10 @@ index 000000000..30151a44f
 +};
 diff --git a/arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dts b/arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dts
 new file mode 100644
-index 000000000..c34649867
+index 000000000..4a937bccb
 --- /dev/null
 +++ b/arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dts
-@@ -0,0 +1,332 @@
+@@ -0,0 +1,339 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * dts file for Kira KV260 Vision AI Starter Kit
@@ -224,6 +224,13 @@ index 000000000..c34649867
 +	memory {
 +		device_type = "memory";
 +		reg = <0x0 0x0 0x0 0x7ff00000>, <0x00000008 0x00000000 0x0 0x80000000>;
++	};
++
++	amba_pl: amba_pl@0 {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		compatible = "simple-bus";
++		ranges ;
 +	};
 +};
 +
@@ -2780,7 +2787,7 @@ index 000000000..349e308f1
 +			  "", "", "", ""; /* 170 - 174 */
 +};
 diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
-index 2c7acc313..4bdb534dc 100644
+index b5752fc64..880300a55 100644
 --- a/arch/arm64/configs/xilinx_zynqmp_defconfig
 +++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
 @@ -292,7 +292,7 @@ CONFIG_USB_XHCI_HCD=y
