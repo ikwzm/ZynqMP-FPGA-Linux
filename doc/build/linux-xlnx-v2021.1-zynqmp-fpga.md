@@ -93,8 +93,8 @@ shell$ git commit -m "[add] Xilinx APF driver."
 ## Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2021.1-zynqmp-fpga-1 -m "release xilinx-v2021.1-zynqmp-fpga-1"
-shell$ echo 1 > .version
+shell$ git tag -a xilinx-v2021.1-zynqmp-fpga-2 -m "release xilinx-v2021.1-zynqmp-fpga-2"
+shell$ echo 2 > .version
 ```
 
 ## Setup for Build 
