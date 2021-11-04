@@ -11,7 +11,7 @@ index a9efbf7fc..dc21d71b6 100644
  dtb-$(CONFIG_ARCH_ZYNQMP) += zynqmp-zc1751-xm015-dc1.dtb
 diff --git a/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 new file mode 100644
-index 000000000..30eed69f4
+index 000000000..d9d6838f1
 --- /dev/null
 +++ b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 @@ -0,0 +1,630 @@
@@ -144,7 +144,8 @@ index 000000000..30eed69f4
 +
 +	sdio_pwrseq: sdio-pwrseq {
 +		compatible = "mmc-pwrseq-simple";
-+		reset-gpios = <&gpio 7 GPIO_ACTIVE_LOW>; /* WIFI_EN */
++		reset-gpios = <&gpio 7 1>;   /* MIO[7] for WILC3000 RESETN, Active Low */
++		chip_en-gpios = <&gpio 8 1>;
 +		post-power-on-delay-ms = <10>;
 +	};
 +
@@ -526,15 +527,14 @@ index 000000000..30eed69f4
 +	xlnx,mio-bank = <0>;
 +	non-removable;
 +	disable-wp;
-+	cap-power-off-card;
++	// cap-power-off-card; /* This is not compatible with the WILC3000 and means the WILC will always be powered on */
++	non-removeable;
++	mmc-pwrseq = <&sdio_pwrseq>;
 +	vqmmc-supply = <&wmmcsdio_fixed>;
 +	#address-cells = <1>;
 +	#size-cells = <0>;
 +	wlcore: wilc_sdio@0 {
 +		compatible    = "microchip,wilc1000", "microchip,wilc3000";
-+		irq-gpios     = <&gpio 76 GPIO_ACTIVE_HIGH>; /* MIO76 WLAN_IRQ    1V8 */
-+		reset-gpios   = <&gpio  7 GPIO_ACTIVE_HIGH>; /* MIO7  RADIO_RST_N 1V8 */
-+		chip_en-gpios = <&gpio  8 GPIO_ACTIVE_HIGH>; /* MIO8  RADIO_EN    1V8 */
 +		status        = "okay";
 +		reg           = <0>;
 +		bus-width     = <4>;
@@ -646,7 +646,7 @@ index 000000000..30eed69f4
 +	status = "okay";
 +};
 diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
-index cd6b1a7d7..5c479eb4c 100644
+index 6a3973cc4..3fa994542 100644
 --- a/arch/arm64/configs/xilinx_zynqmp_defconfig
 +++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
 @@ -180,6 +180,7 @@ CONFIG_USB_USBNET=y
@@ -657,3 +657,41 @@ index cd6b1a7d7..5c479eb4c 100644
  CONFIG_INPUT_EVDEV=y
  CONFIG_KEYBOARD_GPIO=y
  CONFIG_KEYBOARD_GPIO_POLLED=y
+diff --git a/drivers/mmc/core/pwrseq_simple.c b/drivers/mmc/core/pwrseq_simple.c
+index ea4d36705..4efbb9dde 100644
+--- a/drivers/mmc/core/pwrseq_simple.c
++++ b/drivers/mmc/core/pwrseq_simple.c
+@@ -112,6 +112,33 @@ static int mmc_pwrseq_simple_probe(struct platform_device *pdev)
+ {
+ 	struct mmc_pwrseq_simple *pwrseq;
+ 	struct device *dev = &pdev->dev;
++        struct gpio_desc *gpio_chip_en;
++        struct gpio_desc *gpio_resetn;
++
++        // Leave resetn low and let pwrseq take care of it
++        gpio_resetn = gpiod_get(dev, "reset", GPIOD_ASIS);
++        if (IS_ERR(gpio_resetn)) {
++                dev_warn(dev,
++                   "mmc failed to get default resetn GPIO\n");
++        } else {
++                dev_info(dev, "mmc succesfully got gpio_resetn\n");
++                gpiod_direction_output(gpio_resetn, 1);  // low
++                gpiod_put(gpio_resetn);
++        }
++
++        // Turn power off then back on
++        gpio_chip_en = gpiod_get(dev, "chip_en", GPIOD_ASIS);
++        if (IS_ERR(gpio_chip_en)) {
++                dev_warn(dev,
++                   "mmc failed to get default chip_en GPIO\n");
++        } else {
++                dev_info(dev, "mmc succesfully got gpio_chip_en\n");
++                gpiod_direction_output(gpio_chip_en, 1);  // low (chip off)
++                mdelay(5);
++                gpiod_set_value(gpio_chip_en, 0); // high (chip on)
++                gpiod_put(gpio_chip_en);
++                mdelay(5);
++        }
+ 
+ 	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
+ 	if (!pwrseq)
