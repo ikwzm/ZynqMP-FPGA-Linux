@@ -1,6 +1,10 @@
 ZynqMP-FPGA-Linux
 ====================================================================================
 
+**WARNING: Ultra96-V2 WiFi is currently not working in this version.**
+
+I would like somebody's help.
+
 Overview
 ------------------------------------------------------------------------------------
 
@@ -14,18 +18,19 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + UltraZed-EG-IOCC : Xilinx Zynq UltraScale+ MPSoC Starter Kit by Avnet.
   + Ultra96    : Xilinx Zynq UltraScale+ MPSoC development board based on the Linaro 96Boards specification. 
   + Ultra96-V2 : updates and refreshes the Ultra96 product that was released in 2018.
+  + KV260 : Kria KV260 Vision AI Startar Kit.
 * Boot Loader
   + FSBL(First Stage Boot Loader for ZynqMP)
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
-* Linux Kernel Version v5.4.0
-  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.2
+* Linux Kernel Version v5.10.0
+  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2021.1
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
   + Enable FPGA Reagion
-  + Enable ATWILC3000 Linux Driver for Ultra96-V2
+  + Enable ATWILC3000 Linux Driver for Ultra96-V2 **(However, it is not working properly yet)**
   + Enable CIFS (Common Internet File System)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
@@ -47,6 +52,7 @@ Install
   + [UltraZed-EG-IOCC](doc/install/ultrazed-eg-iocc.md)
   + [Ultra96](doc/install/ultra96.md)
   + [Ultra96-V2](doc/install/ultra96v2.md)
+  + [KV260](doc/install/kv260.md)
 
 Build 
 ------------------------------------------------------------------------------------
