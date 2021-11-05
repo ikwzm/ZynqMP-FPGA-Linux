@@ -50,8 +50,8 @@ shell# tar xfz debian10-rootfs-vanilla.tgz -C                             /mnt/u
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
 shell# cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb   /mnt/usb2/home/fpga/debian
 shell# cp linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb /mnt/usb2/home/fpga/debian
-shell# cp fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.3.0-1_arm64.deb       /mnt/usb2/home/fpga/debian
-shell# cp u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.0.1-0_arm64.deb     /mnt/usb2/home/fpga/debian
+shell# cp fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       /mnt/usb2/home/fpga/debian
+shell# cp u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     /mnt/usb2/home/fpga/debian
 ```
 
 #### Add boot partition mount position to /etc/fstab
