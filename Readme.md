@@ -1,9 +1,9 @@
 ZynqMP-FPGA-Linux
 ====================================================================================
 
-**WARNING: Ultra96-V2 WiFi is currently not working in this version.**
-
-I would like somebody's help.
+**WARNING: Ultr96-V2 WiFi doesn't work with 5.10.0-xlnx-v2021.1-zynqmp-fpga.
+Therefore, use 5.4.0-xlnx-v2020.2-zynqmp-fpga.
+I would like somebody's help.**
 
 Overview
 ------------------------------------------------------------------------------------
@@ -24,7 +24,7 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
-* Linux Kernel Version v5.10.0
+* Linux Kernel Version v5.10.0 (expect for Ultra96-V2)
   + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2021.1
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
@@ -34,13 +34,13 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + Enable CIFS (Common Internet File System)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
-* Debian10.9(buster) Root File System
+* Debian11.1(bullseye) Root File System
   + Installed build-essential
   + Installed device-tree-compiler
   + Installed ruby ruby-msgpack ruby-serialport
   + Installed python python3 msgpack-rpc-python
   + Installed u-boot-tools
-  + Installed Other package list -> [files/debian10-dpkg-list.txt](files/debian10-dpkg-list.txt)
+  + Installed Other package list -> [files/debian11-dpkg-list.txt](files/debian11-dpkg-list.txt)
 * FPGA Device Drivers and Services
   + [fclkcfg    (FPGA Clock Configuration Device Driver)](https://github.com/ikwzm/fclkcfg)
   + [u-dma-buf  (User space mappable DMA Buffer)](https://github.com/ikwzm/udmabuf)
@@ -60,13 +60,15 @@ Build
 * [Build Boot Loader for UltraZed-EG-IOCC](target/UltraZed-EG-IOCC/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96](target/Ultra96/build-v2019.2/Readme.md)
 * [Build Boot Loader for Ultra96-V2](target/Ultra96-V2/build-v2019.2/Readme.md)
-* [Build Linux Kernel](doc/build/linux-xlnx-v2020.2-zynqmp-fpga.md)
-* [Build Debian10 RootFS](doc/build/debian10-rootfs.md)
+* [Build Linux Kernel](doc/build/linux-xlnx-v2021.1-zynqmp-fpga.md)
+* [Build Debian11 RootFS](doc/build/debian11-rootfs.md)
 * [Build Device Drivers](doc/build/device-drivers.md)
 
 Other Projects
 ------------------------------------------------------------------------------------
 
+* https://github.com/ikwzm/ZynqMP-FPGA-Ubuntu20.04-Ultra96
+  + Linux Boot Image(U-boot, Kernel, Ubuntu 20.04 Desktop) for Ultra96/Ultra96-V2
 * https://github.com/ikwzm/ZynqMP-FPGA-Ubuntu18.04-Ultra96
   + Linux Boot Image(U-boot, Kernel, Ubuntu 18.04 Desktop) for Ultra96/Ultra96-V2
 * https://github.com/ikwzm/ZynqMP-FPGA-Xserver
