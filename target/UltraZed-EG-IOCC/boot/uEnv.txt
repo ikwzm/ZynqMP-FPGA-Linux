@@ -62,3 +62,7 @@ boot_targets=xilinx
 # Boot Menu
 ########################################################################
 bootmenu_0=Boot Default=boot
+bootdelay=5
+bootmenu_0=Boot Default=boot
+bootmenu_1=Boot 5.4.0-xlnx-v2021.1-zynqmp-fpga=env set external_env_file uEnv-linux-5.4.0-xlnx-v2020.2-zynqmp-fpga.txt && env run external_env_boot
+bootmenu_2=Boot 5.10.0-xlnx-v2021.1-zynqmp-fpga=env set external_env_file uEnv-linux-5.10.0-xlnx-v2021.1-zynqmp-fpga.txt && env run external_env_boot
