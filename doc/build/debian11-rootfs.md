@@ -37,7 +37,7 @@ There are two ways
 
 ### Run debootstrap second stage
 
-````console
+```console
 debian11-rootfs# distro=bullseye
 debian11-rootfs# export LANG=C
 debian11-rootfs# /debootstrap/debootstrap --second-stage
