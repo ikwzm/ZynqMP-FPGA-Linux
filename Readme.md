@@ -24,7 +24,7 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
-* Linux Kernel Version v5.10.0 (expect for Ultra96-V2)
+* Linux Kernel Version v5.10.0 (expect for Ultra96-V2)     Linux Kernel Version v5.4.0 (for Ultra96-V2)
   + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2021.1
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
