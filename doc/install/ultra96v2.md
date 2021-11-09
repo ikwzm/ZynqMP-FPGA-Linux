@@ -1,13 +1,13 @@
 ## Ultra96-V2
 
-**Note: Ultr96-V2 WiFi doesn't work with 5.10.0-xlnx-v2021.1-zynqmp-fpga. Therefore, use 5.4.0-xlnx-v2020.2-zynqmp-fpga. **
+**Note: Ultr96-V2 WiFi doesn't work with 5.10.0-xlnx-v2021.1-zynqmp-fpga. Therefore, use 5.4.0-xlnx-v2020.2-zynqmp-fpga.**
 
 ### Downlowd from github
 
 **Note: Downloading the entire repository is time consuming, so download only the branch you need.**
 
 ```console
-shell$ git clone --depth=1 --branch v2021.1.1-rc2 git://github.com/ikwzm/ZynqMP-FPGA-Linux
+shell$ git clone --depth=1 --branch v2021.1.1-rc3 git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
 shell$ git lfs pull
 ```
