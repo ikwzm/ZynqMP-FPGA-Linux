@@ -24,13 +24,23 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
-* Linux Kernel Version v5.10.0 (expect for Ultra96-V2)     Linux Kernel Version v5.4.0 (for Ultra96-V2)
+* Linux Kernel Version v5.10.0 (for UltraZed-EG-IOCC, Ultra96, KV260)
   + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2021.1
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
   + Enable FPGA Reagion
   + Enable ATWILC3000 Linux Driver for Ultra96-V2 **(However, it is not working properly yet)**
+  + Enable CIFS (Common Internet File System)
+  + Enable Xilinx APF Accelerator driver
+  + Enable Xilinx APF DMA engines support
+* Linux Kernel Version v5.4.0 (for UltraZed-EG-IOCC, Ultra96, Ultra96-V2)
+  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.2
+  + Enable Device Tree Overlay with Configuration File System
+  + Enable FPGA Manager
+  + Enable FPGA Bridge
+  + Enable FPGA Reagion
+  + Enable ATWILC3000 Linux Driver for Ultra96-V2
   + Enable CIFS (Common Internet File System)
   + Enable Xilinx APF Accelerator driver
   + Enable Xilinx APF DMA engines support
@@ -48,7 +58,7 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
 Install
 ------------------------------------------------------------------------------------
 
-* Install U-Boot and Linux to SD-Card
+* Install Boot Loader and Linux to SD-Card
   + [UltraZed-EG-IOCC](doc/install/ultrazed-eg-iocc.md)
   + [Ultra96](doc/install/ultra96.md)
   + [Ultra96-V2](doc/install/ultra96v2.md)
