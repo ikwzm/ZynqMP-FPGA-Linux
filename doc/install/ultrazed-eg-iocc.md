@@ -5,7 +5,7 @@
 **Note: Downloading the entire repository is time consuming, so download only the branch you need.**
 
 ```console
-shell$ git clone --depth=1 --branch v2021.1.1-rc3 git://github.com/ikwzm/ZynqMP-FPGA-Linux
+shell$ git clone --depth=1 --branch v2021.1.1-rc4 git://github.com/ikwzm/ZynqMP-FPGA-Linux
 shell$ cd ZynqMP-FPGA-Linux
 shell$ git lfs pull
 ```
@@ -27,8 +27,8 @@ shell$ git lfs pull
  * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   : Linux Headers Package    (use Git LFS)
  * fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        : fclkcfg(1.7.2) Device Driver and Services Package
  * u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb      : u-dma-buf(3.2.4) Device Driver and Services Package
- * linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb   : Linux Image Package      (use Git LFS)
- * linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb : Linux Headers Package    (use Git LFS)
+ * linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   : Linux Image Package      (use Git LFS)
+ * linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb : Linux Headers Package    (use Git LFS)
  * fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       : fclkcfg(1.7.2) Device Driver and Services Package
  * u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     : u-dma-buf(3.2.4) Device Driver and Services Package
  
@@ -58,8 +58,8 @@ shell# mkdir                                                              /mnt/u
 shell# cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     /mnt/usb2/home/fpga/debian
 shell# cp linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   /mnt/usb2/home/fpga/debian
 shell# cp fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        /mnt/usb2/home/fpga/debian
-shell# cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb /mnt/usb2/home/fpga/debian
+shell# cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   /mnt/usb2/home/fpga/debian
+shell# cp linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb /mnt/usb2/home/fpga/debian
 shell# cp fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       /mnt/usb2/home/fpga/debian
 shell# cp u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     /mnt/usb2/home/fpga/debian
 ```
@@ -102,28 +102,29 @@ root@debian-fpga:~#
 
 #### Install Linux Image Package
 
-Since linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb is already pre-installed in debian11-rootfs.tgz, this The process can be omitted.
+Since linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb is already pre-installed in debian11-rootfs.tgz, this The process can be omitted.
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
 Selecting previously unselected package linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 117341 files and directories currently installed.)
-Preparing to unpack linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb ...
-Unpacking linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-2) ...
-Setting up linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-2) ...
+(Reading database ... 117342 files and directories currently installed.)
+Preparing to unpack linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb ...
+Unpacking linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
+Setting up linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
 ```
 
 #### Install Linux Headers Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# pkg -i linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-5.10.0-xlnx-v2021.1-zy
+nqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
 Selecting previously unselected package linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 117613 files and directories currently installed.)
-Preparing to unpack linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb ...
-Unpacking linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-2) ...
-Setting up linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-2) ...
+(Reading database ... 117624 files and directories currently installed.)
+Preparing to unpack linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb ...
+Unpacking linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
+Setting up linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
 make: Entering directory '/usr/src/linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga'
   SYNC    include/config/auto.conf.cmd
   HOSTCC  scripts/basic/fixdep
@@ -187,7 +188,7 @@ make: Leaving directory '/usr/src/linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga'
 root@debian-fpga:~# cd /home/fpga/debian
 root@debian-fpga:/home/fpga/debian# dpkg -i fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb
 Selecting previously unselected package fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 134024 files and directories currently installed.)
+(Reading database ... 134025 files and directories currently installed.)
 Preparing to unpack fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb ...
 Unpacking fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga (1.7.2-1) ...
 Setting up fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga (1.7.2-1) ...
@@ -199,7 +200,7 @@ Setting up fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga (1.7.2-1) ...
 root@debian-fpga:~# cd /home/fpga/debian
 root@debian-fpga:/home/fpga/debian# dpkg -i u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb
 Selecting previously unselected package u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 134030 files and directories currently installed.)
+(Reading database ... 134031 files and directories currently installed.)
 Preparing to unpack u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb ...
 Unpacking u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga (3.2.4-0) ...
 Setting up u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga (3.2.4-0) ...
