@@ -162,7 +162,7 @@ ii  libkrb5-3:arm64                             1.18.3-6+deb11u1                
 ii  libkrb5support0:arm64                       1.18.3-6+deb11u1                  arm64        MIT Kerberos runtime libraries - Support library
 ii  liblapack3:arm64                            3.9.0-3                           arm64        Library of linear algebra routines 3 - shared version
 ii  libldap-2.4-2:arm64                         2.4.57+dfsg-3                     arm64        OpenLDAP libraries
-ii  libldb2:arm64                               2:2.2.0-3.1                       arm64        LDAP-like embedded database - shared library
+ii  libldb2:arm64                               2:2.2.3-2~deb11u1                 arm64        LDAP-like embedded database - shared library
 ii  liblmdb0:arm64                              0.9.24-1                          arm64        Lightning Memory-Mapped Database shared library
 ii  liblocale-gettext-perl                      1.07-4+b1                         arm64        module using libc functions for internationalization in Perl
 ii  liblognorm5:arm64                           2.0.5-1.1                         arm64        log normalizing library
@@ -248,14 +248,14 @@ ii  libudev1:arm64                              247.3-6                         
 ii  libunistring2:arm64                         0.9.10-4                          arm64        Unicode string library for C
 ii  libuuid1:arm64                              2.36.1-8                          arm64        Universally Unique ID library
 ii  libuv1:arm64                                1.40.0-2                          arm64        asynchronous event notification library - runtime library
-ii  libwbclient0:arm64                          2:4.13.5+dfsg-2                   arm64        Samba winbind client library
+ii  libwbclient0:arm64                          2:4.13.13+dfsg-1~deb11u2          arm64        Samba winbind client library
 ii  libwrap0:arm64                              7.6.q-31                          arm64        Wietse Venema's TCP wrappers library
 ii  libxml2:arm64                               2.9.10+dfsg-6.7                   arm64        GNOME XML library
 ii  libxtables12:arm64                          1.8.7-1                           arm64        netfilter xtables library
 ii  libxxhash0:arm64                            0.8.0-2                           arm64        shared library for xxhash
 ii  libyaml-0-2:arm64                           0.2.2-1                           arm64        Fast YAML 1.1 parser and emitter library
 ii  libzstd1:arm64                              1.4.8+dfsg-2.1                    arm64        fast lossless compression algorithm
-ii  linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga 5.10.0-xlnx-v2021.1-zynqmp-fpga-2 arm64        Linux kernel, version 5.10.0-xlnx-v2021.1-zynqmp-fpga
+ii  linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga 5.10.0-xlnx-v2021.1-zynqmp-fpga-4 arm64        Linux kernel, version 5.10.0-xlnx-v2021.1-zynqmp-fpga
 ii  linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga  5.4.0-xlnx-v2020.2-zynqmp-fpga-3  arm64        Linux kernel, version 5.4.0-xlnx-v2020.2-zynqmp-fpga
 ii  linux-libc-dev:arm64                        5.10.70-1                         arm64        Linux support headers for userspace development
 ii  locales                                     2.31-13+deb11u2                   all          GNU C Library: National Language (locale) data [support]
@@ -292,13 +292,13 @@ ii  python3                                     3.9.2-3                         
 ii  python3-dev                                 3.9.2-3                           arm64        header files and a static library for Python (default)
 ii  python3-distutils                           3.9.2-1                           all          distutils package for Python 3.x
 ii  python3-dnspython                           2.0.0-1                           all          DNS toolkit for Python 3
-ii  python3-ldb                                 2:2.2.0-3.1                       arm64        Python 3 bindings for LDB
+ii  python3-ldb                                 2:2.2.3-2~deb11u1                 arm64        Python 3 bindings for LDB
 ii  python3-lib2to3                             3.9.2-1                           all          Interactive high-level object-oriented language (lib2to3)
 ii  python3-minimal                             3.9.2-3                           arm64        minimal subset of the Python language (default python3 version)
 ii  python3-numpy                               1:1.19.5-1                        arm64        Fast array facility to the Python 3 language
 ii  python3-pip                                 20.3.4-4                          all          Python package installer
 ii  python3-pkg-resources                       52.0.0-4                          all          Package Discovery and Resource Access using pkg_resources
-ii  python3-samba                               2:4.13.5+dfsg-2                   arm64        Python 3 bindings for Samba
+ii  python3-samba                               2:4.13.13+dfsg-1~deb11u2          arm64        Python 3 bindings for Samba
 ii  python3-setuptools                          52.0.0-4                          all          Python3 Distutils Enhancements
 ii  python3-talloc:arm64                        2.3.1-2+b1                        arm64        hierarchical pool based memory allocator - Python3 bindings
 ii  python3-tdb                                 1.4.3-1+b1                        arm64        Python3 bindings for TDB
@@ -322,10 +322,10 @@ ii  ruby-xmlrpc                                 0.3.0-2                         
 ii  ruby2.7                                     2.7.4-1                           arm64        Interpreter of object-oriented scripting language Ruby
 ii  rubygems-integration                        1.18                              all          integration of Debian Ruby packages with Rubygems
 ii  runit-helper                                2.10.3                            all          dh-runit implementation detail
-ii  samba                                       2:4.13.5+dfsg-2                   arm64        SMB/CIFS file, print, and login server for Unix
-ii  samba-common                                2:4.13.5+dfsg-2                   all          common files used by both the Samba server and client
-ii  samba-common-bin                            2:4.13.5+dfsg-2                   arm64        Samba common files used by both the server and the client
-ii  samba-libs:arm64                            2:4.13.5+dfsg-2                   arm64        Samba core libraries
+ii  samba                                       2:4.13.13+dfsg-1~deb11u2          arm64        SMB/CIFS file, print, and login server for Unix
+ii  samba-common                                2:4.13.13+dfsg-1~deb11u2          all          common files used by both the Samba server and client
+ii  samba-common-bin                            2:4.13.13+dfsg-1~deb11u2          arm64        Samba common files used by both the server and the client
+ii  samba-libs:arm64                            2:4.13.13+dfsg-1~deb11u2          arm64        Samba core libraries
 ii  sed                                         4.7-1                             arm64        GNU stream editor for filtering/transforming text
 ii  sensible-utils                              0.0.14                            all          Utilities for sensible alternative selection
 ii  socat                                       1.7.4.1-3                         arm64        multipurpose relay for bidirectional data transfer
