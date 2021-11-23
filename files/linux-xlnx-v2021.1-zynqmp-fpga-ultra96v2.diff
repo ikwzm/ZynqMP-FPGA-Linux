@@ -11,7 +11,7 @@ index a9efbf7fc..dc21d71b6 100644
  dtb-$(CONFIG_ARCH_ZYNQMP) += zynqmp-zc1751-xm015-dc1.dtb
 diff --git a/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 new file mode 100644
-index 000000000..d9d6838f1
+index 000000000..6636525c1
 --- /dev/null
 +++ b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 @@ -0,0 +1,630 @@
@@ -534,7 +534,7 @@ index 000000000..d9d6838f1
 +	#address-cells = <1>;
 +	#size-cells = <0>;
 +	wlcore: wilc_sdio@0 {
-+		compatible    = "microchip,wilc1000", "microchip,wilc3000";
++		compatible    = "microchip,wilc3000", "microchip,wilc3000";
 +		status        = "okay";
 +		reg           = <0>;
 +		bus-width     = <4>;
@@ -646,7 +646,7 @@ index 000000000..d9d6838f1
 +	status = "okay";
 +};
 diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
-index 6a3973cc4..3fa994542 100644
+index cd6b1a7d7..5c479eb4c 100644
 --- a/arch/arm64/configs/xilinx_zynqmp_defconfig
 +++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
 @@ -180,6 +180,7 @@ CONFIG_USB_USBNET=y

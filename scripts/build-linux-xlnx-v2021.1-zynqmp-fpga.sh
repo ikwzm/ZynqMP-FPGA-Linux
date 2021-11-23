@@ -30,6 +30,7 @@ git commit -m "[patch] for UltraZed-EG IO Carrier Card."
 ## Add ATWILC3000 Linux Driver for Ultra96-V2
 
 cp -r ../files/microchip-wilc-driver/wilc1000 drivers/staging/wilc3000
+patch -d drivers/staging/wilc3000 < ../files/microchip-wilc-driver/0001-ultra96-modifications-15.5.patch
 patch -p1 < ../files/linux-xlnx-v2021.1-zynqmp-fpga-wilc3000.diff
 git add --update
 git add drivers/staging/wilc3000
@@ -63,8 +64,8 @@ git add --update
 git commit -m "[add] Xilinx APF driver."
 
 ## Create tag and .version
-git tag -a xilinx-v2021.1-zynqmp-fpga-2 -m "release xilinx-v2021.1-zynqmp-fpga-2"
-echo 2 > .version
+git tag -a xilinx-v2021.1-zynqmp-fpga-3 -m "release xilinx-v2021.1-zynqmp-fpga-3"
+echo 3 > .version
 
 ## Setup for Build 
 export ARCH=arm64

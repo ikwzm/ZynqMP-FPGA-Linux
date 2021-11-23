@@ -517,7 +517,7 @@
 	#address-cells = <1>;
 	#size-cells = <0>;
 	wlcore: wilc_sdio@0 {
-		compatible    = "microchip,wilc1000", "microchip,wilc3000";
+		compatible    = "microchip,wilc3000", "microchip,wilc3000";
 		status        = "okay";
 		reg           = <0>;
 		bus-width     = <4>;
