@@ -126,10 +126,10 @@
 	};
 
 	sdio_pwrseq: sdio-pwrseq {
-		compatible = "mmc-pwrseq-simple";
-		reset-gpios = <&gpio 7 1>;   /* MIO[7] for WILC3000 RESETN, Active Low */
-		chip_en-gpios = <&gpio 8 1>;
-		post-power-on-delay-ms = <10>;
+		compatible = "mmc-pwrseq-wilc";
+		reset-gpios = <&gpio 7 GPIO_ACTIVE_HIGH>;
+		powerdown-gpios = <&gpio 8 GPIO_ACTIVE_HIGH>;
+		status = "okay";
 	};
 
 	ina226 {

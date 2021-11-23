@@ -1,8 +1,8 @@
 diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
-index 5c479eb4c..1db8aea5a 100644
+index fca1d8ca3..c06305970 100644
 --- a/arch/arm64/configs/xilinx_zynqmp_defconfig
 +++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
-@@ -395,6 +395,12 @@ CONFIG_NFS_V4=y
+@@ -396,6 +396,12 @@ CONFIG_NFS_V4=y
  CONFIG_NFS_V4_1=y
  CONFIG_NFS_V4_2=y
  CONFIG_ROOT_NFS=y
