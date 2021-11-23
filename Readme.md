@@ -1,10 +1,6 @@
 ZynqMP-FPGA-Linux
 ====================================================================================
 
-**WARNING: Ultr96-V2 WiFi doesn't work with 5.10.0-xlnx-v2021.1-zynqmp-fpga.
-Therefore, use 5.4.0-xlnx-v2020.2-zynqmp-fpga.
-I would like somebody's help.**
-
 Overview
 ------------------------------------------------------------------------------------
 
@@ -24,18 +20,8 @@ This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MP
   + PMU Firmware(Platform Management Unit Firmware)
   + BL31(ARM Trusted Firmware Boot Loader stage 3-1)
   + U-Boot xilinx-v2019.2 (customized)
-* Linux Kernel Version v5.10.0 (for UltraZed-EG-IOCC, Ultra96, KV260)
+* Linux Kernel Version v5.10.0
   + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2021.1
-  + Enable Device Tree Overlay with Configuration File System
-  + Enable FPGA Manager
-  + Enable FPGA Bridge
-  + Enable FPGA Reagion
-  + Enable ATWILC3000 Linux Driver for Ultra96-V2 **(However, it is not working properly yet)**
-  + Enable CIFS (Common Internet File System)
-  + Enable Xilinx APF Accelerator driver
-  + Enable Xilinx APF DMA engines support
-* Linux Kernel Version v5.4.0 (for UltraZed-EG-IOCC, Ultra96, Ultra96-V2)
-  + [linux-xlnx](https://github.com/Xilinx/linux-xlnx) tag=xilinx-v2020.2
   + Enable Device Tree Overlay with Configuration File System
   + Enable FPGA Manager
   + Enable FPGA Bridge
