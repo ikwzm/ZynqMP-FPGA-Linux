@@ -1313,7 +1313,7 @@
 			phandle = <0x75>;
 
 			wilc_sdio@0 {
-				compatible = "microchip,wilc1000\0microchip,wilc3000";
+				compatible = "microchip,wilc3000\0microchip,wilc3000";
 				status = "okay";
 				reg = <0x00>;
 				bus-width = <0x04>;
@@ -1824,10 +1824,10 @@
 	};
 
 	sdio-pwrseq {
-		compatible = "mmc-pwrseq-simple";
-		reset-gpios = <0x10 0x07 0x01>;
-		chip_en-gpios = <0x10 0x08 0x01>;
-		post-power-on-delay-ms = <0x0a>;
+		compatible = "mmc-pwrseq-wilc";
+		reset-gpios = <0x10 0x07 0x00>;
+		powerdown-gpios = <0x10 0x08 0x00>;
+		status = "okay";
 		phandle = <0x19>;
 	};
 

@@ -51,9 +51,12 @@ shell$ git commit -m "[patch] for UltraZed-EG IO Carrier Card."
 
 ```console
 shell$ cp -r ../files/microchip-wilc-driver/wilc1000 drivers/staging/wilc3000
+shell$ patch -d drivers/staging/wilc3000 < ../files/microchip-wilc-driver/0001-ultra96-modifications-15.5.patch
 shell$ patch -p1 < ../files/linux-xlnx-v2021.1-zynqmp-fpga-wilc3000.diff
+shell$ patch -p1 < ../files/linux-xlnx-v2021.1-zynqmp-fpga-pwrseq-wilc.diff
 shell$ git add --update
 shell$ git add drivers/staging/wilc3000
+shell$ git add drivers/mmc/core/pwrseq_wilc.c
 shell$ git commit -m "[add] drivers/staging/wilc3000"
 ```
 
@@ -95,8 +98,8 @@ shell$ git commit -m "[add] Xilinx APF driver."
 ### Create tag and .version
 
 ```console
-shell$ git tag -a xilinx-v2021.1-zynqmp-fpga-2 -m "release xilinx-v2021.1-zynqmp-fpga-2"
-shell$ echo 2 > .version
+shell$ git tag -a xilinx-v2021.1-zynqmp-fpga-4 -m "release xilinx-v2021.1-zynqmp-fpga-4"
+shell$ echo 3 > .version
 ```
 
 ## Build

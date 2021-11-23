@@ -11,7 +11,7 @@ index a9efbf7fc..dc21d71b6 100644
  dtb-$(CONFIG_ARCH_ZYNQMP) += zynqmp-zc1751-xm015-dc1.dtb
 diff --git a/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 new file mode 100644
-index 000000000..d9d6838f1
+index 000000000..d49ab39fa
 --- /dev/null
 +++ b/arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dts
 @@ -0,0 +1,630 @@
@@ -143,10 +143,10 @@ index 000000000..d9d6838f1
 +	};
 +
 +	sdio_pwrseq: sdio-pwrseq {
-+		compatible = "mmc-pwrseq-simple";
-+		reset-gpios = <&gpio 7 1>;   /* MIO[7] for WILC3000 RESETN, Active Low */
-+		chip_en-gpios = <&gpio 8 1>;
-+		post-power-on-delay-ms = <10>;
++		compatible = "mmc-pwrseq-wilc";
++		reset-gpios = <&gpio 7 GPIO_ACTIVE_HIGH>;
++		powerdown-gpios = <&gpio 8 GPIO_ACTIVE_HIGH>;
++		status = "okay";
 +	};
 +
 +	ina226 {
@@ -534,7 +534,7 @@ index 000000000..d9d6838f1
 +	#address-cells = <1>;
 +	#size-cells = <0>;
 +	wlcore: wilc_sdio@0 {
-+		compatible    = "microchip,wilc1000", "microchip,wilc3000";
++		compatible    = "microchip,wilc3000", "microchip,wilc3000";
 +		status        = "okay";
 +		reg           = <0>;
 +		bus-width     = <4>;
@@ -646,52 +646,15 @@ index 000000000..d9d6838f1
 +	status = "okay";
 +};
 diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
-index 6a3973cc4..3fa994542 100644
+index cd6b1a7d7..a6cdc6600 100644
 --- a/arch/arm64/configs/xilinx_zynqmp_defconfig
 +++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
-@@ -180,6 +180,7 @@ CONFIG_USB_USBNET=y
+@@ -180,6 +180,8 @@ CONFIG_USB_USBNET=y
  CONFIG_WL18XX=y
  CONFIG_WLCORE_SPI=y
  CONFIG_WLCORE_SDIO=y
 +CONFIG_WILC_SDIO=y
++CONFIG_PWRSEQ_WILC=y
  CONFIG_INPUT_EVDEV=y
  CONFIG_KEYBOARD_GPIO=y
  CONFIG_KEYBOARD_GPIO_POLLED=y
-diff --git a/drivers/mmc/core/pwrseq_simple.c b/drivers/mmc/core/pwrseq_simple.c
-index ea4d36705..4efbb9dde 100644
---- a/drivers/mmc/core/pwrseq_simple.c
-+++ b/drivers/mmc/core/pwrseq_simple.c
-@@ -112,6 +112,33 @@ static int mmc_pwrseq_simple_probe(struct platform_device *pdev)
- {
- 	struct mmc_pwrseq_simple *pwrseq;
- 	struct device *dev = &pdev->dev;
-+        struct gpio_desc *gpio_chip_en;
-+        struct gpio_desc *gpio_resetn;
-+
-+        // Leave resetn low and let pwrseq take care of it
-+        gpio_resetn = gpiod_get(dev, "reset", GPIOD_ASIS);
-+        if (IS_ERR(gpio_resetn)) {
-+                dev_warn(dev,
-+                   "mmc failed to get default resetn GPIO\n");
-+        } else {
-+                dev_info(dev, "mmc succesfully got gpio_resetn\n");
-+                gpiod_direction_output(gpio_resetn, 1);  // low
-+                gpiod_put(gpio_resetn);
-+        }
-+
-+        // Turn power off then back on
-+        gpio_chip_en = gpiod_get(dev, "chip_en", GPIOD_ASIS);
-+        if (IS_ERR(gpio_chip_en)) {
-+                dev_warn(dev,
-+                   "mmc failed to get default chip_en GPIO\n");
-+        } else {
-+                dev_info(dev, "mmc succesfully got gpio_chip_en\n");
-+                gpiod_direction_output(gpio_chip_en, 1);  // low (chip off)
-+                mdelay(5);
-+                gpiod_set_value(gpio_chip_en, 0); // high (chip on)
-+                gpiod_put(gpio_chip_en);
-+                mdelay(5);
-+        }
- 
- 	pwrseq = devm_kzalloc(dev, sizeof(*pwrseq), GFP_KERNEL);
- 	if (!pwrseq)
