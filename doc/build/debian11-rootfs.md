@@ -19,7 +19,7 @@ shell$ sudo cp /usr/bin/qemu-aarch64-static                $PWD/$targetdir/usr/b
 shell$ sudo cp /etc/resolv.conf                            $PWD/$targetdir/etc
 shell$ sudo cp scripts/build-debian11-rootfs-with-qemu.sh  $PWD/$targetdir
 shell$ sudo cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     $PWD/$targetdir
-shell$ sudo cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb   $PWD/$targetdir
+shell$ sudo cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   $PWD/$targetdir
 ````
 
 ## Build Debian RootFS second-step with QEMU
@@ -231,7 +231,7 @@ debian11-rootfs# apt-get install -y haveged
 
 ```console
 debian11-rootfs# dpkg -i linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
-debian11-rootfs# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb
+debian11-rootfs# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
 ```
 
 ### Clean Cache
@@ -253,7 +253,7 @@ debian10-rootfs# exit
 shell$ sudo rm -f $PWD/$targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $PWD/$targetdir/build-debian11-rootfs-with-qemu.sh
 shell$ sudo rm -f $PWD/$targetdir/linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
-shell$ sudo rm -f $PWD/$targetdir/linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-2_arm64.deb
+shell$ sudo rm -f $PWD/$targetdir/linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
 shell$ sudo mv    $PWD/$targetdir/dpkg-list.txt files/debian11-dpkg-list.txt
 ```
 
