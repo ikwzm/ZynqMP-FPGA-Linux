@@ -1,7 +1,7 @@
 Build Device Drivers and Services Package
 ====================================================================================
 
-u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb
+u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb
 ------------------------------------------------------------------------------------
 
 ### Download repository
@@ -14,15 +14,15 @@ shell$ cd u-dma-buf-kmod-dpkg
 ### Cross Compile for linux-xlnx-v2020.1-zynqmp-fpga
 
 ```console
-shell$ sudo debian/rules arch=arm64 deb_arch=arm64 kernel_release=5.4.0-xlnx-v2020.2-zynqmp-fpga kernel_src_dir=../../linux-xlnx-v2020.2-zynqmp-fpga binary
+shell$ sudo debian/rules arch=arm64 deb_arch=arm64 kernel_release=5.10.0-xlnx-v2021.1-zynqmp-fpga kernel_src_dir=../../linux-xlnx-v2021.1-zynqmp-fpga binary
     :
     :
     :
-shell$ file ../u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb 
-../u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb: Debian binary package (format 2.0)
+shell$ file ../u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb 
+../u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb: Debian binary package (format 2.0)
 ```
 
-fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb
+fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb
 ------------------------------------------------------------------------------------
 
 ### Download repository
@@ -35,12 +35,12 @@ shell$ cd fclkcfg-kmod-dpkg
 ### Cross Compile for linux-xlnx-v2020.1-zynqmp-fpga
 
 ```console
-shell$ sudo debian/rules arch=arm64 deb_arch=arm64 kernel_release=5.4.0-xlnx-v2020.2-zynqmp-fpga kernel_src_dir=../../linux-xlnx-v2020.2-zynqmp-fpga binary
+shell$ sudo debian/rules arch=arm64 deb_arch=arm64 kernel_release=5.10.0-xlnx-v2021.1-zynqmp-fpga kernel_src_dir=../../linux-xlnx-v2021.1-zynqmp-fpga binary
     :
     :
     :
-shell$ file ../fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb 
-../fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb: Debian binary package (format 2.0)
+shell$ file ../fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb 
+../fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb: Debian binary package (format 2.0)
 ```
 
 

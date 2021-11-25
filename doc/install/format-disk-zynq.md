@@ -98,6 +98,6 @@ Syncing disks.
 
 ````console
 shell# mkfs.vfat /dev/sdc1
-shell# mkfs.ext3 /dev/sdc2
+shell# mkfs.ext4 /dev/sdc2
 ````
 
