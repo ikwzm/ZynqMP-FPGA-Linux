@@ -8,6 +8,8 @@ Overview
 
 This Repository provides a Linux Boot Image(U-boot, Kernel, Root-fs) for Zynq MPSoC.
 
+**Note: Downloading the entire repository takes time, so download the source code from https://github.com/ikwzm/ZynqMP-FPGA-Linux/releases.**
+
 ### Features
 
 * Hardware
