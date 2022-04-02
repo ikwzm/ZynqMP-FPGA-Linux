@@ -2,12 +2,12 @@
 
 ### Downlowd from github
 
-**Note: Downloading the entire repository is time consuming, so download only the branch you need.**
+**Note: Downloading the entire repository takes time, so download the source code from https://github.com/ikwzm/ZynqMP-FPGA-Linux/releases.**
 
 ```console
-shell$ git clone --depth=1 --branch v2021.1.1 git://github.com/ikwzm/ZynqMP-FPGA-Linux
-shell$ cd ZynqMP-FPGA-Linux
-shell$ git lfs pull
+shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v2021.1.1.tar.gz
+shell$ tar xfz v2021.1.1.tar.gz
+shell$ cd ZynqMP-FPGA-Linux-2021.1.1
 ```
 
 ### File Description
