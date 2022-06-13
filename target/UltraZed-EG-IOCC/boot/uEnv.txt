@@ -3,8 +3,8 @@
 #  * linux_kernel_image : Linux Kernel Image File Name
 #  * linux_fdt_image    : Linux Device Tree Blob File Name
 ########################################################################
-linux_kernel_image=image-5.10.0-xlnx-v2021.1-zynqmp-fpga
-linux_fdt_image=devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-uz3eg-iocc.dtb
+linux_kernel_image=image-5.10.120-zynqmp-fpga-generic
+linux_fdt_image=devicetree-5.10.120-zynqmp-fpga-generic-uz3eg-iocc.dtb
 
 ########################################################################
 # Linux Boot Argments
@@ -64,5 +64,4 @@ boot_targets=xilinx
 bootmenu_0=Boot Default=boot
 bootdelay=5
 bootmenu_0=Boot Default=boot
-bootmenu_1=Boot 5.4.0-xlnx-v2021.1-zynqmp-fpga=env set external_env_file uEnv-linux-5.4.0-xlnx-v2020.2-zynqmp-fpga.txt && env run external_env_boot
-bootmenu_2=Boot 5.10.0-xlnx-v2021.1-zynqmp-fpga=env set external_env_file uEnv-linux-5.10.0-xlnx-v2021.1-zynqmp-fpga.txt && env run external_env_boot
+bootmenu_1=Boot 5.10.120-zynqmp-fpga-generic=env set external_env_file uEnv-linux-5.10.120-zynqmp-fpga-generic.txt && env run external_env_boot
