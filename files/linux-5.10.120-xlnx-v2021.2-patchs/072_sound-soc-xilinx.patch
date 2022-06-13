@@ -1,0 +1,3192 @@
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt b/Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
+index cbc93c8f4..1d2550207 100644
+--- a/Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
++++ b/Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
+@@ -1,6 +1,6 @@
+ Device-Tree bindings for Xilinx PL audio formatter
+ 
+-The IP core supports DMA, data formatting(AES<->PCM conversion)
++The IP core supports DMA, data formatting(packing, conversion)
+ of audio samples.
+ 
+ Required properties:
+@@ -13,8 +13,21 @@ Required properties:
+  - interrupts-parent: Phandle for interrupt controller.
+  - interrupts: List of Interrupt numbers.
+  - reg: Base address and size of the IP core instance.
++ - xlnx,tx: connected audio sink node.
++	    Should be one of below supported nodes:
++		1. HDMI video Tx output
++		2. I2S transmitter
++		3. UHDSDI audio embed
++	    Only those nodes were supported in sound card driver
++
++ - xlnx,rx: connected audio source node.
++	    Should be one of below supported nodes:
++		1. HDMI video Rx input
++		2. I2S receiver
++		3. UHDSDI audio extract
++	    Only those nodes were supported in sound card driver
+  - clock-names: List of input clocks.
+-   Required elements: "s_axi_lite_aclk", "aud_mclk"
++   Required elements: "s_axi_lite_aclk", "m_axis_mm2s_aclk", "aud_mclk", "s_axis_s2mm_aclk"
+  - clocks: Input clock specifier. Refer to common clock bindings.
+ 
+ Example:
+@@ -24,6 +37,8 @@ Example:
+ 		interrupt-parent = <&gic>;
+ 		interrupts = <0 104 4>, <0 105 4>;
+ 		reg = <0x0 0x80010000 0x0 0x1000>;
+-		clock-names = "s_axi_lite_aclk", "aud_mclk";
+-		clocks = <&clk 71>, <&clk_wiz_1 0>;
++		xlnx,tx = <&i2s_transmitter>;
++		xlnx,rx = <&i2s_receiver>;
++		clock-names = "s_axi_lite_aclk", "m_axis_mm2s_aclk", "aud_mclk", "s_axis_s2mm_aclk";
++		clocks = <&clk 71>, <&audio_ss_0_clk_wiz_0 0>, <&audio_ss_0_clk_wiz_0 0>, <&clk 71>;
+ 	};
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,dp-snd-card.txt b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-card.txt
+new file mode 100644
+index 000000000..7eb932913
+--- /dev/null
++++ b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-card.txt
+@@ -0,0 +1,17 @@
++Device-Tree bindings for Xilinx ZynqMP DisplayPort Audio Card
++
++The card driver integrates codec and pcm components and represents as a single
++audio device.
++
++Required properties:
++ - compatible: Should be "xlnx,dp-snd-card".
++ - xlnx,dp-snd-pcm: phandle(s) to the ZynqMP DP PCM node.
++ - xlnx,dp-snd-codec: phandle to the ZynqMP DP card node.
++
++Example:
++
++	xlnx_dp_snd_card: dp_snd_card {
++		compatible = "xlnx,dp-snd-card";
++		xlnx,dp-snd-pcm = <&xlnx_dp_snd_pcm0>, <&xlnx_dp_snd_pcm1>;
++		xlnx,dp-snd-codec = <&xlnx_dp_snd_codec0>;
++	};
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,dp-snd-codec.txt b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-codec.txt
+new file mode 100644
+index 000000000..d094fdd9d
+--- /dev/null
++++ b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-codec.txt
+@@ -0,0 +1,18 @@
++Device-Tree bindings for Xilinx ZynqMP DisplayPort Codec
++
++The codec driver handles the audio clock and format management.
++
++Required properties:
++ - compatible: Should be "xlnx,dp-snd-codec".
++ - clocks: The phandle for the audio clock. The audio clock should be
++   configured to the correct audio clock rate, which should be one of
++   (44100 * 512) or (48000 * 512).
++ - clock-names: The identification string should be "aud_clk".
++
++Example:
++
++	xlnx_dp_snd_codec0: dp_snd_codec0 {
++		compatible = "xlnx,dp-snd-codec";
++		clocks = <&dp_aud_clk>;
++		clock-names = "aud_clk";
++	};
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,dp-snd-pcm.txt b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-pcm.txt
+new file mode 100644
+index 000000000..e76f302a0
+--- /dev/null
++++ b/Documentation/devicetree/bindings/sound/xlnx,dp-snd-pcm.txt
+@@ -0,0 +1,18 @@
++Device-Tree bindings for Xilinx ZynqMP DisplayPort PCM
++
++The DPDMA driver of ZynqMP DisplayPort subsystem is based on DMA engine,
++and the DP PCM driver is based on snd dmaengine helpers.
++
++Required properties:
++ - compatible: Should be "xlnx,dp-snd-pcm" or "xlnx,dp-snd-pcm0" or "xlnx,dp-snd-pcm1".
++ - dmas: the phandle list of DMA specifiers. The dma channel ID should be one
++   of 4 for audio0 channel or 5 for audio1 channel.
++ - dma-names: the indentifier strings for DMAs. The value should be "tx".
++
++Example:
++
++	xlnx_dp_snd_pcm0: dp_snd_pcm0 {
++		compatible = "xlnx,dp-snd-pcm0";
++		dmas = <&xlnx_dpdma 4>;
++		dma-names = "tx";
++	};
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,i2s.txt b/Documentation/devicetree/bindings/sound/xlnx,i2s.txt
+index 5e7c7d5bb..19ab3cd31 100644
+--- a/Documentation/devicetree/bindings/sound/xlnx,i2s.txt
++++ b/Documentation/devicetree/bindings/sound/xlnx,i2s.txt
+@@ -11,18 +11,31 @@ Required property common to both I2S playback and capture:
+  - xlnx,dwidth: sample data width. Can be any of 16, 24.
+  - xlnx,num-channels: Number of I2S streams. Can be any of 1, 2, 3, 4.
+ 		      supported channels = 2 * xlnx,num-channels
++ - xlnx,snd-pcm: reference to audio formatter block
++ - clock-names: List of input clocks.
++   Required elements for I2S Tx: "s_axi_ctrl_aclk", "aud_mclk", "s_axis_aud_aclk".
++   Required elements for I2S Rx: "s_axi_ctrl_aclk", "aud_mclk", "m_axis_aud_aclk".
++ - clocks: Input clock specifier. Refer to common clock bindings.
+ 
+ Example:
+ 
+ 	i2s_receiver@a0080000 {
+ 		compatible = "xlnx,i2s-receiver-1.0";
++		clock-names = "s_axi_ctrl_aclk", "aud_mclk", "m_axis_aud_aclk";
++		clocks = <&clk 71>, <&audio_ss_0_clk_wiz_0 0>, <&clk 71>;
+ 		reg = <0x0 0xa0080000 0x0 0x10000>;
+ 		xlnx,dwidth = <0x18>;
+ 		xlnx,num-channels = <1>;
++		xlnx,snd-pcm = <&audio_ss_0_audio_formatter_0>;
+ 	};
+ 	i2s_transmitter@a0090000 {
+ 		compatible = "xlnx,i2s-transmitter-1.0";
++		clock-names = "s_axi_ctrl_aclk", "aud_mclk", "s_axis_aud_aclk";
++		clocks = <&clk 71>, <&audio_ss_0_clk_wiz_0 0>, <&audio_ss_0_clk_wiz_0 0>;
+ 		reg = <0x0 0xa0090000 0x0 0x10000>;
+ 		xlnx,dwidth = <0x18>;
+ 		xlnx,num-channels = <1>;
++		xlnx,snd-pcm = <&audio_ss_0_audio_formatter_0>;
+ 	};
++	Documentation of "audio_ss_0_audio_formatter_0" node is located
++	at Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,spdif.txt b/Documentation/devicetree/bindings/sound/xlnx,spdif.txt
+index 15c2d64d2..45214da42 100644
+--- a/Documentation/devicetree/bindings/sound/xlnx,spdif.txt
++++ b/Documentation/devicetree/bindings/sound/xlnx,spdif.txt
+@@ -1,28 +1,27 @@
+-Device-Tree bindings for Xilinx SPDIF IP
++Device-Tree bindings for Xilinx SPDIF PL IP
+ 
+-The IP supports playback and capture of SPDIF audio
++The IP supports SPDIF based playback and capture audio
+ 
+ Required properties:
+  - compatible: "xlnx,spdif-2.0"
+  - clock-names: List of input clocks.
+-   Required elements: "s_axi_aclk", "aud_clk_i"
++   Required elements for SPDIF Tx: "aud_clk_i", "s_axi_aclk", "s_axis_aclk".
++   Required elements for SPDIF Rx: "aud_clk_i", "s_axi_aclk", "m_axis_aclk".
+  - clocks: Input clock specifier. Refer to common clock bindings.
+  - reg: Base address and address length of the IP core instance.
+  - interrupts-parent: Phandle for interrupt controller.
+  - interrupts: List of Interrupt numbers.
+- - xlnx,spdif-mode: 0 :- receiver mode
+-		    1 :- transmitter mode
+- - xlnx,aud_clk_i: input audio clock value.
++ - xlnx,spdif-mode: 0 :- receiver mode ; 1 :- transmitter mode
++ - xlnx,snd-pcm: phandle to audio formatter node
+ 
+-Example:
++Example - SPDIF Rx:
+ 	spdif_0: spdif@80010000 {
+-		clock-names = "aud_clk_i", "s_axi_aclk";
+-		clocks = <&misc_clk_0>, <&clk 71>;
++		clock-names = "aud_clk_i", "s_axi_aclk", "m_axis_aclk";
++		clocks = <&si570_1>, <&clk 71>, <&clk 71>;
+ 		compatible = "xlnx,spdif-2.0";
+-		interrupt-names = "spdif_interrupt";
+ 		interrupt-parent = <&gic>;
+ 		interrupts = <0 91 4>;
+ 		reg = <0x0 0x80010000 0x0 0x10000>;
+ 		xlnx,spdif-mode = <1>;
+-		xlnx,aud_clk_i = <49152913>;
++		xlnx,snd-pcm = <&audio_formatter_0>;
+ 	};
+diff --git a/Documentation/devicetree/bindings/sound/xlnx,v-uhdsdi-audio.txt b/Documentation/devicetree/bindings/sound/xlnx,v-uhdsdi-audio.txt
+new file mode 100644
+index 000000000..69134458b
+--- /dev/null
++++ b/Documentation/devicetree/bindings/sound/xlnx,v-uhdsdi-audio.txt
+@@ -0,0 +1,60 @@
++Device-Tree bindings for Xilinx SDI audio
++
++The IP core supports embed/extract of audio in SDI Tx and Rx
++protocol respectively. Reference to PG:
++https://www.xilinx.com/support/documentation/ip_documentation/v_uhdsdi_audio/v1_0/pg309-v-uhdsdi-audio.pdf
++
++Required properties:
++ - compatible: Should be one of:
++		"xlnx,v-uhdsdi-audio-2.0"
++		"xlnx,v-uhdsdi-audio-1.0"
++   Note: v1.0 (xlnx,v-uhdsdi-audio-1.0) is deprecated
++   and driver no longer supports it. Mandatory to upgrade to v2.0
++ - interrupts: Interrupt number.
++ - interrupts-parent: phandle for interrupt controller.
++ - reg: Base address and size of the IP core instance.
++ - xlnx,snd-pcm: reference to audio formatter block
++ - clock-names: List of input clocks.
++   Required elements for SDI Embed: "s_axi_aclk", "s_axis_clk", "sdi_embed_clk".
++   Required elements for SDI Extract: "s_axi_aclk", "sdi_extract_clk", "m_axis_clk".
++ - clocks: Input clock specifier. Refer to common clock bindings.
++
++SDI embed contains a output port to remote endpoint of SDI video Tx node.
++This pipeline should be described using the DT bindings defined in
++Documentation/devicetree/bindings/graph.txt
++
++Example:
++
++	audio_ss_0_v_uhdsdi_audio_extract_0: v_uhdsdi_audio@80080000 {
++		compatible = "xlnx,v-uhdsdi-audio-2.0";
++		clock-names = "s_axi_aclk", "sdi_extract_clk", "m_axis_clk";
++		clocks = <&misc_clk_0>, <&misc_clk_1>, <&misc_clk_0>;
++		interrupt-names = "interrupt";
++		interrupt-parent = <&gic>;
++		interrupts = <0 106 4>;
++		reg = <0x0 0x80080000 0x0 0x10000>;
++		xlnx,snd-pcm = <&audio_ss_0_audio_formatter_0>;
++	};
++
++	audio_ss_0_v_uhdsdi_audio_embed_0: v_uhdsdi_audio@80090000 {
++		compatible = "xlnx,v-uhdsdi-audio-2.0";
++		clock-names = "s_axi_aclk", "s_axis_clk", "sdi_embed_clk";
++		clocks = <&misc_clk_0>, <&misc_clk_0>, <&misc_clk_1>;
++		interrupt-names = "interrupt";
++		interrupt-parent = <&gic>;
++		interrupts = <0 107 4>;
++		reg = <0x0 0x80090000 0x0 0x10000>;
++		xlnx,snd-pcm = <&audio_ss_0_audio_formatter_0>;
++		sdi_av_port: port@0 {
++			reg = <0>;
++			sditx_audio_embed_src: endpoint {
++				remote-endpoint = <&sdi_audio_sink_port>;
++			};
++		};
++	};
++
++	Node 'v_smpte_uhdsdi_tx_ss' is documented in SDI Tx video bindings,
++	located at Documentation/devicetree/bindings/display/xlnx/xlnx,sdi-tx.txt.
++
++	Node 'audio_ss_0_audio_formatter_0' node is documented
++	at Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
+diff --git a/sound/soc/xilinx/Kconfig b/sound/soc/xilinx/Kconfig
+index 5bd2730aa..5e88572ed 100644
+--- a/sound/soc/xilinx/Kconfig
++++ b/sound/soc/xilinx/Kconfig
+@@ -1,4 +1,26 @@
+ # SPDX-License-Identifier: GPL-2.0-only
++config SND_SOC_XILINX_DP
++	tristate "Audio support for the the Xilinx DisplayPort"
++	select SND_DMAENGINE_PCM
++	select SND_SOC_GENERIC_DMAENGINE_PCM
++	help
++	  Audio support the for Xilinx DisplayPort.
++
++config SND_SOC_XILINX_AUDIO_FORMATTER
++	tristate "Audio support for the the Xilinx audio formatter"
++	help
++	  Select this option to enable Xilinx audio formatter
++	  support. This provides PCM platform device support for
++	  audio functionality.
++
++config SND_SOC_XILINX_SDI
++	tristate "Audio support for the the Xilinx SDI"
++	depends on DRM_XLNX_SDI
++	depends on VIDEO_XILINX_SDIRXSS
++	help
++	  Select this option to enable Xilinx SDI Audio.This enables
++	  SDI audio playback and capture using xilinx soft IP
++
+ config SND_SOC_XILINX_I2S
+ 	tristate "Audio support for the Xilinx I2S"
+ 	help
+@@ -7,6 +29,7 @@ config SND_SOC_XILINX_I2S
+ 	  mode, IP receives audio in AES format, extracts PCM and sends
+ 	  PCM data. In receiver mode, IP receives PCM audio and
+ 	  encapsulates PCM in AES format and sends AES data.
++	  I2S playback and capture using xilinx soft IP
+ 
+ config SND_SOC_XILINX_AUDIO_FORMATTER
+ 	tristate "Audio support for the Xilinx audio formatter"
+@@ -19,5 +42,15 @@ config SND_SOC_XILINX_SPDIF
+ 	tristate "Audio support for the Xilinx SPDIF"
+ 	help
+ 	  Select this option to enable Xilinx SPDIF Audio.
+-	  This provides playback and capture of SPDIF audio in
+-	  AES format.
++	  Enabling this provides one of the component required in ASoC
++	  audio pipeline.
++	  This supports playback and capture usecases.
++
++config SND_SOC_XILINX_PL_SND_CARD
++	tristate "Audio support for the the Xilinx PL sound card"
++	depends on SND_SOC_XILINX_AUDIO_FORMATTER || SND_SOC_XILINX_I2S || SND_SOC_XILINX_SDI
++	select SND_SOC_HDMI_CODEC
++	help
++	  Select this option to enable Xilinx PL sound card
++	  support. This enables sound card using xilinx soft IPs
++	  in audio pipeline.
+diff --git a/sound/soc/xilinx/Makefile b/sound/soc/xilinx/Makefile
+index be7652ce7..7b0a54610 100644
+--- a/sound/soc/xilinx/Makefile
++++ b/sound/soc/xilinx/Makefile
+@@ -1,7 +1,12 @@
+ # SPDX-License-Identifier: GPL-2.0-only
++obj-$(CONFIG_SND_SOC_XILINX_DP) += xilinx-dp-pcm.o
++obj-$(CONFIG_SND_SOC_XILINX_DP) += xilinx-dp-codec.o
++obj-$(CONFIG_SND_SOC_XILINX_DP) += xilinx-dp-card.o
++obj-$(CONFIG_SND_SOC_XILINX_AUDIO_FORMATTER) += xlnx_formatter_pcm.o
++obj-$(CONFIG_SND_SOC_XILINX_SDI) += xlnx_sdi_audio.o
+ snd-soc-xlnx-i2s-objs      := xlnx_i2s.o
+ obj-$(CONFIG_SND_SOC_XILINX_I2S) += snd-soc-xlnx-i2s.o
+ snd-soc-xlnx-formatter-pcm-objs := xlnx_formatter_pcm.o
+ obj-$(CONFIG_SND_SOC_XILINX_AUDIO_FORMATTER) += snd-soc-xlnx-formatter-pcm.o
+-snd-soc-xlnx-spdif-objs := xlnx_spdif.o
+-obj-$(CONFIG_SND_SOC_XILINX_SPDIF) += snd-soc-xlnx-spdif.o
++obj-$(CONFIG_SND_SOC_XILINX_SPDIF) += xlnx_spdif.o
++obj-$(CONFIG_SND_SOC_XILINX_PL_SND_CARD) += xlnx_pl_snd_card.o
+diff --git a/sound/soc/xilinx/xilinx-dp-card.c b/sound/soc/xilinx/xilinx-dp-card.c
+new file mode 100644
+index 000000000..396a87d56
+--- /dev/null
++++ b/sound/soc/xilinx/xilinx-dp-card.c
+@@ -0,0 +1,123 @@
++/*
++ * Xilinx DisplayPort SoC Sound Card support
++ *
++ *  Copyright (C) 2015 Xilinx, Inc.
++ *
++ *  Author: Hyun Woo Kwon <hyunk@xilinx.com>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++
++#include <sound/soc.h>
++
++static int xilinx_dp_startup(struct snd_pcm_substream *substream)
++{
++	struct snd_pcm_runtime *runtime = substream->runtime;
++
++	snd_pcm_hw_constraint_step(runtime, 0,
++				   SNDRV_PCM_HW_PARAM_PERIOD_BYTES, 256);
++	return 0;
++}
++
++static const struct snd_soc_ops xilinx_dp_ops = {
++	.startup	= xilinx_dp_startup,
++};
++
++SND_SOC_DAILINK_DEFS(xilinx_dp0,
++		DAILINK_COMP_ARRAY(COMP_CPU("xilinx-dp-snd-codec-dai")),
++		DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xilinx-dp-snd-codec-dai")),
++		DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xilinx_dp1,
++		DAILINK_COMP_ARRAY(COMP_CPU("xilinx-dp-snd-codec-dai")),
++		DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xilinx-dp-snd-codec-dai")),
++		DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++static struct snd_soc_dai_link xilinx_dp_dai_links[] = {
++	{
++		.name		= "xilinx-dp0",
++		.stream_name	= "xilinx-dp0",
++		SND_SOC_DAILINK_REG(xilinx_dp0),
++		.ops		= &xilinx_dp_ops,
++	},
++	{
++		.name		= "xilinx-dp1",
++		.stream_name	= "xilinx-dp1",
++		SND_SOC_DAILINK_REG(xilinx_dp1),
++		.ops		= &xilinx_dp_ops,
++	},
++
++};
++
++static struct snd_soc_card xilinx_dp_card = {
++	.name		= "DisplayPort monitor",
++	.owner		= THIS_MODULE,
++	.dai_link	= xilinx_dp_dai_links,
++	.num_links	= 2,
++};
++
++static int xilinx_dp_probe(struct platform_device *pdev)
++{
++	struct snd_soc_card *card = &xilinx_dp_card;
++	struct device_node *node = pdev->dev.of_node;
++	struct device_node *codec, *pcm;
++	int ret;
++
++	card->dev = &pdev->dev;
++
++	codec = of_parse_phandle(node, "xlnx,dp-snd-codec", 0);
++	if (!codec)
++		return -ENODEV;
++
++	pcm = of_parse_phandle(node, "xlnx,dp-snd-pcm", 0);
++	if (!pcm)
++		return -ENODEV;
++	xilinx_dp_dai_links[0].platforms->of_node = pcm;
++	xilinx_dp_dai_links[0].cpus->of_node = codec;
++	xilinx_dp_dai_links[0].codecs->of_node = codec;
++
++	pcm = of_parse_phandle(node, "xlnx,dp-snd-pcm", 1);
++	if (!pcm)
++		return -ENODEV;
++	xilinx_dp_dai_links[1].platforms->of_node = pcm;
++	xilinx_dp_dai_links[1].cpus->of_node = codec;
++	xilinx_dp_dai_links[1].codecs->of_node = codec;
++
++	ret = devm_snd_soc_register_card(&pdev->dev, card);
++	if (ret)
++		return ret;
++
++	dev_info(&pdev->dev, "Xilinx DisplayPort Sound Card probed\n");
++
++	return 0;
++}
++
++static const struct of_device_id xilinx_dp_of_match[] = {
++	{ .compatible = "xlnx,dp-snd-card", },
++	{},
++};
++MODULE_DEVICE_TABLE(of, xilinx_dp_of_match);
++
++static struct platform_driver xilinx_dp_aud_driver = {
++	.driver	= {
++		.name		= "xilinx-dp-snd-card",
++		.of_match_table	= xilinx_dp_of_match,
++		.pm		= &snd_soc_pm_ops,
++	},
++	.probe	= xilinx_dp_probe,
++};
++module_platform_driver(xilinx_dp_aud_driver);
++
++MODULE_DESCRIPTION("Xilinx DisplayPort Sound Card module");
++MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xilinx-dp-codec.c b/sound/soc/xilinx/xilinx-dp-codec.c
+new file mode 100644
+index 000000000..af6e6b08c
+--- /dev/null
++++ b/sound/soc/xilinx/xilinx-dp-codec.c
+@@ -0,0 +1,178 @@
++/*
++ * Xilinx DisplayPort Sound Codec support
++ *
++ *  Copyright (C) 2015 Xilinx, Inc.
++ *
++ *  Author: Hyun Woo Kwon <hyunk@xilinx.com>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/clk.h>
++#include <linux/device.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++
++#include <sound/soc.h>
++
++/**
++ * struct xilinx_dp_codec - DisplayPort codec
++ * @aud_clk: audio clock
++ */
++struct xilinx_dp_codec {
++	struct clk *aud_clk;
++};
++
++struct xilinx_dp_codec_fmt {
++	unsigned long rate;
++	unsigned int snd_rate;
++};
++
++static struct snd_soc_dai_driver xilinx_dp_codec_dai = {
++	.name		= "xilinx-dp-snd-codec-dai",
++	.playback	= {
++		.channels_min	= 2,
++		.channels_max	= 2,
++		.rates		= SNDRV_PCM_RATE_44100,
++		.formats	= SNDRV_PCM_FMTBIT_S16_LE,
++	},
++};
++
++static const struct xilinx_dp_codec_fmt rates[] = {
++	{
++		.rate	= 48000 * 512,
++		.snd_rate = SNDRV_PCM_RATE_48000
++	},
++	{
++		.rate	= 44100 * 512,
++		.snd_rate = SNDRV_PCM_RATE_44100
++	}
++};
++
++static const struct snd_soc_component_driver xilinx_dp_component_driver = {
++	.idle_bias_on		= 1,
++	.use_pmdown_time	= 1,
++	.endianness		= 1,
++	.non_legacy_dai_naming	= 1,
++};
++
++static int xilinx_dp_codec_probe(struct platform_device *pdev)
++{
++	struct xilinx_dp_codec *codec;
++	unsigned int i;
++	unsigned long rate;
++	int ret;
++
++	codec = devm_kzalloc(&pdev->dev, sizeof(*codec), GFP_KERNEL);
++	if (!codec)
++		return -ENOMEM;
++
++	codec->aud_clk = devm_clk_get(&pdev->dev, NULL);
++	if (IS_ERR(codec->aud_clk))
++		return PTR_ERR(codec->aud_clk);
++
++	ret = clk_prepare_enable(codec->aud_clk);
++	if (ret) {
++		dev_err(&pdev->dev, "failed to enable the aud_clk\n");
++		return ret;
++	}
++
++	for (i = 0; i < ARRAY_SIZE(rates); i++) {
++		clk_disable_unprepare(codec->aud_clk);
++		ret = clk_set_rate(codec->aud_clk, rates[i].rate);
++		clk_prepare_enable(codec->aud_clk);
++		if (ret)
++			continue;
++
++		rate = clk_get_rate(codec->aud_clk);
++		/* Ignore some offset +- 10 */
++		if (abs(rates[i].rate - rate) < 10) {
++			xilinx_dp_codec_dai.playback.rates = rates[i].snd_rate;
++			break;
++		}
++		ret = -EINVAL;
++	}
++
++	if (ret) {
++		dev_err(&pdev->dev, "Failed to get required clock freq\n");
++		goto error_clk;
++	}
++
++	ret = devm_snd_soc_register_component(&pdev->dev,
++					      &xilinx_dp_component_driver,
++					      &xilinx_dp_codec_dai, 1);
++	if (ret)
++		goto error_clk;
++
++	platform_set_drvdata(pdev, codec);
++
++	dev_info(&pdev->dev, "Xilinx DisplayPort Sound Codec probed\n");
++
++	return 0;
++
++error_clk:
++	clk_disable_unprepare(codec->aud_clk);
++	return ret;
++}
++
++static int xilinx_dp_codec_dev_remove(struct platform_device *pdev)
++{
++	struct xilinx_dp_codec *codec = platform_get_drvdata(pdev);
++
++	clk_disable_unprepare(codec->aud_clk);
++
++	return 0;
++}
++
++static int __maybe_unused xilinx_dp_codec_pm_suspend(struct device *dev)
++{
++	struct xilinx_dp_codec *codec = dev_get_drvdata(dev);
++
++	clk_disable_unprepare(codec->aud_clk);
++
++	return 0;
++}
++
++static int __maybe_unused xilinx_dp_codec_pm_resume(struct device *dev)
++{
++	struct xilinx_dp_codec *codec = dev_get_drvdata(dev);
++	int ret;
++
++	ret = clk_prepare_enable(codec->aud_clk);
++	if (ret)
++		dev_err(dev, "failed to enable the aud_clk\n");
++
++	return ret;
++}
++
++static const struct dev_pm_ops xilinx_dp_codec_pm_ops = {
++	SET_SYSTEM_SLEEP_PM_OPS(xilinx_dp_codec_pm_suspend,
++				xilinx_dp_codec_pm_resume)
++};
++
++static const struct of_device_id xilinx_dp_codec_of_match[] = {
++	{ .compatible = "xlnx,dp-snd-codec", },
++	{ /* end of table */ },
++};
++MODULE_DEVICE_TABLE(of, xilinx_dp_codec_of_match);
++
++static struct platform_driver xilinx_dp_codec_driver = {
++	.driver	= {
++		.name		= "xilinx-dp-snd-codec",
++		.of_match_table	= xilinx_dp_codec_of_match,
++		.pm		= &xilinx_dp_codec_pm_ops,
++	},
++	.probe	= xilinx_dp_codec_probe,
++	.remove	= xilinx_dp_codec_dev_remove,
++};
++module_platform_driver(xilinx_dp_codec_driver);
++
++MODULE_DESCRIPTION("Xilinx DisplayPort Sound Codec module");
++MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xilinx-dp-pcm.c b/sound/soc/xilinx/xilinx-dp-pcm.c
+new file mode 100644
+index 000000000..f32dc2c20
+--- /dev/null
++++ b/sound/soc/xilinx/xilinx-dp-pcm.c
+@@ -0,0 +1,88 @@
++/*
++ * Xilinx DisplayPort Sound PCM support
++ *
++ *  Copyright (C) 2015 Xilinx, Inc.
++ *
++ *  Author: Hyun Woo Kwon <hyunk@xilinx.com>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/device.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++
++#include <sound/dmaengine_pcm.h>
++#include <sound/pcm.h>
++#include <sound/soc.h>
++
++#define DP_PCM_NAME_0 "zynqmp_dp_snd_pcm0"
++#define DP_PCM_NAME_1 "zynqmp_dp_snd_pcm1"
++
++static const struct snd_pcm_hardware xilinx_pcm_hw = {
++	.info			= SNDRV_PCM_INFO_MMAP |
++				  SNDRV_PCM_INFO_MMAP_VALID |
++				  SNDRV_PCM_INFO_INTERLEAVED |
++				  SNDRV_PCM_INFO_PAUSE |
++				  SNDRV_PCM_INFO_RESUME |
++				  SNDRV_PCM_INFO_NO_PERIOD_WAKEUP,
++	.buffer_bytes_max	= 128 * 1024,
++	.period_bytes_min	= 256,
++	.period_bytes_max	= 1024 * 1024,
++	.periods_min		= 2,
++	.periods_max		= 256,
++};
++
++static const struct snd_dmaengine_pcm_config xilinx_dmaengine_pcm_config = {
++	.pcm_hardware = &xilinx_pcm_hw,
++	.prealloc_buffer_size = 64 * 1024,
++};
++
++static int xilinx_dp_pcm_probe(struct platform_device *pdev)
++{
++	int ret;
++
++	if (of_device_is_compatible(pdev->dev.of_node, "xlnx,dp-snd-pcm0"))
++		dev_set_name(&pdev->dev, DP_PCM_NAME_0);
++	else if (of_device_is_compatible(pdev->dev.of_node, "xlnx,dp-snd-pcm1"))
++		dev_set_name(&pdev->dev, DP_PCM_NAME_1);
++	else
++		dev_set_name(&pdev->dev, pdev->dev.of_node->name);
++
++	pdev->name = dev_name(&pdev->dev);
++	ret = devm_snd_dmaengine_pcm_register(&pdev->dev,
++					      &xilinx_dmaengine_pcm_config, 0);
++	if (ret)
++		return ret;
++
++	dev_info(&pdev->dev, "Xilinx DisplayPort Sound PCM probed\n");
++
++	return 0;
++}
++
++static const struct of_device_id xilinx_dp_pcm_of_match[] = {
++	{ .compatible = "xlnx,dp-snd-pcm", },
++	{ .compatible = "xlnx,dp-snd-pcm0", },
++	{ .compatible = "xlnx,dp-snd-pcm1", },
++	{ /* end of table */ },
++};
++MODULE_DEVICE_TABLE(of, xilinx_dp_pcm_of_match);
++
++static struct platform_driver xilinx_dp_pcm_driver = {
++	.driver	= {
++		.name		= "xilinx-dp-snd-pcm",
++		.of_match_table	= xilinx_dp_pcm_of_match,
++	},
++	.probe	= xilinx_dp_pcm_probe,
++};
++module_platform_driver(xilinx_dp_pcm_driver);
++
++MODULE_DESCRIPTION("Xilinx DisplayPort Sound PCM module");
++MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xlnx_formatter_pcm.c b/sound/soc/xilinx/xlnx_formatter_pcm.c
+index 5c4158069..1974c4f3c 100644
+--- a/sound/soc/xilinx/xlnx_formatter_pcm.c
++++ b/sound/soc/xilinx/xlnx_formatter_pcm.c
+@@ -1,22 +1,26 @@
+ // SPDX-License-Identifier: GPL-2.0
+-//
+-// Xilinx ASoC audio formatter support
+-//
+-// Copyright (C) 2018 Xilinx, Inc.
+-//
+-// Author: Maruthi Srinivas Bayyavarapu <maruthis@xilinx.com>
++/*
++ * Xilinx ASoC audio formatter support
++ *
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ */
+ 
+ #include <linux/clk.h>
++#include <linux/dma-mapping.h>
+ #include <linux/io.h>
+ #include <linux/module.h>
+ #include <linux/of_address.h>
+ #include <linux/of_irq.h>
++#include <linux/platform_device.h>
+ #include <linux/sizes.h>
+ 
+ #include <sound/asoundef.h>
+ #include <sound/soc.h>
+ #include <sound/pcm_params.h>
+ 
++#include "xlnx_snd_common.h"
++
+ #define DRV_NAME "xlnx_formatter_pcm"
+ 
+ #define XLNX_S2MM_OFFSET	0
+@@ -57,7 +61,9 @@
+ #define CFG_S2MM_XFER_SHIFT	29
+ #define CFG_S2MM_PKG_MASK	BIT(28)
+ 
++#define AUD_CTRL_DATA_WIDTH_MASK	GENMASK(18, 16)
+ #define AUD_CTRL_DATA_WIDTH_SHIFT	16
++#define AUD_CTRL_ACTIVE_CH_MASK		GENMASK(22, 19)
+ #define AUD_CTRL_ACTIVE_CH_SHIFT	19
+ #define PERIOD_CFG_PERIODS_SHIFT	16
+ 
+@@ -67,12 +73,22 @@
+ #define PERIOD_BYTES_MAX	(50 * 1024)
+ #define XLNX_PARAM_UNKNOWN	0
+ 
+-enum bit_depth {
+-	BIT_DEPTH_8,
+-	BIT_DEPTH_16,
+-	BIT_DEPTH_20,
+-	BIT_DEPTH_24,
+-	BIT_DEPTH_32,
++static const struct snd_pcm_hardware xlnx_pcm_hardware = {
++	.info = SNDRV_PCM_INFO_INTERLEAVED | SNDRV_PCM_INFO_BLOCK_TRANSFER |
++		SNDRV_PCM_INFO_BATCH | SNDRV_PCM_INFO_PAUSE |
++		SNDRV_PCM_INFO_RESUME,
++	.formats = SNDRV_PCM_FMTBIT_S8 | SNDRV_PCM_FMTBIT_S16_LE |
++		   SNDRV_PCM_FMTBIT_S24_LE,
++	.channels_min = 2,
++	.channels_max = 2,
++	.rates = SNDRV_PCM_RATE_8000_192000,
++	.rate_min = 8000,
++	.rate_max = 192000,
++	.buffer_bytes_max = PERIODS_MAX * PERIOD_BYTES_MAX,
++	.period_bytes_min = PERIOD_BYTES_MIN,
++	.period_bytes_max = PERIOD_BYTES_MAX,
++	.periods_min = PERIODS_MIN,
++	.periods_max = PERIODS_MAX,
+ };
+ 
+ struct xlnx_pcm_drv_data {
+@@ -83,8 +99,12 @@ struct xlnx_pcm_drv_data {
+ 	int mm2s_irq;
+ 	struct snd_pcm_substream *play_stream;
+ 	struct snd_pcm_substream *capture_stream;
++	struct platform_device *pdev;
++	struct device_node *nodes[XLNX_MAX_PATHS];
+ 	struct clk *axi_clk;
+-	unsigned int sysclk;
++	struct clk *mm2s_axis_clk;
++	struct clk *s2mm_axis_clk;
++	struct clk *aud_mclk;
+ };
+ 
+ /*
+@@ -103,22 +123,12 @@ struct xlnx_pcm_stream_param {
+ 	u64 buffer_size;
+ };
+ 
+-static const struct snd_pcm_hardware xlnx_pcm_hardware = {
+-	.info = SNDRV_PCM_INFO_INTERLEAVED | SNDRV_PCM_INFO_BLOCK_TRANSFER |
+-		SNDRV_PCM_INFO_BATCH | SNDRV_PCM_INFO_PAUSE |
+-		SNDRV_PCM_INFO_RESUME,
+-	.formats = SNDRV_PCM_FMTBIT_S8 | SNDRV_PCM_FMTBIT_S16_LE |
+-		   SNDRV_PCM_FMTBIT_S24_LE,
+-	.channels_min = 2,
+-	.channels_max = 2,
+-	.rates = SNDRV_PCM_RATE_8000_192000,
+-	.rate_min = 8000,
+-	.rate_max = 192000,
+-	.buffer_bytes_max = PERIODS_MAX * PERIOD_BYTES_MAX,
+-	.period_bytes_min = PERIOD_BYTES_MIN,
+-	.period_bytes_max = PERIOD_BYTES_MAX,
+-	.periods_min = PERIODS_MIN,
+-	.periods_max = PERIODS_MAX,
++enum bit_depth {
++	BIT_DEPTH_8,
++	BIT_DEPTH_16,
++	BIT_DEPTH_20,
++	BIT_DEPTH_24,
++	BIT_DEPTH_32,
+ };
+ 
+ enum {
+@@ -248,16 +258,16 @@ static int xlnx_formatter_pcm_reset(void __iomem *mmio_base)
+ {
+ 	u32 val, retries = 0;
+ 
+-	val = readl(mmio_base + XLNX_AUD_CTRL);
++	val = ioread32(mmio_base + XLNX_AUD_CTRL);
+ 	val |= AUD_CTRL_RESET_MASK;
+-	writel(val, mmio_base + XLNX_AUD_CTRL);
++	iowrite32(val, mmio_base + XLNX_AUD_CTRL);
+ 
+-	val = readl(mmio_base + XLNX_AUD_CTRL);
++	val = ioread32(mmio_base + XLNX_AUD_CTRL);
+ 	/* Poll for maximum timeout of approximately 100ms (1 * 100)*/
+ 	while ((val & AUD_CTRL_RESET_MASK) && (retries < 100)) {
+ 		mdelay(1);
+ 		retries++;
+-		val = readl(mmio_base + XLNX_AUD_CTRL);
++		val = ioread32(mmio_base + XLNX_AUD_CTRL);
+ 	}
+ 	if (val & AUD_CTRL_RESET_MASK)
+ 		return -ENODEV;
+@@ -269,12 +279,12 @@ static void xlnx_formatter_disable_irqs(void __iomem *mmio_base, int stream)
+ {
+ 	u32 val;
+ 
+-	val = readl(mmio_base + XLNX_AUD_CTRL);
++	val = ioread32(mmio_base + XLNX_AUD_CTRL);
+ 	val &= ~AUD_CTRL_IOC_IRQ_MASK;
+ 	if (stream == SNDRV_PCM_STREAM_CAPTURE)
+ 		val &= ~AUD_CTRL_TOUT_IRQ_MASK;
+ 
+-	writel(val, mmio_base + XLNX_AUD_CTRL);
++	iowrite32(val, mmio_base + XLNX_AUD_CTRL);
+ }
+ 
+ static irqreturn_t xlnx_mm2s_irq_handler(int irq, void *arg)
+@@ -285,9 +295,9 @@ static irqreturn_t xlnx_mm2s_irq_handler(int irq, void *arg)
+ 	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(dev);
+ 
+ 	reg = adata->mmio + XLNX_MM2S_OFFSET + XLNX_AUD_STS;
+-	val = readl(reg);
++	val = ioread32(reg);
+ 	if (val & AUD_STS_IOC_IRQ_MASK) {
+-		writel(val & AUD_STS_IOC_IRQ_MASK, reg);
++		iowrite32(val & AUD_STS_IOC_IRQ_MASK, reg);
+ 		if (adata->play_stream)
+ 			snd_pcm_period_elapsed(adata->play_stream);
+ 		return IRQ_HANDLED;
+@@ -304,9 +314,9 @@ static irqreturn_t xlnx_s2mm_irq_handler(int irq, void *arg)
+ 	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(dev);
+ 
+ 	reg = adata->mmio + XLNX_S2MM_OFFSET + XLNX_AUD_STS;
+-	val = readl(reg);
++	val = ioread32(reg);
+ 	if (val & AUD_STS_IOC_IRQ_MASK) {
+-		writel(val & AUD_STS_IOC_IRQ_MASK, reg);
++		iowrite32(val & AUD_STS_IOC_IRQ_MASK, reg);
+ 		if (adata->capture_stream)
+ 			snd_pcm_period_elapsed(adata->capture_stream);
+ 		return IRQ_HANDLED;
+@@ -315,24 +325,20 @@ static irqreturn_t xlnx_s2mm_irq_handler(int irq, void *arg)
+ 	return IRQ_NONE;
+ }
+ 
+-static int xlnx_formatter_set_sysclk(struct snd_soc_component *component,
+-				     int clk_id, int source, unsigned int freq, int dir)
+-{
+-	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(component->dev);
+-
+-	adata->sysclk = freq;
+-	return 0;
+-}
+-
+ static int xlnx_formatter_pcm_open(struct snd_soc_component *component,
+-				   struct snd_pcm_substream *substream)
++			       struct snd_pcm_substream *substream)
+ {
+ 	int err;
+ 	u32 val, data_format_mode;
+ 	u32 ch_count_mask, ch_count_shift, data_xfer_mode, data_xfer_shift;
+ 	struct xlnx_pcm_stream_param *stream_data;
+ 	struct snd_pcm_runtime *runtime = substream->runtime;
+-	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(component->dev);
++	struct xlnx_pcm_drv_data *adata;
++
++	if (!component)
++		return -ENODEV;
++
++	adata = dev_get_drvdata(component->dev);
+ 
+ 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+ 	    !adata->mm2s_presence)
+@@ -364,10 +370,12 @@ static int xlnx_formatter_pcm_open(struct snd_soc_component *component,
+ 		adata->capture_stream = substream;
+ 	}
+ 
+-	val = readl(adata->mmio + XLNX_AUD_CORE_CONFIG);
++	val = ioread32(adata->mmio + XLNX_AUD_CORE_CONFIG);
+ 
+ 	if (!(val & data_format_mode))
+ 		stream_data->interleaved = true;
++	else
++		stream_data->interleaved = false;
+ 
+ 	stream_data->xfer_mode = (val & data_xfer_mode) >> data_xfer_shift;
+ 	stream_data->ch_limit = (val & ch_count_mask) >> ch_count_shift;
+@@ -388,7 +396,6 @@ static int xlnx_formatter_pcm_open(struct snd_soc_component *component,
+ 			"Unable to set constraint on period bytes\n");
+ 		return err;
+ 	}
+-
+ 	/* Resize the buffer bytes as divisible by 64 */
+ 	err = snd_pcm_hw_constraint_step(runtime, 0,
+ 					 SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
+@@ -398,7 +405,6 @@ static int xlnx_formatter_pcm_open(struct snd_soc_component *component,
+ 			"Unable to set constraint on buffer bytes\n");
+ 		return err;
+ 	}
+-
+ 	/* Set periods as integer multiple */
+ 	err = snd_pcm_hw_constraint_integer(runtime,
+ 					    SNDRV_PCM_HW_PARAM_PERIODS);
+@@ -409,20 +415,23 @@ static int xlnx_formatter_pcm_open(struct snd_soc_component *component,
+ 	}
+ 
+ 	/* enable DMA IOC irq */
+-	val = readl(stream_data->mmio + XLNX_AUD_CTRL);
++	val = ioread32(stream_data->mmio + XLNX_AUD_CTRL);
+ 	val |= AUD_CTRL_IOC_IRQ_MASK;
+-	writel(val, stream_data->mmio + XLNX_AUD_CTRL);
++	iowrite32(val, stream_data->mmio + XLNX_AUD_CTRL);
+ 
+ 	return 0;
+ }
+ 
+ static int xlnx_formatter_pcm_close(struct snd_soc_component *component,
+-				    struct snd_pcm_substream *substream)
++			       struct snd_pcm_substream *substream)
+ {
+ 	int ret;
+ 	struct xlnx_pcm_stream_param *stream_data =
+ 			substream->runtime->private_data;
+ 
++	if (!component)
++		return -ENODEV;
++
+ 	ret = xlnx_formatter_pcm_reset(stream_data->mmio);
+ 	if (ret) {
+ 		dev_err(component->dev, "audio formatter reset failed\n");
+@@ -437,13 +446,13 @@ static int xlnx_formatter_pcm_close(struct snd_soc_component *component,
+ 
+ static snd_pcm_uframes_t
+ xlnx_formatter_pcm_pointer(struct snd_soc_component *component,
+-			   struct snd_pcm_substream *substream)
++					struct snd_pcm_substream *substream)
+ {
+ 	u32 pos;
+ 	struct snd_pcm_runtime *runtime = substream->runtime;
+ 	struct xlnx_pcm_stream_param *stream_data = runtime->private_data;
+ 
+-	pos = readl(stream_data->mmio + XLNX_AUD_XFER_COUNT);
++	pos = ioread32(stream_data->mmio + XLNX_AUD_XFER_COUNT);
+ 
+ 	if (pos >= stream_data->buffer_size)
+ 		pos = 0;
+@@ -455,38 +464,40 @@ static int xlnx_formatter_pcm_hw_params(struct snd_soc_component *component,
+ 					struct snd_pcm_substream *substream,
+ 					struct snd_pcm_hw_params *params)
+ {
+-	u32 low, high, active_ch, val, bytes_per_ch, bits_per_sample;
++	u32 low, high, active_ch, val, bits_per_sample, bytes_per_ch;
+ 	u32 aes_reg1_val, aes_reg2_val;
++	int status;
+ 	u64 size;
++	struct pl_card_data *prv;
+ 	struct snd_pcm_runtime *runtime = substream->runtime;
+ 	struct xlnx_pcm_stream_param *stream_data = runtime->private_data;
+-	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(component->dev);
++	struct xlnx_pcm_drv_data *adata;
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++
++	if (!component)
++		return -ENODEV;
++
++	adata = dev_get_drvdata(component->dev);
+ 
+ 	active_ch = params_channels(params);
+ 	if (active_ch > stream_data->ch_limit)
+ 		return -EINVAL;
+ 
+-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+-	    adata->sysclk) {
+-		unsigned int mclk_fs = adata->sysclk / params_rate(params);
+-
+-		if (adata->sysclk % params_rate(params) != 0) {
+-			dev_warn(component->dev, "sysclk %u not divisible by rate %u\n",
+-				 adata->sysclk, params_rate(params));
+-			return -EINVAL;
+-		}
+-
+-		writel(mclk_fs, stream_data->mmio + XLNX_AUD_FS_MULTIPLIER);
+-	}
+-
+ 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE &&
+-	    stream_data->xfer_mode == AES_TO_PCM) {
+-		val = readl(stream_data->mmio + XLNX_AUD_STS);
++	    stream_data->xfer_mode == AES_TO_PCM &&
++	    ((strstr(adata->nodes[XLNX_CAPTURE]->name, "hdmi")) ||
++	    (strstr(adata->nodes[XLNX_CAPTURE]->name, "sdi")) ||
++	    (strstr(adata->nodes[XLNX_CAPTURE]->name, "dp")))) {
++		/*
++		 * If formatter is in AES_PCM mode for HDMI/SDI capture path,
++		 * parse AES header
++		 */
++		val = ioread32(stream_data->mmio + XLNX_AUD_STS);
+ 		if (val & AUD_STS_CH_STS_MASK) {
+-			aes_reg1_val = readl(stream_data->mmio +
+-					     XLNX_AUD_CH_STS_START);
+-			aes_reg2_val = readl(stream_data->mmio +
+-					     XLNX_AUD_CH_STS_START + 0x4);
++			aes_reg1_val = ioread32(stream_data->mmio +
++					 XLNX_AUD_CH_STS_START);
++			aes_reg2_val = ioread32(stream_data->mmio +
++					 XLNX_AUD_CH_STS_START + 0x4);
+ 
+ 			xlnx_parse_aes_params(aes_reg1_val, aes_reg2_val,
+ 					      component->dev);
+@@ -494,15 +505,19 @@ static int xlnx_formatter_pcm_hw_params(struct snd_soc_component *component,
+ 	}
+ 
+ 	size = params_buffer_bytes(params);
++	status = snd_pcm_lib_malloc_pages(substream, size);
++	if (status < 0)
++		return status;
+ 
+ 	stream_data->buffer_size = size;
+ 
+-	low = lower_32_bits(runtime->dma_addr);
+-	high = upper_32_bits(runtime->dma_addr);
+-	writel(low, stream_data->mmio + XLNX_AUD_BUFF_ADDR_LSB);
+-	writel(high, stream_data->mmio + XLNX_AUD_BUFF_ADDR_MSB);
++	low = lower_32_bits(substream->dma_buffer.addr);
++	high = upper_32_bits(substream->dma_buffer.addr);
++	iowrite32(low, stream_data->mmio + XLNX_AUD_BUFF_ADDR_LSB);
++	iowrite32(high, stream_data->mmio + XLNX_AUD_BUFF_ADDR_MSB);
+ 
+-	val = readl(stream_data->mmio + XLNX_AUD_CTRL);
++	val = ioread32(stream_data->mmio + XLNX_AUD_CTRL);
++	val &= ~AUD_CTRL_DATA_WIDTH_MASK;
+ 	bits_per_sample = params_width(params);
+ 	switch (bits_per_sample) {
+ 	case 8:
+@@ -520,25 +535,35 @@ static int xlnx_formatter_pcm_hw_params(struct snd_soc_component *component,
+ 	case 32:
+ 		val |= (BIT_DEPTH_32 << AUD_CTRL_DATA_WIDTH_SHIFT);
+ 		break;
+-	default:
+-		return -EINVAL;
+ 	}
+ 
++	val &= ~AUD_CTRL_ACTIVE_CH_MASK;
+ 	val |= active_ch << AUD_CTRL_ACTIVE_CH_SHIFT;
+-	writel(val, stream_data->mmio + XLNX_AUD_CTRL);
++	iowrite32(val, stream_data->mmio + XLNX_AUD_CTRL);
+ 
+ 	val = (params_periods(params) << PERIOD_CFG_PERIODS_SHIFT)
+ 		| params_period_bytes(params);
+-	writel(val, stream_data->mmio + XLNX_AUD_PERIOD_CONFIG);
++	iowrite32(val, stream_data->mmio + XLNX_AUD_PERIOD_CONFIG);
+ 	bytes_per_ch = DIV_ROUND_UP(params_period_bytes(params), active_ch);
+-	writel(bytes_per_ch, stream_data->mmio + XLNX_BYTES_PER_CH);
++	iowrite32(bytes_per_ch, stream_data->mmio + XLNX_BYTES_PER_CH);
++
++	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
++		prv = snd_soc_card_get_drvdata(rtd->card);
++		iowrite32(prv->mclk_ratio,
++			  stream_data->mmio + XLNX_AUD_FS_MULTIPLIER);
++	}
+ 
+ 	return 0;
+ }
+ 
++static int xlnx_formatter_pcm_hw_free(struct snd_soc_component *component,
++					struct snd_pcm_substream *substream)
++{
++	return snd_pcm_lib_free_pages(substream);
++}
++
+ static int xlnx_formatter_pcm_trigger(struct snd_soc_component *component,
+-				      struct snd_pcm_substream *substream,
+-				      int cmd)
++					struct snd_pcm_substream *substream, int cmd)
+ {
+ 	u32 val;
+ 	struct xlnx_pcm_stream_param *stream_data =
+@@ -548,16 +573,16 @@ static int xlnx_formatter_pcm_trigger(struct snd_soc_component *component,
+ 	case SNDRV_PCM_TRIGGER_START:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+ 	case SNDRV_PCM_TRIGGER_RESUME:
+-		val = readl(stream_data->mmio + XLNX_AUD_CTRL);
++		val = ioread32(stream_data->mmio + XLNX_AUD_CTRL);
+ 		val |= AUD_CTRL_DMA_EN_MASK;
+-		writel(val, stream_data->mmio + XLNX_AUD_CTRL);
++		iowrite32(val, stream_data->mmio + XLNX_AUD_CTRL);
+ 		break;
+ 	case SNDRV_PCM_TRIGGER_STOP:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+ 	case SNDRV_PCM_TRIGGER_SUSPEND:
+-		val = readl(stream_data->mmio + XLNX_AUD_CTRL);
++		val = ioread32(stream_data->mmio + XLNX_AUD_CTRL);
+ 		val &= ~AUD_CTRL_DMA_EN_MASK;
+-		writel(val, stream_data->mmio + XLNX_AUD_CTRL);
++		iowrite32(val, stream_data->mmio + XLNX_AUD_CTRL);
+ 		break;
+ 	}
+ 
+@@ -565,30 +590,167 @@ static int xlnx_formatter_pcm_trigger(struct snd_soc_component *component,
+ }
+ 
+ static int xlnx_formatter_pcm_new(struct snd_soc_component *component,
+-				  struct snd_soc_pcm_runtime *rtd)
++					struct snd_soc_pcm_runtime *rtd)
+ {
+-	snd_pcm_set_managed_buffer_all(rtd->pcm,
++	if (!component)
++		return -ENODEV;
++
++	snd_pcm_lib_preallocate_pages_for_all(rtd->pcm,
+ 			SNDRV_DMA_TYPE_DEV, component->dev,
+ 			xlnx_pcm_hardware.buffer_bytes_max,
+ 			xlnx_pcm_hardware.buffer_bytes_max);
+ 	return 0;
+ }
+ 
+-static const struct snd_soc_component_driver xlnx_asoc_component = {
+-	.name		= DRV_NAME,
+-	.set_sysclk	= xlnx_formatter_set_sysclk,
+-	.open		= xlnx_formatter_pcm_open,
+-	.close		= xlnx_formatter_pcm_close,
+-	.hw_params	= xlnx_formatter_pcm_hw_params,
+-	.trigger	= xlnx_formatter_pcm_trigger,
+-	.pointer	= xlnx_formatter_pcm_pointer,
+-	.pcm_construct	= xlnx_formatter_pcm_new,
++static struct snd_soc_component_driver xlnx_asoc_component = {
++	.name = DRV_NAME,
++	.open = xlnx_formatter_pcm_open,
++	.close = xlnx_formatter_pcm_close,
++	.hw_params = xlnx_formatter_pcm_hw_params,
++	.hw_free = xlnx_formatter_pcm_hw_free,
++	.trigger = xlnx_formatter_pcm_trigger,
++	.pointer = xlnx_formatter_pcm_pointer,
++	.pcm_construct = xlnx_formatter_pcm_new,
+ };
+ 
++static int configure_mm2s(struct xlnx_pcm_drv_data *aud_drv_data,
++			  struct platform_device *pdev)
++{
++	int ret;
++	struct device *dev = &pdev->dev;
++
++	aud_drv_data->mm2s_axis_clk = devm_clk_get(dev, "m_axis_mm2s_aclk");
++	if (IS_ERR(aud_drv_data->mm2s_axis_clk)) {
++		ret = PTR_ERR(aud_drv_data->mm2s_axis_clk);
++		dev_err(dev, "failed to get m_axis_mm2s_aclk(%d)\n", ret);
++		return ret;
++	}
++	ret = clk_prepare_enable(aud_drv_data->mm2s_axis_clk);
++	if (ret) {
++		dev_err(dev, "failed to enable m_axis_mm2s_aclk(%d)\n", ret);
++		return ret;
++	}
++
++	aud_drv_data->aud_mclk = devm_clk_get(dev, "aud_mclk");
++	if (IS_ERR(aud_drv_data->aud_mclk)) {
++		ret = PTR_ERR(aud_drv_data->aud_mclk);
++		dev_err(dev, "failed to get aud_mclk(%d)\n", ret);
++		goto axis_clk_err;
++	}
++	ret = clk_prepare_enable(aud_drv_data->aud_mclk);
++	if (ret) {
++		dev_err(dev, "failed to enable aud_mclk(%d)\n", ret);
++		goto axis_clk_err;
++	}
++
++	aud_drv_data->mm2s_irq = platform_get_irq_byname(pdev,
++							 "irq_mm2s");
++	if (aud_drv_data->mm2s_irq < 0) {
++		ret = aud_drv_data->mm2s_irq;
++		goto mm2s_err;
++	}
++	ret = devm_request_irq(dev, aud_drv_data->mm2s_irq,
++			       xlnx_mm2s_irq_handler, 0,
++			       "xlnx_formatter_pcm_mm2s_irq",
++			       dev);
++	if (ret) {
++		dev_err(dev, "xlnx audio mm2s irq request failed\n");
++		goto mm2s_err;
++	}
++	ret = xlnx_formatter_pcm_reset(aud_drv_data->mmio +
++				       XLNX_MM2S_OFFSET);
++	if (ret) {
++		dev_err(dev, "audio formatter reset failed\n");
++		goto mm2s_err;
++	}
++	xlnx_formatter_disable_irqs(aud_drv_data->mmio +
++				    XLNX_MM2S_OFFSET,
++				    SNDRV_PCM_STREAM_PLAYBACK);
++
++	aud_drv_data->nodes[XLNX_PLAYBACK] =
++		of_parse_phandle(dev->of_node, "xlnx,tx", 0);
++	if (!aud_drv_data->nodes[XLNX_PLAYBACK])
++		dev_err(dev, "tx node not found\n");
++	else
++		dev_info(dev,
++			 "sound card device will use DAI link: %s\n",
++			 (aud_drv_data->nodes[XLNX_PLAYBACK])->name);
++	of_node_put(aud_drv_data->nodes[XLNX_PLAYBACK]);
++
++	aud_drv_data->mm2s_presence = true;
++	return 0;
++
++mm2s_err:
++	clk_disable_unprepare(aud_drv_data->aud_mclk);
++axis_clk_err:
++	clk_disable_unprepare(aud_drv_data->mm2s_axis_clk);
++
++	return ret;
++}
++
++static int configure_s2mm(struct xlnx_pcm_drv_data *aud_drv_data,
++			  struct platform_device *pdev)
++{
++	int ret;
++	struct device *dev = &pdev->dev;
++
++	aud_drv_data->s2mm_axis_clk = devm_clk_get(dev, "s_axis_s2mm_aclk");
++	if (IS_ERR(aud_drv_data->s2mm_axis_clk)) {
++		ret = PTR_ERR(aud_drv_data->s2mm_axis_clk);
++		dev_err(dev, "failed to get s_axis_s2mm_aclk(%d)\n", ret);
++		return ret;
++	}
++	ret = clk_prepare_enable(aud_drv_data->s2mm_axis_clk);
++	if (ret) {
++		dev_err(dev, "failed to enable s_axis_s2mm_aclk(%d)\n", ret);
++		return ret;
++	}
++
++	aud_drv_data->s2mm_irq = platform_get_irq_byname(pdev, "irq_s2mm");
++	if (aud_drv_data->s2mm_irq < 0) {
++		ret = aud_drv_data->s2mm_irq;
++		goto s2mm_err;
++	}
++	ret = devm_request_irq(dev, aud_drv_data->s2mm_irq,
++			       xlnx_s2mm_irq_handler, 0,
++			       "xlnx_formatter_pcm_s2mm_irq",
++			       dev);
++	if (ret) {
++		dev_err(dev, "xlnx audio s2mm irq request failed\n");
++		goto s2mm_err;
++	}
++	ret = xlnx_formatter_pcm_reset(aud_drv_data->mmio +
++				       XLNX_S2MM_OFFSET);
++	if (ret) {
++		dev_err(dev, "audio formatter reset failed\n");
++		goto s2mm_err;
++	}
++	xlnx_formatter_disable_irqs(aud_drv_data->mmio +
++				    XLNX_S2MM_OFFSET,
++				    SNDRV_PCM_STREAM_CAPTURE);
++
++	aud_drv_data->nodes[XLNX_CAPTURE] =
++		of_parse_phandle(dev->of_node, "xlnx,rx", 0);
++	if (!aud_drv_data->nodes[XLNX_CAPTURE])
++		dev_err(dev, "rx node not found\n");
++	else
++		dev_info(dev, "sound card device will use DAI link: %s\n",
++			 (aud_drv_data->nodes[XLNX_CAPTURE])->name);
++	of_node_put(aud_drv_data->nodes[XLNX_CAPTURE]);
++
++	aud_drv_data->s2mm_presence = true;
++	return 0;
++
++s2mm_err:
++	clk_disable_unprepare(aud_drv_data->s2mm_axis_clk);
++	return ret;
++}
++
+ static int xlnx_formatter_pcm_probe(struct platform_device *pdev)
+ {
+ 	int ret;
+ 	u32 val;
++	size_t pdata_size;
+ 	struct xlnx_pcm_drv_data *aud_drv_data;
+ 	struct device *dev = &pdev->dev;
+ 
+@@ -596,6 +758,12 @@ static int xlnx_formatter_pcm_probe(struct platform_device *pdev)
+ 	if (!aud_drv_data)
+ 		return -ENOMEM;
+ 
++	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
++	if (ret) {
++		dev_err(dev, "higher dma address mapping failed %d\n", ret);
++		return ret;
++	}
++
+ 	aud_drv_data->axi_clk = devm_clk_get(dev, "s_axi_lite_aclk");
+ 	if (IS_ERR(aud_drv_data->axi_clk)) {
+ 		ret = PTR_ERR(aud_drv_data->axi_clk);
+@@ -604,8 +772,7 @@ static int xlnx_formatter_pcm_probe(struct platform_device *pdev)
+ 	}
+ 	ret = clk_prepare_enable(aud_drv_data->axi_clk);
+ 	if (ret) {
+-		dev_err(dev,
+-			"failed to enable s_axi_lite_aclk(%d)\n", ret);
++		dev_err(dev, "failed to enable s_axi_lite_aclk(%d)\n", ret);
+ 		return ret;
+ 	}
+ 
+@@ -616,59 +783,17 @@ static int xlnx_formatter_pcm_probe(struct platform_device *pdev)
+ 		goto clk_err;
+ 	}
+ 
+-	val = readl(aud_drv_data->mmio + XLNX_AUD_CORE_CONFIG);
++	val = ioread32(aud_drv_data->mmio + XLNX_AUD_CORE_CONFIG);
+ 	if (val & AUD_CFG_MM2S_MASK) {
+-		aud_drv_data->mm2s_presence = true;
+-		ret = xlnx_formatter_pcm_reset(aud_drv_data->mmio +
+-					       XLNX_MM2S_OFFSET);
+-		if (ret) {
+-			dev_err(dev, "audio formatter reset failed\n");
+-			goto clk_err;
+-		}
+-		xlnx_formatter_disable_irqs(aud_drv_data->mmio +
+-					    XLNX_MM2S_OFFSET,
+-					    SNDRV_PCM_STREAM_PLAYBACK);
+-
+-		aud_drv_data->mm2s_irq = platform_get_irq_byname(pdev,
+-								 "irq_mm2s");
+-		if (aud_drv_data->mm2s_irq < 0) {
+-			ret = aud_drv_data->mm2s_irq;
+-			goto clk_err;
+-		}
+-		ret = devm_request_irq(dev, aud_drv_data->mm2s_irq,
+-				       xlnx_mm2s_irq_handler, 0,
+-				       "xlnx_formatter_pcm_mm2s_irq", dev);
+-		if (ret) {
+-			dev_err(dev, "xlnx audio mm2s irq request failed\n");
++		ret = configure_mm2s(aud_drv_data, pdev);
++		if (ret)
+ 			goto clk_err;
+-		}
+ 	}
++
+ 	if (val & AUD_CFG_S2MM_MASK) {
+-		aud_drv_data->s2mm_presence = true;
+-		ret = xlnx_formatter_pcm_reset(aud_drv_data->mmio +
+-					       XLNX_S2MM_OFFSET);
+-		if (ret) {
+-			dev_err(dev, "audio formatter reset failed\n");
+-			goto clk_err;
+-		}
+-		xlnx_formatter_disable_irqs(aud_drv_data->mmio +
+-					    XLNX_S2MM_OFFSET,
+-					    SNDRV_PCM_STREAM_CAPTURE);
+-
+-		aud_drv_data->s2mm_irq = platform_get_irq_byname(pdev,
+-								 "irq_s2mm");
+-		if (aud_drv_data->s2mm_irq < 0) {
+-			ret = aud_drv_data->s2mm_irq;
++		ret = configure_s2mm(aud_drv_data, pdev);
++		if (ret)
+ 			goto clk_err;
+-		}
+-		ret = devm_request_irq(dev, aud_drv_data->s2mm_irq,
+-				       xlnx_s2mm_irq_handler, 0,
+-				       "xlnx_formatter_pcm_s2mm_irq",
+-				       dev);
+-		if (ret) {
+-			dev_err(dev, "xlnx audio s2mm irq request failed\n");
+-			goto clk_err;
+-		}
+ 	}
+ 
+ 	dev_set_drvdata(dev, aud_drv_data);
+@@ -680,6 +805,19 @@ static int xlnx_formatter_pcm_probe(struct platform_device *pdev)
+ 		goto clk_err;
+ 	}
+ 
++	pdata_size = sizeof(aud_drv_data->nodes);
++	if (aud_drv_data->nodes[XLNX_PLAYBACK] ||
++	    aud_drv_data->nodes[XLNX_CAPTURE])
++		aud_drv_data->pdev =
++			platform_device_register_resndata(dev, "xlnx_snd_card",
++							  PLATFORM_DEVID_AUTO,
++							  NULL, 0,
++							  &aud_drv_data->nodes,
++							  pdata_size);
++	if (!aud_drv_data->pdev)
++		dev_err(dev, "sound card device creation failed\n");
++
++	dev_info(dev, "pcm platform device registered\n");
+ 	return 0;
+ 
+ clk_err:
+@@ -692,6 +830,8 @@ static int xlnx_formatter_pcm_remove(struct platform_device *pdev)
+ 	int ret = 0;
+ 	struct xlnx_pcm_drv_data *adata = dev_get_drvdata(&pdev->dev);
+ 
++	platform_device_unregister(adata->pdev);
++
+ 	if (adata->s2mm_presence)
+ 		ret = xlnx_formatter_pcm_reset(adata->mmio + XLNX_S2MM_OFFSET);
+ 
+@@ -722,5 +862,5 @@ static struct platform_driver xlnx_formatter_pcm_driver = {
+ };
+ 
+ module_platform_driver(xlnx_formatter_pcm_driver);
+-MODULE_AUTHOR("Maruthi Srinivas Bayyavarapu <maruthis@xilinx.com>");
++MODULE_AUTHOR("Maruthi Srinivas Bayyavarapu");
+ MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xlnx_i2s.c b/sound/soc/xilinx/xlnx_i2s.c
+index cc641e582..31f05a017 100644
+--- a/sound/soc/xilinx/xlnx_i2s.c
++++ b/sound/soc/xilinx/xlnx_i2s.c
+@@ -7,6 +7,7 @@
+ // Author: Praveen Vuppala <praveenv@xilinx.com>
+ // Author: Maruthi Srinivas Bayyavarapu <maruthis@xilinx.com>
+ 
++#include <linux/clk.h>
+ #include <linux/io.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -22,15 +23,22 @@
+ #define I2S_CH0_OFFSET			0x30
+ #define I2S_I2STIM_VALID_MASK		GENMASK(7, 0)
+ 
++struct xlnx_i2s_dev_data {
++	void __iomem *base;
++	struct clk *axi_clk;
++	struct clk *axis_clk;
++	struct clk *aud_mclk;
++};
++
+ static int xlnx_i2s_set_sclkout_div(struct snd_soc_dai *cpu_dai,
+ 				    int div_id, int div)
+ {
+-	void __iomem *base = snd_soc_dai_get_drvdata(cpu_dai);
++	struct xlnx_i2s_dev_data *dev_data = snd_soc_dai_get_drvdata(cpu_dai);
+ 
+ 	if (!div || (div & ~I2S_I2STIM_VALID_MASK))
+ 		return -EINVAL;
+ 
+-	writel(div, base + I2S_I2STIM_OFFSET);
++	writel(div, dev_data->base + I2S_I2STIM_OFFSET);
+ 
+ 	return 0;
+ }
+@@ -40,13 +48,13 @@ static int xlnx_i2s_hw_params(struct snd_pcm_substream *substream,
+ 			      struct snd_soc_dai *i2s_dai)
+ {
+ 	u32 reg_off, chan_id;
+-	void __iomem *base = snd_soc_dai_get_drvdata(i2s_dai);
++	struct xlnx_i2s_dev_data *dev_data = snd_soc_dai_get_drvdata(i2s_dai);
+ 
+ 	chan_id = params_channels(params) / 2;
+ 
+ 	while (chan_id > 0) {
+ 		reg_off = I2S_CH0_OFFSET + ((chan_id - 1) * 4);
+-		writel(chan_id, base + reg_off);
++		writel(chan_id, dev_data->base + reg_off);
+ 		chan_id--;
+ 	}
+ 
+@@ -56,18 +64,18 @@ static int xlnx_i2s_hw_params(struct snd_pcm_substream *substream,
+ static int xlnx_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
+ 			    struct snd_soc_dai *i2s_dai)
+ {
+-	void __iomem *base = snd_soc_dai_get_drvdata(i2s_dai);
++	struct xlnx_i2s_dev_data *dev_data = snd_soc_dai_get_drvdata(i2s_dai);
+ 
+ 	switch (cmd) {
+ 	case SNDRV_PCM_TRIGGER_START:
+ 	case SNDRV_PCM_TRIGGER_RESUME:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+-		writel(1, base + I2S_CORE_CTRL_OFFSET);
++		writel(1, dev_data->base + I2S_CORE_CTRL_OFFSET);
+ 		break;
+ 	case SNDRV_PCM_TRIGGER_STOP:
+ 	case SNDRV_PCM_TRIGGER_SUSPEND:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+-		writel(0, base + I2S_CORE_CTRL_OFFSET);
++		writel(0, dev_data->base + I2S_CORE_CTRL_OFFSET);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+@@ -95,10 +103,10 @@ MODULE_DEVICE_TABLE(of, xlnx_i2s_of_match);
+ 
+ static int xlnx_i2s_probe(struct platform_device *pdev)
+ {
+-	void __iomem *base;
+ 	struct snd_soc_dai_driver *dai_drv;
++	struct xlnx_i2s_dev_data *dev_data;
+ 	int ret;
+-	u32 ch, format, data_width;
++	u32 ch = 0, format, data_width = 0;
+ 	struct device *dev = &pdev->dev;
+ 	struct device_node *node = dev->of_node;
+ 
+@@ -106,9 +114,16 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
+ 	if (!dai_drv)
+ 		return -ENOMEM;
+ 
+-	base = devm_platform_ioremap_resource(pdev, 0);
+-	if (IS_ERR(base))
+-		return PTR_ERR(base);
++	dev_data = devm_kzalloc(&pdev->dev, sizeof(*dev_data), GFP_KERNEL);
++	if (!dev_data)
++		return -ENOMEM;
++
++	dev_data->axi_clk = devm_clk_get(&pdev->dev, "s_axi_ctrl_aclk");
++	if (IS_ERR(dev_data->axi_clk)) {
++		ret = PTR_ERR(dev_data->axi_clk);
++		dev_err(&pdev->dev, "failed to get s_axi_ctrl_aclk(%d)\n", ret);
++		return ret;
++	}
+ 
+ 	ret = of_property_read_u32(node, "xlnx,num-channels", &ch);
+ 	if (ret < 0) {
+@@ -141,6 +156,15 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
+ 		dai_drv->playback.channels_max = ch;
+ 		dai_drv->playback.rates	= SNDRV_PCM_RATE_8000_192000;
+ 		dai_drv->ops = &xlnx_i2s_dai_ops;
++
++		dev_data->axis_clk = devm_clk_get(&pdev->dev,
++						  "s_axis_aud_aclk");
++		if (IS_ERR(dev_data->axis_clk)) {
++			ret = PTR_ERR(dev_data->axis_clk);
++			dev_err(&pdev->dev,
++				"failed to get s_axis_aud_aclk(%d)\n", ret);
++			return ret;
++		}
+ 	} else if (of_device_is_compatible(node, "xlnx,i2s-receiver-1.0")) {
+ 		dai_drv->name = "xlnx_i2s_capture";
+ 		dai_drv->capture.stream_name = "Capture";
+@@ -149,30 +173,93 @@ static int xlnx_i2s_probe(struct platform_device *pdev)
+ 		dai_drv->capture.channels_max = ch;
+ 		dai_drv->capture.rates = SNDRV_PCM_RATE_8000_192000;
+ 		dai_drv->ops = &xlnx_i2s_dai_ops;
++
++		dev_data->axis_clk = devm_clk_get(&pdev->dev,
++						  "m_axis_aud_aclk");
++		if (IS_ERR(dev_data->axis_clk)) {
++			ret = PTR_ERR(dev_data->axis_clk);
++			dev_err(&pdev->dev,
++				"failed to get m_axis_aud_aclk(%d)\n", ret);
++			return ret;
++		}
+ 	} else {
+ 		return -ENODEV;
+ 	}
+ 
+-	dev_set_drvdata(&pdev->dev, base);
++	dev_data->aud_mclk = devm_clk_get(&pdev->dev, "aud_mclk");
++	if (IS_ERR(dev_data->aud_mclk)) {
++		ret = PTR_ERR(dev_data->aud_mclk);
++		dev_err(&pdev->dev, "failed to get aud_mclk(%d)\n", ret);
++		return ret;
++	}
++
++	ret = clk_prepare_enable(dev_data->axi_clk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable s_axi_ctrl_aclk(%d)\n", ret);
++		return ret;
++	}
++
++	ret = clk_prepare_enable(dev_data->axis_clk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable axis_aud_aclk(%d)\n", ret);
++		goto err_axis_clk;
++	}
++
++	ret = clk_prepare_enable(dev_data->aud_mclk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable aud_mclk(%d)\n", ret);
++		goto err_aud_mclk;
++	}
++
++	dev_data->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(dev_data->base)) {
++		ret = PTR_ERR(dev_data->base);
++		goto clk_err;
++	}
++
++	dev_set_drvdata(&pdev->dev, dev_data);
+ 
+ 	ret = devm_snd_soc_register_component(&pdev->dev, &xlnx_i2s_component,
+ 					      dai_drv, 1);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "i2s component registration failed\n");
+-		return ret;
++		goto clk_err;
+ 	}
+ 
+ 	dev_info(&pdev->dev, "%s DAI registered\n", dai_drv->name);
+ 
++	return 0;
++clk_err:
++	clk_disable_unprepare(dev_data->aud_mclk);
++err_aud_mclk:
++	clk_disable_unprepare(dev_data->axis_clk);
++err_axis_clk:
++	clk_disable_unprepare(dev_data->axi_clk);
++
+ 	return ret;
+ }
+ 
++static int xlnx_i2s_remove(struct platform_device *pdev)
++{
++	struct xlnx_i2s_dev_data *dev_data = dev_get_drvdata(&pdev->dev);
++
++	clk_disable_unprepare(dev_data->aud_mclk);
++	clk_disable_unprepare(dev_data->axis_clk);
++	clk_disable_unprepare(dev_data->axi_clk);
++
++	return 0;
++}
++
+ static struct platform_driver xlnx_i2s_aud_driver = {
+ 	.driver = {
+ 		.name = DRV_NAME,
+ 		.of_match_table = xlnx_i2s_of_match,
+ 	},
+ 	.probe = xlnx_i2s_probe,
++	.remove = xlnx_i2s_remove,
+ };
+ 
+ module_platform_driver(xlnx_i2s_aud_driver);
+diff --git a/sound/soc/xilinx/xlnx_pl_snd_card.c b/sound/soc/xilinx/xlnx_pl_snd_card.c
+new file mode 100644
+index 000000000..ac959fc54
+--- /dev/null
++++ b/sound/soc/xilinx/xlnx_pl_snd_card.c
+@@ -0,0 +1,537 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx ASoC sound card support
++ *
++ * Copyright (C) 2018 Xilinx, Inc.
++ */
++
++#include <linux/clk.h>
++#include <linux/idr.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_device.h>
++#include <sound/pcm_params.h>
++#include <sound/soc.h>
++
++#include "xlnx_snd_common.h"
++
++#define I2S_CLOCK_RATIO 384
++#define XLNX_MAX_PL_SND_DEV 6
++
++static DEFINE_IDA(xlnx_snd_card_dev);
++
++enum {
++	I2S_AUDIO = 0,
++	HDMI_AUDIO,
++	SDI_AUDIO,
++	SPDIF_AUDIO,
++	DP_AUDIO,
++	XLNX_MAX_IFACE,
++};
++
++static const char *xlnx_snd_card_name[XLNX_MAX_IFACE] = {
++	[I2S_AUDIO]	= "xlnx-i2s-snd-card",
++	[HDMI_AUDIO]	= "xlnx-hdmi-snd-card",
++	[SDI_AUDIO]	= "xlnx-sdi-snd-card",
++	[SPDIF_AUDIO]	= "xlnx-spdif-snd-card",
++	[DP_AUDIO]	= "xlnx-dp-snd-card",
++};
++
++static const char *dev_compat[][XLNX_MAX_IFACE] = {
++	[XLNX_PLAYBACK] = {
++		"xlnx,i2s-transmitter-1.0",
++		"xlnx,v-hdmi-tx-ss-3.1",
++		"xlnx,v-uhdsdi-audio-2.0",
++		"xlnx,spdif-2.0",
++		"xlnx,v-dp-txss-3.0"
++	},
++
++	[XLNX_CAPTURE] = {
++		"xlnx,i2s-receiver-1.0",
++		"xlnx,v-hdmi-rx-ss-3.1",
++		"xlnx,v-uhdsdi-audio-2.0",
++		"xlnx,spdif-2.0",
++		"xlnx,v-dp-rxss-3.0",
++	},
++};
++
++static int xlnx_spdif_card_hw_params(struct snd_pcm_substream *substream,
++				     struct snd_pcm_hw_params *params)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct pl_card_data *prv = snd_soc_card_get_drvdata(rtd->card);
++	u32 sample_rate = params_rate(params);
++
++	/* mclk must be >=1024 * sampleing rate */
++	prv->mclk_val = 1024 * sample_rate;
++	prv->mclk_ratio = 1024;
++	return clk_set_rate(prv->mclk, prv->mclk_val);
++}
++
++static int xlnx_sdi_card_hw_params(struct snd_pcm_substream *substream,
++				   struct snd_pcm_hw_params *params)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct pl_card_data *prv = snd_soc_card_get_drvdata(rtd->card);
++	u32 sample_rate = params_rate(params);
++
++	prv->mclk_val = prv->mclk_ratio * sample_rate;
++	return clk_set_rate(prv->mclk, prv->mclk_val);
++}
++
++static int xlnx_dp_card_hw_params(struct snd_pcm_substream *substream,
++				  struct snd_pcm_hw_params *params)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct pl_card_data *prv = snd_soc_card_get_drvdata(rtd->card);
++	u32 sample_rate = params_rate(params);
++
++	switch (sample_rate) {
++	case 32000:
++	case 44100:
++	case 48000:
++	case 88200:
++	case 96000:
++	case 176400:
++	case 192000:
++		prv->mclk_ratio = 512;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	prv->mclk_val = prv->mclk_ratio * sample_rate;
++	return clk_set_rate(prv->mclk, prv->mclk_val);
++}
++
++static int xlnx_hdmi_card_hw_params(struct snd_pcm_substream *substream,
++				    struct snd_pcm_hw_params *params)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct pl_card_data *prv = snd_soc_card_get_drvdata(rtd->card);
++	u32 sample_rate = params_rate(params);
++
++	switch (sample_rate) {
++	case 32000:
++	case 44100:
++	case 48000:
++	case 88200:
++	case 96000:
++	case 176400:
++	case 192000:
++		prv->mclk_ratio = 512;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	prv->mclk_val = prv->mclk_ratio * sample_rate;
++	return clk_set_rate(prv->mclk, prv->mclk_val);
++}
++
++static int xlnx_i2s_card_hw_params(struct snd_pcm_substream *substream,
++				   struct snd_pcm_hw_params *params)
++{
++	int ret, clk_div;
++	u32 ch, data_width, sample_rate;
++	struct pl_card_data *prv;
++
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
++
++	ch = params_channels(params);
++	data_width = params_width(params);
++	sample_rate = params_rate(params);
++
++	/* only 2 channels supported */
++	if (ch != 2)
++		return -EINVAL;
++
++	prv = snd_soc_card_get_drvdata(rtd->card);
++	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
++		switch (sample_rate) {
++		case 5512:
++		case 8000:
++		case 11025:
++		case 16000:
++		case 22050:
++		case 32000:
++		case 44100:
++		case 48000:
++		case 64000:
++		case 88200:
++		case 96000:
++			prv->mclk_ratio = 384;
++			break;
++		default:
++			return -EINVAL;
++		}
++	} else {
++		switch (sample_rate) {
++		case 32000:
++		case 44100:
++		case 48000:
++		case 88200:
++		case 96000:
++			prv->mclk_ratio = 384;
++			break;
++		case 64000:
++		case 176400:
++		case 192000:
++			prv->mclk_ratio = 192;
++			break;
++		default:
++			return -EINVAL;
++		}
++	}
++
++	prv->mclk_val = prv->mclk_ratio * sample_rate;
++	clk_div = DIV_ROUND_UP(prv->mclk_ratio, 2 * ch * data_width);
++	ret = snd_soc_dai_set_clkdiv(cpu_dai, 0, clk_div);
++	if (ret)
++		return ret;
++
++	return clk_set_rate(prv->mclk, prv->mclk_val);
++}
++
++static const struct snd_soc_ops xlnx_sdi_card_ops = {
++	.hw_params = xlnx_sdi_card_hw_params,
++};
++
++static const struct snd_soc_ops xlnx_i2s_card_ops = {
++	.hw_params = xlnx_i2s_card_hw_params,
++};
++
++static const struct snd_soc_ops xlnx_hdmi_card_ops = {
++	.hw_params = xlnx_hdmi_card_hw_params,
++};
++
++static const struct snd_soc_ops xlnx_dp_card_ops = {
++	.hw_params = xlnx_dp_card_hw_params,
++};
++
++static const struct snd_soc_ops xlnx_spdif_card_ops = {
++	.hw_params = xlnx_spdif_card_hw_params,
++};
++
++SND_SOC_DAILINK_DEFS(xlnx_i2s_capture,
++		     DAILINK_COMP_ARRAY(COMP_CPU("xlnx_i2s_capture")),
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_i2s_playback,
++		     DAILINK_COMP_ARRAY(COMP_CPU("xlnx_i2s_playback")),
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_hdmi_tx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC("hdmi-audio-codec.0", "i2s-hifi")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_hdmi_rx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xlnx_hdmi_rx")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_dp_tx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC("hdmi-audio-codec.0", "i2s-hifi")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_dp_rx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xlnx_dp_rx")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_sdi_tx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xlnx_sdi_tx")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_sdi_rx,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_CODEC(NULL, "xlnx_sdi_rx")),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++SND_SOC_DAILINK_DEFS(xlnx_spdif,
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_DUMMY()),
++		     DAILINK_COMP_ARRAY(COMP_PLATFORM(NULL)));
++
++static struct snd_soc_dai_link xlnx_snd_dai[][XLNX_MAX_PATHS] = {
++	[I2S_AUDIO] = {
++		{
++			.name = "xilinx-i2s_playback",
++			SND_SOC_DAILINK_REG(xlnx_i2s_playback),
++			.ops = &xlnx_i2s_card_ops,
++		},
++		{
++			.name = "xilinx-i2s_capture",
++			SND_SOC_DAILINK_REG(xlnx_i2s_capture),
++			.ops = &xlnx_i2s_card_ops,
++		},
++	},
++	[HDMI_AUDIO] = {
++		{
++			.name = "xilinx-hdmi-playback",
++			SND_SOC_DAILINK_REG(xlnx_hdmi_tx),
++			.ops = &xlnx_hdmi_card_ops,
++		},
++		{
++			.name = "xilinx-hdmi-capture",
++			SND_SOC_DAILINK_REG(xlnx_hdmi_rx),
++		},
++	},
++	[SDI_AUDIO] = {
++		{
++			.name = "xlnx-sdi-playback",
++			SND_SOC_DAILINK_REG(xlnx_sdi_tx),
++			.ops = &xlnx_sdi_card_ops,
++		},
++		{
++			.name = "xlnx-sdi-capture",
++			SND_SOC_DAILINK_REG(xlnx_sdi_rx),
++		},
++	},
++	[SPDIF_AUDIO] = {
++		{
++			.name = "xilinx-spdif_playback",
++			SND_SOC_DAILINK_REG(xlnx_spdif),
++			.ops = &xlnx_spdif_card_ops,
++		},
++		{
++			.name = "xilinx-spdif_capture",
++			SND_SOC_DAILINK_REG(xlnx_spdif),
++			.ops = &xlnx_spdif_card_ops,
++		},
++	},
++	[DP_AUDIO] = {
++		{
++			.name = "xilinx-dp-playback",
++			SND_SOC_DAILINK_REG(xlnx_dp_tx),
++			.ops = &xlnx_dp_card_ops,
++		},
++		{
++			.name = "xilinx-dp-capture",
++			SND_SOC_DAILINK_REG(xlnx_dp_rx),
++		},
++	},
++};
++
++static int find_link(struct device_node *node, int direction)
++{
++	int ret;
++	u32 i, size;
++	const char **link_names = dev_compat[direction];
++
++	size = ARRAY_SIZE(dev_compat[direction]);
++
++	for (i = 0; i < size; i++) {
++		ret = of_device_is_compatible(node, link_names[i]);
++		if (ret)
++			return i;
++	}
++	return -ENODEV;
++}
++
++static int xlnx_snd_probe(struct platform_device *pdev)
++{
++	u32 i, max_links = 0, start_count = 0;
++	size_t sz;
++	char *buf;
++	int ret, audio_interface;
++	struct snd_soc_dai_link *dai;
++	struct pl_card_data *prv;
++	struct platform_device *iface_pdev;
++
++	struct snd_soc_card *card;
++	struct device_node **node = pdev->dev.platform_data;
++
++	if (!node)
++		return -ENODEV;
++
++	if (node[XLNX_PLAYBACK] && node[XLNX_CAPTURE]) {
++		max_links = 2;
++		start_count = XLNX_PLAYBACK;
++	} else if (node[XLNX_PLAYBACK]) {
++		max_links = 1;
++		start_count = XLNX_PLAYBACK;
++	} else if (node[XLNX_CAPTURE]) {
++		max_links = 1;
++		start_count = XLNX_CAPTURE;
++	}
++
++	card = devm_kzalloc(&pdev->dev, sizeof(struct snd_soc_card),
++			    GFP_KERNEL);
++	if (!card)
++		return -ENOMEM;
++
++	card->dev = &pdev->dev;
++
++	card->dai_link = devm_kzalloc(card->dev,
++				      sizeof(*dai) * max_links,
++				      GFP_KERNEL);
++	if (!card->dai_link)
++		return -ENOMEM;
++
++	prv = devm_kzalloc(card->dev,
++			   sizeof(struct pl_card_data),
++			   GFP_KERNEL);
++	if (!prv)
++		return -ENOMEM;
++
++	card->num_links = 0;
++	for (i = start_count; i < (start_count + max_links); i++) {
++		struct device_node *pnode = of_parse_phandle(node[i],
++							     "xlnx,snd-pcm", 0);
++		if (!pnode) {
++			dev_err(card->dev, "platform node not found\n");
++			of_node_put(pnode);
++			return -ENODEV;
++		}
++
++		/*
++		 * Check for either playback or capture is enough, as
++		 * same clock is used for both.
++		 */
++		if (i == XLNX_PLAYBACK) {
++			iface_pdev = of_find_device_by_node(pnode);
++			if (!iface_pdev) {
++				of_node_put(pnode);
++				return -ENODEV;
++			}
++
++			prv->mclk = devm_clk_get(&iface_pdev->dev, "aud_mclk");
++			if (IS_ERR(prv->mclk))
++				return PTR_ERR(prv->mclk);
++
++		}
++		of_node_put(pnode);
++
++		if (max_links == 2)
++			dai = &card->dai_link[i];
++		else
++			dai = &card->dai_link[0];
++
++		audio_interface = find_link(node[i], i);
++		switch (audio_interface) {
++		case I2S_AUDIO:
++			*dai = xlnx_snd_dai[I2S_AUDIO][i];
++			dai->platforms->of_node = pnode;
++			dai->cpus->of_node = node[i];
++			card->num_links++;
++			snd_soc_card_set_drvdata(card, prv);
++			dev_dbg(card->dev, "%s registered\n",
++				card->dai_link[i].name);
++			break;
++		case HDMI_AUDIO:
++			*dai = xlnx_snd_dai[HDMI_AUDIO][i];
++			dai->platforms->of_node = pnode;
++			if (i == XLNX_CAPTURE)
++				dai->codecs->of_node = node[i];
++			card->num_links++;
++			/* TODO: support multiple sampling rates */
++			prv->mclk_ratio = 384;
++			snd_soc_card_set_drvdata(card, prv);
++			dev_dbg(card->dev, "%s registered\n",
++				card->dai_link[i].name);
++			break;
++		case SDI_AUDIO:
++			*dai = xlnx_snd_dai[SDI_AUDIO][i];
++			dai->platforms->of_node = pnode;
++			dai->codecs->of_node = node[i];
++			card->num_links++;
++			/* TODO: support multiple sampling rates */
++			prv->mclk_ratio = 384;
++			snd_soc_card_set_drvdata(card, prv);
++			dev_dbg(card->dev, "%s registered\n",
++				card->dai_link[i].name);
++			break;
++		case SPDIF_AUDIO:
++			*dai = xlnx_snd_dai[SPDIF_AUDIO][i];
++			dai->platforms->of_node = pnode;
++			dai->codecs->of_node = node[i];
++			card->num_links++;
++			prv->mclk_ratio = 384;
++			snd_soc_card_set_drvdata(card, prv);
++			dev_dbg(card->dev, "%s registered\n",
++				card->dai_link[i].name);
++			break;
++		case DP_AUDIO:
++			*dai = xlnx_snd_dai[DP_AUDIO][i];
++			dai->platforms->of_node = pnode;
++			if (i == XLNX_CAPTURE)
++				dai->codecs->of_node = node[i];
++			card->num_links++;
++			/* TODO: support multiple sampling rates */
++			prv->mclk_ratio = 512;
++			snd_soc_card_set_drvdata(card, prv);
++			dev_dbg(card->dev, "%s registered\n",
++				card->dai_link[i].name);
++			break;
++		default:
++			dev_err(card->dev, "Invalid audio interface\n");
++			return -ENODEV;
++		}
++	}
++
++	if (card->num_links) {
++		/*
++		 *  Example : i2s card name = xlnx-i2s-snd-card-0
++		 *  length = number of chars in "xlnx-i2s-snd-card"
++		 *	    + 1 ('-'), + 1 (card instance num)
++		 *	    + 1 ('\0')
++		 */
++		sz = strlen(xlnx_snd_card_name[audio_interface]) + 3;
++		buf = devm_kzalloc(card->dev, sz, GFP_KERNEL);
++		if (!buf)
++			return -ENOMEM;
++
++		prv->xlnx_snd_dev_id = ida_simple_get(&xlnx_snd_card_dev, 0,
++						      XLNX_MAX_PL_SND_DEV,
++						      GFP_KERNEL);
++		if (prv->xlnx_snd_dev_id < 0)
++			return prv->xlnx_snd_dev_id;
++
++		snprintf(buf, sz, "%s-%d", xlnx_snd_card_name[audio_interface],
++			 prv->xlnx_snd_dev_id);
++		card->name = buf;
++
++		ret = devm_snd_soc_register_card(card->dev, card);
++		if (ret) {
++			dev_err(card->dev, "%s registration failed\n",
++				card->name);
++			ida_simple_remove(&xlnx_snd_card_dev,
++					  prv->xlnx_snd_dev_id);
++			return ret;
++		}
++
++		dev_set_drvdata(card->dev, prv);
++		dev_info(card->dev, "%s registered\n", card->name);
++	}
++
++	return 0;
++}
++
++static int xlnx_snd_remove(struct platform_device *pdev)
++{
++	struct pl_card_data *pdata = dev_get_drvdata(&pdev->dev);
++
++	ida_simple_remove(&xlnx_snd_card_dev, pdata->xlnx_snd_dev_id);
++	return 0;
++}
++
++static struct platform_driver xlnx_snd_driver = {
++	.driver = {
++		.name = "xlnx_snd_card",
++	},
++	.probe = xlnx_snd_probe,
++	.remove = xlnx_snd_remove,
++};
++
++module_platform_driver(xlnx_snd_driver);
++
++MODULE_DESCRIPTION("Xilinx FPGA sound card driver");
++MODULE_AUTHOR("Maruthi Srinivas Bayyavarapu");
++MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xlnx_sdi_audio.c b/sound/soc/xilinx/xlnx_sdi_audio.c
+new file mode 100644
+index 000000000..a53745838
+--- /dev/null
++++ b/sound/soc/xilinx/xlnx_sdi_audio.c
+@@ -0,0 +1,609 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx SDI embed and extract audio support
++ *
++ * Copyright (c) 2018 Xilinx Pvt., Ltd
++ *
++ */
++
++#include <linux/clk.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of_graph.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
++#include <linux/wait.h>
++#include <drm/drm_modes.h>
++#include <sound/pcm_params.h>
++#include <sound/soc.h>
++
++#define DRIVER_NAME "xlnx-sdi-audio"
++
++#define XSDIAUD_CNTRL_REG_OFFSET		0x00
++#define XSDIAUD_SOFT_RST_REG_OFFSET		0x04
++#define XSDIAUD_VER_REG_OFFSET			0x08
++#define XSDIAUD_INT_EN_REG_OFFSET		0x0C
++#define XSDIAUD_INT_STS_REG_OFFSET		0x10
++#define XSDIAUD_EMB_VID_CNTRL_REG_OFFSET	0X14
++#define XSDIAUD_AUD_CNTRL_REG_OFFSET		0x18
++#define XSDIAUD_CH_VALID_REG_OFFSET		0x20
++#define XSDIAUD_CH_MUTE_REG_OFFSET		0x30
++#define XSDIAUD_ACTIVE_GRP_REG_OFFSET		0X40
++#define XSDIAUD_EXT_CH_STAT0_REG_OFFSET		0X48
++#define XSDIAUD_EXT_SRATE_STS_REG_OFFSET	0X70
++#define XSDIAUD_GUI_PARAM_REG_OFFSET		0XFC
++
++#define XSDIAUD_CNTRL_EN_MASK		BIT(0)
++#define XSDIAUD_SOFT_RST_CONFIG_MASK	BIT(0)
++#define XSDIAUD_SOFT_RST_CORE_MASK	BIT(1)
++#define XSDIAUD_VER_MAJOR_MASK		GENMASK(31, 24)
++#define XSDIAUD_VER_MINOR_MASK		GENMASK(23, 16)
++
++#define XSDIAUD_EXT_GROUP_1_STS_MASK	BIT(0)
++#define XSDIAUD_EXT_AUDSTS_UPDATE_MASK	BIT(8)
++#define XSDIAUD_EMB_VID_CNT_ELE_SHIFT	(16)
++#define XSDIAUD_EMB_VID_CNT_ELE_MASK	BIT(16)
++#define XSDIAUD_EMB_VID_CNT_TSCAN_MASK	BIT(8)
++#define XSDIAUD_EMB_VID_CNT_TSCAN_SHIFT	(8)
++#define XSDIAUD_EMB_VID_CNT_TRATE_SHIFT	(4)
++#define XSDIAUD_EMB_AUD_CNT_SS_MASK	BIT(3)
++#define XSDIAUD_EMB_AUD_CNT_ASYNC_AUDIO	BIT(4)
++
++#define CH_STATUS_UPDATE_TIMEOUT	40
++
++enum IP_MODE {
++	EMBED,
++	EXTRACT,
++};
++
++enum channel_id {
++	CHAN_ID_0 = 1,
++	CHAN_ID_1,
++};
++
++enum sdi_transport_family {
++	SDI_TRANSPORT_FAMILY_1920,
++	SDI_TRANSPORT_FAMILY_1280,
++	SDI_TRANSPORT_FAMILY_2048,
++	SDI_TRANSPORT_FAMILY_NTSC = 8,
++	SDI_TRANSPORT_FAMILY_PAL = 9,
++};
++
++/**
++ * enum sdi_audio_samplerate - audio sampling rate
++ * @XSDIAUD_SAMPRATE0:	48 KHz
++ * @XSDIAUD_SAMPRATE1:	44.1 KHz
++ * @XSDIAUD_SAMPRATE2:	32 KHz
++ */
++enum sdi_audio_samplerate {
++	XSDIAUD_SAMPRATE0,
++	XSDIAUD_SAMPRATE1,
++	XSDIAUD_SAMPRATE2
++};
++
++/**
++ * enum sdi_audio_samplesize - bits per sample
++ * @XSDIAUD_SAMPSIZE0:	20 Bit Audio Sample
++ * @XSDIAUD_SAMPSIZE1:	24 Bit Audio Sample
++ */
++enum sdi_audio_samplesize {
++	XSDIAUD_SAMPSIZE0,
++	XSDIAUD_SAMPSIZE1
++};
++
++struct dev_ctx {
++	enum IP_MODE mode;
++	void __iomem *base;
++	struct device *dev;
++	struct drm_display_mode *video_mode;
++	struct snd_pcm_substream *stream;
++	struct clk *axi_clk;
++	struct clk *axis_clk;
++	struct clk *aud_clk;
++	bool rx_srate_updated;
++	wait_queue_head_t srate_q;
++};
++
++static irqreturn_t xtract_irq_handler(int irq, void *dev_id)
++{
++	u32 irq_sts, irq_en, active_grps;
++	struct dev_ctx *ctx = dev_id;
++
++	irq_sts = ioread32(ctx->base + XSDIAUD_INT_STS_REG_OFFSET);
++	active_grps = ioread32(ctx->base + XSDIAUD_ACTIVE_GRP_REG_OFFSET);
++	if ((irq_sts & XSDIAUD_EXT_AUDSTS_UPDATE_MASK) &&
++	    (active_grps & XSDIAUD_EXT_GROUP_1_STS_MASK)) {
++		writel(XSDIAUD_EXT_AUDSTS_UPDATE_MASK,
++		       ctx->base + XSDIAUD_INT_STS_REG_OFFSET);
++		irq_en = ioread32(ctx->base + XSDIAUD_INT_EN_REG_OFFSET);
++		/* Disable further interrupts. sample rate status got updated*/
++		writel(irq_en & ~XSDIAUD_EXT_AUDSTS_UPDATE_MASK,
++		       ctx->base + XSDIAUD_INT_EN_REG_OFFSET);
++
++		ctx->rx_srate_updated = true;
++		wake_up_interruptible(&ctx->srate_q);
++		return IRQ_HANDLED;
++	}
++
++	return IRQ_NONE;
++}
++
++static void audio_enable(void __iomem *aud_base)
++{
++	u32 val;
++
++	val = ioread32(aud_base + XSDIAUD_CNTRL_REG_OFFSET);
++	val |= XSDIAUD_CNTRL_EN_MASK;
++	writel(val, aud_base + XSDIAUD_CNTRL_REG_OFFSET);
++}
++
++static void audio_disable(void __iomem *aud_base)
++{
++	u32 val;
++
++	val = ioread32(aud_base + XSDIAUD_CNTRL_REG_OFFSET);
++	val &= ~XSDIAUD_CNTRL_EN_MASK;
++	writel(val, aud_base + XSDIAUD_CNTRL_REG_OFFSET);
++}
++
++static void audio_reset_core(void __iomem *aud_base, bool reset)
++{
++	u32 val;
++
++	if (reset) {
++		/* reset the core */
++		val = ioread32(aud_base + XSDIAUD_SOFT_RST_REG_OFFSET);
++		val |= XSDIAUD_SOFT_RST_CORE_MASK;
++		writel(val, aud_base + XSDIAUD_SOFT_RST_REG_OFFSET);
++	} else {
++		/* bring the core out of reset */
++		val = ioread32(aud_base + XSDIAUD_SOFT_RST_REG_OFFSET);
++		val &= ~XSDIAUD_SOFT_RST_CORE_MASK;
++		writel(val, aud_base + XSDIAUD_SOFT_RST_REG_OFFSET);
++	}
++}
++
++static int xlnx_sdi_rx_pcm_startup(struct snd_pcm_substream *substream,
++				   struct snd_soc_dai *dai)
++{
++	int err;
++	u32 val, sample_rate;
++
++	struct dev_ctx *ctx = dev_get_drvdata(dai->dev);
++	void __iomem *base = ctx->base;
++	unsigned long jiffies = msecs_to_jiffies(CH_STATUS_UPDATE_TIMEOUT);
++
++	audio_enable(base);
++	writel(XSDIAUD_EXT_AUDSTS_UPDATE_MASK,
++	       ctx->base + XSDIAUD_INT_EN_REG_OFFSET);
++	err = wait_event_interruptible_timeout(ctx->srate_q,
++					       ctx->rx_srate_updated,
++					       jiffies);
++
++	if (!err) {
++		dev_err(ctx->dev, "Didn't get valid audio property update\n");
++		return -EINVAL;
++	}
++	ctx->rx_srate_updated = false;
++
++	val = ioread32(base + XSDIAUD_EXT_SRATE_STS_REG_OFFSET);
++	/* As both channels contain same sample rate, read either of them */
++	switch (val & CHAN_ID_1) {
++	case 0:
++		sample_rate = 48000;
++		break;
++	case 1:
++		sample_rate = 44100;
++		break;
++	case 2:
++		sample_rate = 32000;
++		break;
++	}
++
++	dev_dbg(ctx->dev,
++		"sdi rx audio enabled : sample rate = %d\n", sample_rate);
++	return 0;
++}
++
++static void xlnx_sdi_rx_pcm_shutdown(struct snd_pcm_substream *substream,
++				     struct snd_soc_dai *dai)
++{
++	struct dev_ctx *ctx = dev_get_drvdata(dai->dev);
++
++	audio_disable(ctx->base);
++
++	dev_info(dai->dev, " sdi rx audio disabled\n");
++}
++
++static int xlnx_sdi_tx_pcm_startup(struct snd_pcm_substream *substream,
++				   struct snd_soc_dai *dai)
++{
++	struct dev_ctx *ctx = dev_get_drvdata(dai->dev);
++
++	audio_enable(ctx->base);
++	ctx->stream = substream;
++
++	dev_info(ctx->dev, " sdi tx audio enabled\n");
++	return 0;
++}
++
++static int xlnx_sdi_tx_hw_params(struct snd_pcm_substream *substream,
++				 struct snd_pcm_hw_params *params,
++				 struct snd_soc_dai *dai)
++{
++	u32 val = 0;
++	u32 num_channels, sample_rate, sig_bits;
++
++	struct dev_ctx *ctx = dev_get_drvdata(dai->dev);
++	void __iomem *base = ctx->base;
++
++	/* video mode properties needed by audio driver are shared to audio
++	 * driver through a pointer in platform data. This is used here in
++	 * audio driver. The solution may be needed to modify/extend to avoid
++	 * probable error scenarios
++	 */
++	if (!ctx->video_mode || !ctx->video_mode->vdisplay ||
++	    !drm_mode_vrefresh(ctx->video_mode)) {
++		dev_err(ctx->dev, "couldn't find video display properties\n");
++		return -EINVAL;
++	}
++
++	/*
++	 * map video properties.
++	 * Note: 1920x1080 and 2048x1080 are the resolutions of sub images for
++	 * 3840x2160 and 4096x2160 resolutions respectively.
++	 */
++	switch (ctx->video_mode->hdisplay) {
++	case 1920:
++	case 3840:
++		val = SDI_TRANSPORT_FAMILY_1920;
++		break;
++	case 1280:
++		val |= SDI_TRANSPORT_FAMILY_1280;
++		break;
++	case 2048:
++	case 4096:
++		val |= SDI_TRANSPORT_FAMILY_2048;
++		break;
++	case 720:
++		if (ctx->video_mode->vdisplay == 486)
++			val |= SDI_TRANSPORT_FAMILY_NTSC;
++		else if (ctx->video_mode->vdisplay == 576)
++			val |= SDI_TRANSPORT_FAMILY_PAL;
++		else
++			return -EINVAL;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	switch (drm_mode_vrefresh(ctx->video_mode)) {
++	case 24:
++		val |= (3 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	case 25:
++		val |= (5 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	case 30:
++		val |= (7 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	case 48:
++		val |= (8 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	case 50:
++		val |= (9 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	case 60:
++		val |= (11 << XSDIAUD_EMB_VID_CNT_TRATE_SHIFT);
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	if (!(ctx->video_mode->flags & DRM_MODE_FLAG_INTERLACE))
++		val |= XSDIAUD_EMB_VID_CNT_TSCAN_MASK;
++
++	val |= XSDIAUD_EMB_VID_CNT_ELE_MASK;
++
++	writel(val, base + XSDIAUD_EMB_VID_CNTRL_REG_OFFSET);
++
++	/* map audio properties */
++	num_channels = params_channels(params);
++	sample_rate = params_rate(params);
++	sig_bits = snd_pcm_format_width(params_format(params));
++
++	dev_info(ctx->dev,
++		 "stream params: channels = %d sample_rate = %d bits = %d\n",
++		 num_channels, sample_rate, sig_bits);
++
++	val = 0;
++	val |= XSDIAUD_EMB_AUD_CNT_ASYNC_AUDIO;
++
++	switch (sample_rate) {
++	case 48000:
++		val |= XSDIAUD_SAMPRATE0;
++		break;
++	case 44100:
++		val |= XSDIAUD_SAMPRATE1;
++		break;
++	case 32000:
++		val |= XSDIAUD_SAMPRATE2;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	if (sig_bits == 24)
++		val |= XSDIAUD_EMB_AUD_CNT_SS_MASK;
++
++	writel(val, base + XSDIAUD_AUD_CNTRL_REG_OFFSET);
++
++	writel(BIT(num_channels) - 1, base + XSDIAUD_CH_VALID_REG_OFFSET);
++
++	return 0;
++}
++
++static void xlnx_sdi_tx_pcm_shutdown(struct snd_pcm_substream *substream,
++				     struct snd_soc_dai *dai)
++{
++	struct dev_ctx *ctx = dev_get_drvdata(dai->dev);
++	void __iomem *base = ctx->base;
++
++	audio_disable(base);
++	ctx->stream = NULL;
++
++	dev_info(ctx->dev, " sdi tx audio disabled\n");
++}
++
++static const struct snd_soc_component_driver xlnx_sdi_component = {
++	.name = "xlnx-sdi-dai-component",
++};
++
++static const struct snd_soc_dai_ops xlnx_sdi_rx_dai_ops = {
++	.startup = xlnx_sdi_rx_pcm_startup,
++	.shutdown = xlnx_sdi_rx_pcm_shutdown,
++};
++
++static struct snd_soc_dai_driver xlnx_sdi_rx_dai = {
++	.name = "xlnx_sdi_rx",
++	.capture = {
++		.stream_name = "Capture",
++		.channels_min = 2,
++		.channels_max = 8,
++		.rates = SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
++			SNDRV_PCM_RATE_48000,
++		.formats = SNDRV_PCM_FMTBIT_S24_LE,
++	},
++	.ops = &xlnx_sdi_rx_dai_ops,
++};
++
++static const struct snd_soc_dai_ops xlnx_sdi_tx_dai_ops = {
++	.startup =	xlnx_sdi_tx_pcm_startup,
++	.hw_params =	xlnx_sdi_tx_hw_params,
++	.shutdown =	xlnx_sdi_tx_pcm_shutdown,
++};
++
++static struct snd_soc_dai_driver xlnx_sdi_tx_dai = {
++	.name = "xlnx_sdi_tx",
++	.playback = {
++		.stream_name = "Playback",
++		.channels_min = 2,
++		.channels_max = 8,
++		.rates = SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 |
++			SNDRV_PCM_RATE_48000,
++		.formats = SNDRV_PCM_FMTBIT_S24_LE,
++	},
++	.ops = &xlnx_sdi_tx_dai_ops,
++};
++
++static int xlnx_sdi_audio_probe(struct platform_device *pdev)
++{
++	u32 val;
++	int ret;
++	struct dev_ctx *ctx;
++	struct resource *res;
++	struct device *video_dev;
++	struct device_node *video_node;
++	struct platform_device *video_pdev;
++	struct snd_soc_dai_driver *snd_dai;
++	struct device *dev = &pdev->dev;
++	struct device_node *node = dev->of_node;
++
++	/* TODO - remove before upstreaming */
++	if (of_device_is_compatible(node, "xlnx,v-uhdsdi-audio-1.0")) {
++		dev_err(&pdev->dev, "driver doesn't support sdi audio v1.0\n");
++		return -ENODEV;
++	}
++
++	ctx = devm_kzalloc(&pdev->dev, sizeof(struct dev_ctx), GFP_KERNEL);
++	if (!ctx)
++		return -ENODEV;
++
++	ctx->axi_clk = devm_clk_get(&pdev->dev, "s_axi_aclk");
++	if (IS_ERR(ctx->axi_clk)) {
++		ret = PTR_ERR(ctx->axi_clk);
++		dev_err(&pdev->dev, "failed to get s_axi_aclk(%d)\n", ret);
++		return ret;
++	}
++
++	ret = clk_prepare_enable(ctx->axi_clk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable s_axi_aclk(%d)\n", ret);
++		return ret;
++	}
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	if (!res) {
++		dev_err(&pdev->dev, "No IO MEM resource found\n");
++		ret = -ENODEV;
++		goto err_axis;
++	}
++
++	ctx->base = devm_ioremap_resource(&pdev->dev, res);
++	if (!ctx->base) {
++		dev_err(&pdev->dev, "ioremap failed\n");
++		ret = -EADDRNOTAVAIL;
++		goto err_axis;
++	}
++
++	ctx->dev = &pdev->dev;
++
++	val = ioread32(ctx->base + XSDIAUD_GUI_PARAM_REG_OFFSET);
++	if (val & BIT(6)) {
++		ctx->mode = EXTRACT;
++
++		ctx->axis_clk = devm_clk_get(&pdev->dev, "m_axis_clk");
++		if (IS_ERR(ctx->axis_clk)) {
++			ret = PTR_ERR(ctx->axis_clk);
++			dev_err(&pdev->dev, "failed to get m_axis_clk(%d)\n",
++				ret);
++			goto err_axis;
++		}
++
++		ctx->aud_clk = devm_clk_get(&pdev->dev, "sdi_extract_clk");
++		if (IS_ERR(ctx->aud_clk)) {
++			ret = PTR_ERR(ctx->aud_clk);
++			dev_err(&pdev->dev, "failed to get sdi_extract_clk(%d)\n",
++				ret);
++			goto err_axis;
++		}
++
++		res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
++		if (!res) {
++			dev_err(&pdev->dev, "No IRQ resource found\n");
++			ret = -ENODEV;
++			goto err_axis;
++		}
++		ret = devm_request_irq(&pdev->dev, res->start,
++				       xtract_irq_handler,
++				       0, "XLNX_SDI_AUDIO_XTRACT", ctx);
++		if (ret) {
++			dev_err(&pdev->dev, "extract irq request failed\n");
++			ret = -ENODEV;
++			goto err_axis;
++		}
++
++		init_waitqueue_head(&ctx->srate_q);
++
++		snd_dai = &xlnx_sdi_rx_dai;
++	} else {
++		ctx->mode = EMBED;
++		ctx->axis_clk = devm_clk_get(&pdev->dev, "s_axis_clk");
++		if (IS_ERR(ctx->axis_clk)) {
++			ret = PTR_ERR(ctx->axis_clk);
++			dev_err(&pdev->dev, "failed to get s_axis_clk(%d)\n",
++				ret);
++			goto err_axis;
++		}
++
++		ctx->aud_clk = devm_clk_get(&pdev->dev, "sdi_embed_clk");
++		if (IS_ERR(ctx->aud_clk)) {
++			ret = PTR_ERR(ctx->aud_clk);
++			dev_err(&pdev->dev, "failed to get aud_clk(%d)\n",
++				ret);
++			goto err_axis;
++		}
++
++		video_node = of_graph_get_remote_node(pdev->dev.of_node, 0, 0);
++		if (!video_node) {
++			dev_err(ctx->dev, "video_node not found\n");
++			of_node_put(video_node);
++			ret = -ENODEV;
++			goto err_axis;
++		}
++
++		video_pdev = of_find_device_by_node(video_node);
++		if (!video_pdev) {
++			of_node_put(video_node);
++			ret = -ENODEV;
++			goto err_axis;
++		}
++
++		video_dev = &video_pdev->dev;
++		ctx->video_mode =
++			(struct drm_display_mode *)video_dev->platform_data;
++		/* invalid 'platform_data' implies video driver is not loaded */
++		if (!ctx->video_mode) {
++			of_node_put(video_node);
++			ret = -EPROBE_DEFER;
++			goto err_axis;
++		}
++
++		snd_dai = &xlnx_sdi_tx_dai;
++		of_node_put(video_node);
++	}
++
++	ret = clk_prepare_enable(ctx->axis_clk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable s_axis_clk(%d)\n", ret);
++		goto err_axis;
++	}
++
++	ret = clk_prepare_enable(ctx->aud_clk);
++	if (ret) {
++		dev_err(&pdev->dev,
++			"failed to enable sdi_extract_clk(%d)\n", ret);
++		goto err_aud_clk;
++	}
++
++	ret = devm_snd_soc_register_component(&pdev->dev, &xlnx_sdi_component,
++					      snd_dai, 1);
++	if (ret) {
++		dev_err(&pdev->dev, "couldn't register codec DAI\n");
++		goto err_clk;
++	}
++
++	dev_set_drvdata(&pdev->dev, ctx);
++
++	audio_reset_core(ctx->base, true);
++	audio_reset_core(ctx->base, false);
++
++	dev_info(&pdev->dev, "xlnx sdi codec dai component registered\n");
++	return 0;
++
++err_clk:
++	clk_disable_unprepare(ctx->aud_clk);
++err_aud_clk:
++	clk_disable_unprepare(ctx->axis_clk);
++err_axis:
++	clk_disable_unprepare(ctx->axi_clk);
++	return ret;
++}
++
++static int xlnx_sdi_audio_remove(struct platform_device *pdev)
++{
++	struct dev_ctx *ctx = dev_get_drvdata(&pdev->dev);
++
++	audio_disable(ctx->base);
++	audio_reset_core(ctx->base, true);
++
++	clk_disable_unprepare(ctx->aud_clk);
++	clk_disable_unprepare(ctx->axis_clk);
++	clk_disable_unprepare(ctx->axi_clk);
++	return 0;
++}
++
++static const struct of_device_id xlnx_sdi_audio_of_match[] = {
++	{ .compatible = "xlnx,v-uhdsdi-audio-1.0"},
++	{ .compatible = "xlnx,v-uhdsdi-audio-2.0"},
++	{ }
++};
++MODULE_DEVICE_TABLE(of, xlnx_sdi_audio_of_match);
++
++static struct platform_driver xlnx_sdi_audio_driver = {
++	.driver = {
++		.name = DRIVER_NAME,
++		.of_match_table = xlnx_sdi_audio_of_match,
++	},
++	.probe = xlnx_sdi_audio_probe,
++	.remove = xlnx_sdi_audio_remove,
++};
++
++module_platform_driver(xlnx_sdi_audio_driver);
++
++MODULE_DESCRIPTION("xilinx sdi audio codec driver");
++MODULE_AUTHOR("Maruthi Srinivas Bayyavarapu");
++MODULE_LICENSE("GPL v2");
+diff --git a/sound/soc/xilinx/xlnx_snd_common.h b/sound/soc/xilinx/xlnx_snd_common.h
+new file mode 100644
+index 000000000..f19d8de0f
+--- /dev/null
++++ b/sound/soc/xilinx/xlnx_snd_common.h
+@@ -0,0 +1,23 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Xilinx ASoC sound card support
++ *
++ * Copyright (C) 2018 Xilinx, Inc.
++ */
++
++#ifndef _XLNX_SND_COMMON_H
++#define _XLNX_SND_COMMON_H
++
++enum {
++	XLNX_PLAYBACK = 0,
++	XLNX_CAPTURE = 1,
++	XLNX_MAX_PATHS = 2
++};
++
++struct pl_card_data {
++	u32 mclk_val;
++	u32 mclk_ratio;
++	int xlnx_snd_dev_id;
++	struct clk *mclk;
++};
++#endif /* _XLNX_SND_COMMON_H */
+diff --git a/sound/soc/xilinx/xlnx_spdif.c b/sound/soc/xilinx/xlnx_spdif.c
+index e2ca087ad..e3ea52895 100644
+--- a/sound/soc/xilinx/xlnx_spdif.c
++++ b/sound/soc/xilinx/xlnx_spdif.c
+@@ -24,32 +24,43 @@
+ #define XLNX_SPDIF_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE)
+ 
+ #define XSPDIF_IRQ_STS_REG		0x20
++#define XSPDIF_IRQ_STS_CH_STS_MASK	BIT(5)
+ #define XSPDIF_IRQ_ENABLE_REG		0x28
+ #define XSPDIF_SOFT_RESET_REG		0x40
++#define XSPDIF_SOFT_RESET_VAL		0xA
+ #define XSPDIF_CONTROL_REG		0x44
++#define XSPDIF_CONTROL_ENABLE_MASK	BIT(0)
++#define XSPDIF_CONTROL_FIFO_FLUSH_MASK	BIT(1)
++#define XSPDIF_CONTROL_CLK_CFG_MASK	GENMASK(5, 2)
++#define XSPDIF_CONTROL_CLK_CFG_SHIFT	2
+ #define XSPDIF_CHAN_0_STS_REG		0x4C
+-#define XSPDIF_GLOBAL_IRQ_ENABLE_REG	0x1C
++#define XSPDIF_GLOBAL_IRQ_REG		0x1C
++#define XSPDIF_GLOBAL_IRQ_ENABLE_MASK	BIT(31)
+ #define XSPDIF_CH_A_USER_DATA_REG_0	0x64
+ 
+-#define XSPDIF_CORE_ENABLE_MASK		BIT(0)
+-#define XSPDIF_FIFO_FLUSH_MASK		BIT(1)
+-#define XSPDIF_CH_STS_MASK		BIT(5)
+-#define XSPDIF_GLOBAL_IRQ_ENABLE	BIT(31)
+-#define XSPDIF_CLOCK_CONFIG_BITS_MASK	GENMASK(5, 2)
+-#define XSPDIF_CLOCK_CONFIG_BITS_SHIFT	2
+-#define XSPDIF_SOFT_RESET_VALUE		0xA
+-
+-#define MAX_CHANNELS			2
+-#define AES_SAMPLE_WIDTH		32
+-#define CH_STATUS_UPDATE_TIMEOUT	40
++#define XSPDIF_MAX_CHANNELS		2
++#define XSPDIF_AES_SAMPLE_WIDTH		32
++#define XSPDIF_CH_STS_UPDATE_TIMEOUT	40
++
++enum {
++	CLK_DIV_BY_4,
++	CLK_DIV_BY_8,
++	CLK_DIV_BY_16,
++	CLK_DIV_BY_24,
++	CLK_DIV_BY_32,
++	CLK_DIV_BY_48,
++	CLK_DIV_BY_64,
++};
+ 
+ struct spdif_dev_data {
+-	u32 mode;
+-	u32 aclk;
+-	bool rx_chsts_updated;
++	wait_queue_head_t chsts_q;
+ 	void __iomem *base;
+ 	struct clk *axi_clk;
+-	wait_queue_head_t chsts_q;
++	struct clk *axis_clk;
++	struct clk *aud_clk;
++	u32 mode;
++	unsigned long aclk;
++	bool rx_chsts_updated;
+ };
+ 
+ static irqreturn_t xlnx_spdifrx_irq_handler(int irq, void *arg)
+@@ -57,13 +68,13 @@ static irqreturn_t xlnx_spdifrx_irq_handler(int irq, void *arg)
+ 	u32 val;
+ 	struct spdif_dev_data *ctx = arg;
+ 
+-	val = readl(ctx->base + XSPDIF_IRQ_STS_REG);
+-	if (val & XSPDIF_CH_STS_MASK) {
+-		writel(val & XSPDIF_CH_STS_MASK,
++	val = ioread32(ctx->base + XSPDIF_IRQ_STS_REG);
++	if (val & XSPDIF_IRQ_STS_CH_STS_MASK) {
++		writel(val & XSPDIF_IRQ_STS_CH_STS_MASK,
+ 		       ctx->base + XSPDIF_IRQ_STS_REG);
+-		val = readl(ctx->base +
+-			    XSPDIF_IRQ_ENABLE_REG);
+-		writel(val & ~XSPDIF_CH_STS_MASK,
++		val = ioread32(ctx->base +
++			       XSPDIF_IRQ_ENABLE_REG);
++		writel(val & ~XSPDIF_IRQ_STS_CH_STS_MASK,
+ 		       ctx->base + XSPDIF_IRQ_ENABLE_REG);
+ 
+ 		ctx->rx_chsts_updated = true;
+@@ -80,15 +91,15 @@ static int xlnx_spdif_startup(struct snd_pcm_substream *substream,
+ 	u32 val;
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(dai->dev);
+ 
+-	val = readl(ctx->base + XSPDIF_CONTROL_REG);
+-	val |= XSPDIF_FIFO_FLUSH_MASK;
++	val = ioread32(ctx->base + XSPDIF_CONTROL_REG);
++	val |= XSPDIF_CONTROL_FIFO_FLUSH_MASK;
+ 	writel(val, ctx->base + XSPDIF_CONTROL_REG);
+ 
+ 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE) {
+-		writel(XSPDIF_CH_STS_MASK,
++		writel(XSPDIF_IRQ_STS_CH_STS_MASK,
+ 		       ctx->base + XSPDIF_IRQ_ENABLE_REG);
+-		writel(XSPDIF_GLOBAL_IRQ_ENABLE,
+-		       ctx->base + XSPDIF_GLOBAL_IRQ_ENABLE_REG);
++		writel(XSPDIF_GLOBAL_IRQ_ENABLE_MASK,
++		       ctx->base + XSPDIF_GLOBAL_IRQ_REG);
+ 	}
+ 
+ 	return 0;
+@@ -99,7 +110,7 @@ static void xlnx_spdif_shutdown(struct snd_pcm_substream *substream,
+ {
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(dai->dev);
+ 
+-	writel(XSPDIF_SOFT_RESET_VALUE, ctx->base + XSPDIF_SOFT_RESET_REG);
++	writel(XSPDIF_SOFT_RESET_VAL, ctx->base + XSPDIF_SOFT_RESET_REG);
+ }
+ 
+ static int xlnx_spdif_hw_params(struct snd_pcm_substream *substream,
+@@ -109,38 +120,40 @@ static int xlnx_spdif_hw_params(struct snd_pcm_substream *substream,
+ 	u32 val, clk_div, clk_cfg;
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(dai->dev);
+ 
+-	clk_div = DIV_ROUND_CLOSEST(ctx->aclk, MAX_CHANNELS * AES_SAMPLE_WIDTH *
++	ctx->aclk = clk_get_rate(ctx->aud_clk);
++	clk_div = DIV_ROUND_CLOSEST(ctx->aclk, XSPDIF_MAX_CHANNELS *
++				    XSPDIF_AES_SAMPLE_WIDTH *
+ 				    params_rate(params));
+ 
+ 	switch (clk_div) {
+ 	case 4:
+-		clk_cfg = 0;
++		clk_cfg = CLK_DIV_BY_4;
+ 		break;
+ 	case 8:
+-		clk_cfg = 1;
++		clk_cfg = CLK_DIV_BY_8;
+ 		break;
+ 	case 16:
+-		clk_cfg = 2;
++		clk_cfg = CLK_DIV_BY_16;
+ 		break;
+ 	case 24:
+-		clk_cfg = 3;
++		clk_cfg = CLK_DIV_BY_24;
+ 		break;
+ 	case 32:
+-		clk_cfg = 4;
++		clk_cfg = CLK_DIV_BY_32;
+ 		break;
+ 	case 48:
+-		clk_cfg = 5;
++		clk_cfg = CLK_DIV_BY_48;
+ 		break;
+ 	case 64:
+-		clk_cfg = 6;
++		clk_cfg = CLK_DIV_BY_64;
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	val = readl(ctx->base + XSPDIF_CONTROL_REG);
+-	val &= ~XSPDIF_CLOCK_CONFIG_BITS_MASK;
+-	val |= clk_cfg << XSPDIF_CLOCK_CONFIG_BITS_SHIFT;
++	val = ioread32(ctx->base + XSPDIF_CONTROL_REG);
++	val &= ~XSPDIF_CONTROL_CLK_CFG_MASK;
++	val |= clk_cfg << XSPDIF_CONTROL_CLK_CFG_SHIFT;
+ 	writel(val, ctx->base + XSPDIF_CONTROL_REG);
+ 
+ 	return 0;
+@@ -150,7 +163,7 @@ static int rx_stream_detect(struct snd_soc_dai *dai)
+ {
+ 	int err;
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(dai->dev);
+-	unsigned long jiffies = msecs_to_jiffies(CH_STATUS_UPDATE_TIMEOUT);
++	unsigned long jiffies = msecs_to_jiffies(XSPDIF_CH_STS_UPDATE_TIMEOUT);
+ 
+ 	/* start capture only if stream is detected within 40ms timeout */
+ 	err = wait_event_interruptible_timeout(ctx->chsts_q,
+@@ -172,12 +185,12 @@ static int xlnx_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
+ 	int ret = 0;
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(dai->dev);
+ 
+-	val = readl(ctx->base + XSPDIF_CONTROL_REG);
++	val = ioread32(ctx->base + XSPDIF_CONTROL_REG);
+ 	switch (cmd) {
+ 	case SNDRV_PCM_TRIGGER_START:
+ 	case SNDRV_PCM_TRIGGER_RESUME:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+-		val |= XSPDIF_CORE_ENABLE_MASK;
++		val |= XSPDIF_CONTROL_ENABLE_MASK;
+ 		writel(val, ctx->base + XSPDIF_CONTROL_REG);
+ 		if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
+ 			ret = rx_stream_detect(dai);
+@@ -185,7 +198,7 @@ static int xlnx_spdif_trigger(struct snd_pcm_substream *substream, int cmd,
+ 	case SNDRV_PCM_TRIGGER_STOP:
+ 	case SNDRV_PCM_TRIGGER_SUSPEND:
+ 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+-		val &= ~XSPDIF_CORE_ENABLE_MASK;
++		val &= ~XSPDIF_CONTROL_ENABLE_MASK;
+ 		writel(val, ctx->base + XSPDIF_CONTROL_REG);
+ 		break;
+ 	default:
+@@ -263,21 +276,34 @@ static int xlnx_spdif_probe(struct platform_device *pdev)
+ 	ctx->base = devm_platform_ioremap_resource(pdev, 0);
+ 	if (IS_ERR(ctx->base)) {
+ 		ret = PTR_ERR(ctx->base);
+-		goto clk_err;
++		goto axi_clk_err;
+ 	}
+ 	ret = of_property_read_u32(node, "xlnx,spdif-mode", &ctx->mode);
+ 	if (ret < 0) {
+ 		dev_err(dev, "cannot get SPDIF mode\n");
+-		goto clk_err;
++		goto axi_clk_err;
+ 	}
+ 	if (ctx->mode) {
++		ctx->axis_clk = devm_clk_get(dev, "s_axis_aclk");
++		if (IS_ERR(ctx->axis_clk)) {
++			ret = PTR_ERR(ctx->axis_clk);
++			dev_err(dev, "failed to get s_axis_aclk(%d)\n", ret);
++			goto axi_clk_err;
++		}
+ 		dai_drv = &xlnx_spdif_tx_dai;
+ 	} else {
++		ctx->axis_clk = devm_clk_get(dev, "m_axis_aclk");
++		if (IS_ERR(ctx->axis_clk)) {
++			ret = PTR_ERR(ctx->axis_clk);
++			dev_err(dev, "failed to get m_axis_aclk(%d)\n", ret);
++			goto axi_clk_err;
++		}
++
+ 		res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
+ 		if (!res) {
+ 			dev_err(dev, "No IRQ resource found\n");
+ 			ret = -ENODEV;
+-			goto clk_err;
++			goto axi_clk_err;
+ 		}
+ 		ret = devm_request_irq(dev, res->start,
+ 				       xlnx_spdifrx_irq_handler,
+@@ -285,17 +311,30 @@ static int xlnx_spdif_probe(struct platform_device *pdev)
+ 		if (ret) {
+ 			dev_err(dev, "spdif rx irq request failed\n");
+ 			ret = -ENODEV;
+-			goto clk_err;
++			goto axi_clk_err;
+ 		}
+ 
+ 		init_waitqueue_head(&ctx->chsts_q);
+ 		dai_drv = &xlnx_spdif_rx_dai;
+ 	}
+ 
+-	ret = of_property_read_u32(node, "xlnx,aud_clk_i", &ctx->aclk);
+-	if (ret < 0) {
+-		dev_err(dev, "cannot get aud_clk_i value\n");
+-		goto clk_err;
++	ctx->aud_clk = devm_clk_get(dev, "aud_clk_i");
++	if (IS_ERR(ctx->aud_clk)) {
++		ret = PTR_ERR(ctx->aud_clk);
++		dev_err(dev, "failed to get aud_aclk(%d)\n", ret);
++		goto axi_clk_err;
++	}
++
++	ret = clk_prepare_enable(ctx->axis_clk);
++	if (ret) {
++		dev_err(dev, "failed to enable axis_aclk(%d)\n", ret);
++		goto axi_clk_err;
++	}
++
++	ret = clk_prepare_enable(ctx->aud_clk);
++	if (ret) {
++		dev_err(dev, "failed to enable aud_aclk(%d)\n", ret);
++		goto axis_clk_err;
+ 	}
+ 
+ 	dev_set_drvdata(dev, ctx);
+@@ -307,11 +346,17 @@ static int xlnx_spdif_probe(struct platform_device *pdev)
+ 		goto clk_err;
+ 	}
+ 
+-	writel(XSPDIF_SOFT_RESET_VALUE, ctx->base + XSPDIF_SOFT_RESET_REG);
++	writel(XSPDIF_SOFT_RESET_VAL, ctx->base + XSPDIF_SOFT_RESET_REG);
+ 	dev_info(dev, "%s DAI registered\n", dai_drv->name);
++	return 0;
+ 
+ clk_err:
++	clk_disable_unprepare(ctx->aud_clk);
++axis_clk_err:
++	clk_disable_unprepare(ctx->axis_clk);
++axi_clk_err:
+ 	clk_disable_unprepare(ctx->axi_clk);
++
+ 	return ret;
+ }
+ 
+@@ -319,6 +364,8 @@ static int xlnx_spdif_remove(struct platform_device *pdev)
+ {
+ 	struct spdif_dev_data *ctx = dev_get_drvdata(&pdev->dev);
+ 
++	clk_disable_unprepare(ctx->aud_clk);
++	clk_disable_unprepare(ctx->axis_clk);
+ 	clk_disable_unprepare(ctx->axi_clk);
+ 	return 0;
+ }

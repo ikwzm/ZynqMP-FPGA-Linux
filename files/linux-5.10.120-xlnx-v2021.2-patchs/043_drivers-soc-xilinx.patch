@@ -1,0 +1,1408 @@
+diff --git a/Documentation/devicetree/bindings/power/reset/xlnx,zynqmp-power.yaml b/Documentation/devicetree/bindings/power/reset/xlnx,zynqmp-power.yaml
+new file mode 100644
+index 000000000..6d1c5deb6
+--- /dev/null
++++ b/Documentation/devicetree/bindings/power/reset/xlnx,zynqmp-power.yaml
+@@ -0,0 +1,69 @@
++# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/power/reset/xlnx,zynqmp-power.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Zynq MPSoC Power Management Driver
++
++maintainers:
++  - Abhyuday Godhasara <abhyuday.godhasara@xilinx.com>
++
++description: |
++  The zynqmp-power node describes the power management configurations.
++  It will control remote suspend/shutdown interfaces.
++
++select: false
++
++properties:
++  compatible:
++    const: xlnx,zynqmp-power
++
++  mboxes:
++    description: Standard property to specify a Mailbox. Each value of
++      the mboxes property should contain a phandle to the mailbox
++      controller device node and an args specifier that will be the
++      phandle to the intended sub-mailbox child node to be used for
++      communication.
++      See Documentation/devicetree/bindings/mailbox/mailbox.txt
++      for more details about the generic mailbox controller and
++      client driver bindings.
++      Also see Documentation/devicetree/bindings/mailbox/ \
++      xlnx,zynqmp-ipi-mailbox.txt for typical controller that
++      is used to communicate with these system controllers.
++
++    items:
++      - description: transmit channel
++      - description: receive channel
++
++  mbox-names:
++    description: Name given to channels seen in the 'mboxes' property.
++                 "rx" - Mailbox corresponding to receive path
++                 "tx" - Mailbox corresponding to transmit path
++
++    items:
++      - const: tx
++      - const: rx
++
++  interrupts:
++    maxItems: 1
++
++required:
++  - compatible
++  - interrupts
++
++additionalProperties: false
++
++examples:
++  - |
++    firmware {
++      zynqmp_firmware: zynqmp-firmware {
++        compatible = "xlnx,zynqmp-firmware";
++        zynqmp_power: zynqmp-power {
++          compatible = "xlnx,zynqmp-power";
++          interrupts = <0 35 4>;
++          mboxes = <&ipi_mailbox_pmu0 0>, <&ipi_mailbox_pmu0 1>;
++          mbox-names = "tx", "rx";
++        };
++      };
++    };
+diff --git a/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu-settings.yaml b/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu-settings.yaml
+new file mode 100644
+index 000000000..378d0ced4
+--- /dev/null
++++ b/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu-settings.yaml
+@@ -0,0 +1,34 @@
++# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/soc/xilinx/xlnx,vcu-settings.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx VCU Settings
++
++maintainers:
++  - Michael Tretter <kernel@pengutronix.de>
++
++description: |
++  The Xilinx VCU Settings provides information about the configuration of the
++  video codec unit.
++
++properties:
++  compatible:
++    items:
++      - const: xlnx,vcu-settings
++      - const: syscon
++
++  reg:
++    maxItems: 1
++
++required:
++  - compatible
++  - reg
++
++examples:
++  - |
++    xlnx_vcu: vcu@a0041000 {
++          compatible = "xlnx,vcu-settings", "syscon";
++          reg = <0x0 0xa0041000 0x0 0x1000>;
++    };
+diff --git a/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu.txt b/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu.txt
+index 6786d6715..2417b13ba 100644
+--- a/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu.txt
++++ b/Documentation/devicetree/bindings/soc/xilinx/xlnx,vcu.txt
+@@ -12,10 +12,7 @@ Required properties:
+ - compatible: shall be one of:
+ 	"xlnx,vcu"
+ 	"xlnx,vcu-logicoreip-1.0"
+-- reg, reg-names: There are two sets of registers need to provide.
+-	1. vcu slcr
+-	2. Logicore
+-	reg-names should contain name for the each register sequence.
++- reg : The base offset and size of the VCU_PL_SLCR register space.
+ - clocks: phandle for aclk and pll_ref clocksource
+ - clock-names: The identification string, "aclk", is always required for
+    the axi clock. "pll_ref" is required for pll.
+@@ -23,9 +20,7 @@ Example:
+ 
+ 	xlnx_vcu: vcu@a0040000 {
+ 		compatible = "xlnx,vcu-logicoreip-1.0";
+-		reg = <0x0 0xa0040000 0x0 0x1000>,
+-			 <0x0 0xa0041000 0x0 0x1000>;
+-		reg-names = "vcu_slcr", "logicore";
++		reg = <0x0 0xa0040000 0x0 0x1000>;
+ 		clocks = <&si570_1>, <&clkc 71>;
+ 		clock-names = "pll_ref", "aclk";
+ 	};
+diff --git a/drivers/soc/xilinx/Kconfig b/drivers/soc/xilinx/Kconfig
+index 646512d72..9818928f5 100644
+--- a/drivers/soc/xilinx/Kconfig
++++ b/drivers/soc/xilinx/Kconfig
+@@ -3,7 +3,9 @@ menu "Xilinx SoC drivers"
+ 
+ config XILINX_VCU
+ 	tristate "Xilinx VCU logicoreIP Init"
+-	depends on HAS_IOMEM
++	select REGMAP_MMIO
++	select MFD_CORE
++	depends on HAS_IOMEM && COMMON_CLK
+ 	help
+ 	  Provides the driver to enable and disable the isolation between the
+ 	  processing system and programmable logic part by using the logicoreIP
+@@ -41,4 +43,14 @@ config ZYNQMP_PM_DOMAINS
+ 	  Say yes to enable device power management through PM domains
+ 	  If in doubt, say N.
+ 
++config XLNX_EVENT_MANAGER
++	bool "Enable Xilinx Event Management Driver"
++	depends on ZYNQMP_FIRMWARE
++	default ZYNQMP_FIRMWARE
++	help
++	  Say yes to enable event management support for Xilinx.
++	  This driver uses firmware driver as an interface for event/power
++	  management request to firmware.
++
++	  If in doubt, say N.
+ endmenu
+diff --git a/drivers/soc/xilinx/Makefile b/drivers/soc/xilinx/Makefile
+index f66bfea5d..0373c1962 100644
+--- a/drivers/soc/xilinx/Makefile
++++ b/drivers/soc/xilinx/Makefile
+@@ -2,3 +2,4 @@
+ obj-$(CONFIG_XILINX_VCU)	+= xlnx_vcu.o
+ obj-$(CONFIG_ZYNQMP_POWER)	+= zynqmp_power.o
+ obj-$(CONFIG_ZYNQMP_PM_DOMAINS) += zynqmp_pm_domains.o
++obj-$(CONFIG_XLNX_EVENT_MANAGER)	+= xlnx_event_manager.o
+diff --git a/drivers/soc/xilinx/xlnx_event_manager.c b/drivers/soc/xilinx/xlnx_event_manager.c
+new file mode 100644
+index 000000000..0154161d5
+--- /dev/null
++++ b/drivers/soc/xilinx/xlnx_event_manager.c
+@@ -0,0 +1,600 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx Event Management Driver
++ *
++ *  Copyright (C) 2021 Xilinx, Inc.
++ *
++ *  Abhyuday Godhasara <abhyuday.godhasara@xilinx.com>
++ */
++
++#include <linux/cpuhotplug.h>
++#include <linux/firmware/xlnx-error-events.h>
++#include <linux/firmware/xlnx-event-manager.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/hashtable.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/irqdomain.h>
++#include <linux/module.h>
++#include <linux/of_irq.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++
++static DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number1);
++
++static int virq_sgi;
++static int event_manager_availability = -EACCES;
++
++/* SGI number used for Event management driver */
++#define XLNX_EVENT_SGI_NUM	(15)
++
++/* Max number of driver can register for same event */
++#define MAX_DRIVER_PER_EVENT	(10U)
++
++/* Max HashMap Order for PM API feature check (1<<7 = 128) */
++#define REGISTERED_DRIVER_MAX_ORDER	(7)
++
++#define MAX_BITS	(32U) /* Number of bits available for error mask */
++
++#define FIRMWARE_VERSION_MASK			(0xFFFFU)
++#define REGISTER_NOTIFIER_FIRMWARE_VERSION	(2U)
++
++static DEFINE_HASHTABLE(reg_driver_map, REGISTERED_DRIVER_MAX_ORDER);
++static int sgi_num = XLNX_EVENT_SGI_NUM;
++
++/**
++ * struct registered_event_data - Registered Event Data.
++ * @key:		key is the combine id(Node-Id | Event-Id) of type u64
++ *			where upper u32 for Node-Id and lower u32 for Event-Id,
++ *			And this used as key to index into hashmap.
++ * @agent_data:		Data passed back to handler function.
++ * @cb_type:		Type of Api callback, like PM_NOTIFY_CB, etc.
++ * @eve_cb:		Function pointer to store the callback function.
++ * @wake:		If this flag set, firmware will wakeup processor if is
++ *			in sleep or power down state.
++ * @hentry:		hlist_node that hooks this entry into hashtable.
++ */
++struct registered_event_data {
++	u64 key;
++	enum pm_api_cb_id cb_type;
++	void *agent_data;
++
++	event_cb_func_t eve_cb;
++	bool wake;
++	struct hlist_node hentry;
++};
++
++static bool xlnx_is_error_event(const u32 node_id)
++{
++	if (node_id == XPM_NODETYPE_EVENT_ERROR_PMC_ERR1 ||
++	    node_id == XPM_NODETYPE_EVENT_ERROR_PMC_ERR2 ||
++	    node_id == XPM_NODETYPE_EVENT_ERROR_PSM_ERR1 ||
++	    node_id == XPM_NODETYPE_EVENT_ERROR_PSM_ERR2 ||
++	    node_id == XPM_NODETYPE_EVENT_ERROR_SW_ERR)
++		return true;
++
++	return false;
++}
++
++static int xlnx_add_cb_for_notify_event(const u32 node_id, const u32 event, const bool wake,
++					event_cb_func_t cb_fun,	void *data)
++{
++	u64 key = 0;
++	struct registered_event_data *eve_data;
++
++	key = ((u64)node_id << 32U) | (u64)event;
++	/* Check for existing entry in hash table for given key id */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, key) {
++		if (eve_data->key == key) {
++			pr_err("Found as already registered\n");
++			return -EINVAL;
++		}
++	}
++
++	/* Add new entry if not present */
++	eve_data = kmalloc(sizeof(*eve_data), GFP_KERNEL);
++	if (!eve_data)
++		return -ENOMEM;
++
++	eve_data->key = key;
++	eve_data->cb_type = PM_NOTIFY_CB;
++	eve_data->eve_cb = cb_fun;
++	eve_data->wake = wake;
++	eve_data->agent_data = data;
++
++	hash_add(reg_driver_map, &eve_data->hentry, key);
++
++	return 0;
++}
++
++static int xlnx_add_cb_for_suspend(event_cb_func_t cb_fun, void *data)
++{
++	struct registered_event_data *eve_data;
++
++	/* Check for existing entry in hash table for given cb_type */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, PM_INIT_SUSPEND_CB) {
++		if (eve_data->cb_type == PM_INIT_SUSPEND_CB) {
++			pr_err("Found as already registered\n");
++			return -EINVAL;
++		}
++	}
++
++	/* Add new entry if not present */
++	eve_data = kmalloc(sizeof(*eve_data), GFP_KERNEL);
++	if (!eve_data)
++		return -ENOMEM;
++
++	eve_data->key = 0;
++	eve_data->cb_type = PM_INIT_SUSPEND_CB;
++	eve_data->eve_cb = cb_fun;
++	eve_data->agent_data = data;
++
++	hash_add(reg_driver_map, &eve_data->hentry, PM_INIT_SUSPEND_CB);
++
++	return 0;
++}
++
++static int xlnx_remove_cb_for_suspend(event_cb_func_t cb_fun)
++{
++	bool is_callback_found = false;
++	struct registered_event_data *eve_data;
++
++	/* Check for existing entry in hash table for given cb_type */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, PM_INIT_SUSPEND_CB) {
++		if (eve_data->cb_type == PM_INIT_SUSPEND_CB &&
++		    eve_data->eve_cb == cb_fun) {
++			is_callback_found = true;
++			/* remove an object from a hashtable */
++			hash_del(&eve_data->hentry);
++			kfree(eve_data);
++		}
++	}
++	if (!is_callback_found) {
++		pr_warn("Didn't find any registered callback for suspend event\n");
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int xlnx_remove_cb_for_notify_event(const u32 node_id, const u32 event,
++					   event_cb_func_t cb_fun)
++{
++	bool is_callback_found = false;
++	struct registered_event_data *eve_data;
++	u64 key = ((u64)node_id << 32U) | (u64)event;
++
++	/* Check for existing entry in hash table for given key id */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, key) {
++		if (eve_data->key == key &&
++		    eve_data->eve_cb == cb_fun) {
++			is_callback_found = true;
++			/* remove an object from a hashtable */
++			hash_del(&eve_data->hentry);
++			kfree(eve_data);
++		}
++	}
++	if (!is_callback_found) {
++		pr_warn("Didn't find any registered callback for 0x%x 0x%x\n",
++			node_id, event);
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++/**
++ * xlnx_register_event() - Register for the event.
++ * @cb_type:	Type of callback from pm_api_cb_id,
++ *			PM_NOTIFY_CB - for Error Events,
++ *			PM_INIT_SUSPEND_CB - for suspend callback.
++ * @node_id:	Node-Id related to event.
++ * @event:	Event Mask for the Error Event.
++ * @wake:	Flag specifying whether the subsystem should be woken upon
++ *		event notification.
++ * @cb_fun:	Function pointer to store the callback function.
++ * @data:	Pointer for the driver instance.
++ *
++ * Return:	Returns 0 on successful registration else error code.
++ */
++int xlnx_register_event(const enum pm_api_cb_id cb_type, const u32 node_id, const u32 event,
++			const bool wake, event_cb_func_t cb_fun, void *data)
++{
++	int ret = 0;
++	u32 eve;
++	int pos;
++
++	if (event_manager_availability)
++		return event_manager_availability;
++
++	if (cb_type != PM_NOTIFY_CB && cb_type != PM_INIT_SUSPEND_CB) {
++		pr_err("%s() Unsupported Callback 0x%x\n", __func__, cb_type);
++		return -EINVAL;
++	}
++
++	if (!cb_fun)
++		return -EFAULT;
++
++	if (cb_type == PM_INIT_SUSPEND_CB) {
++		ret = xlnx_add_cb_for_suspend(cb_fun, data);
++	} else {
++		if (!xlnx_is_error_event(node_id)) {
++			/* Add entry for Node-Id/Event in hash table */
++			ret = xlnx_add_cb_for_notify_event(node_id, event, wake, cb_fun, data);
++		} else {
++			/* Add into Hash table */
++			for (pos = 0; pos < MAX_BITS; pos++) {
++				eve = event & (1 << pos);
++				if (!eve)
++					continue;
++
++				/* Add entry for Node-Id/Eve in hash table */
++				ret = xlnx_add_cb_for_notify_event(node_id, eve, wake, cb_fun,
++								   data);
++				/* Break the loop if got error */
++				if (ret)
++					break;
++			}
++			if (ret) {
++				/* Skip the Event for which got the error */
++				pos--;
++				/* Remove registered(during this call) event from hash table */
++				for ( ; pos >= 0; pos--) {
++					eve = event & (1 << pos);
++					if (!eve)
++						continue;
++					xlnx_remove_cb_for_notify_event(node_id, eve, cb_fun);
++				}
++			}
++		}
++
++		if (ret) {
++			pr_err("%s() failed for 0x%x and 0x%x: %d\r\n", __func__, node_id,
++			       event, ret);
++			return ret;
++		}
++
++		/* Register for Node-Id/Event combination in firmware */
++		ret = zynqmp_pm_register_notifier(node_id, event, wake, true);
++		if (ret) {
++			pr_err("%s() failed for 0x%x and 0x%x: %d\r\n", __func__, node_id,
++			       event, ret);
++			/* Remove already registered event from hash table */
++			if (xlnx_is_error_event(node_id)) {
++				for (pos = 0; pos < MAX_BITS; pos++) {
++					eve = event & (1 << pos);
++					if (!eve)
++						continue;
++					xlnx_remove_cb_for_notify_event(node_id, eve, cb_fun);
++				}
++			} else {
++				xlnx_remove_cb_for_notify_event(node_id, event, cb_fun);
++			}
++			return ret;
++		}
++	}
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(xlnx_register_event);
++
++/**
++ * xlnx_unregister_event() - Unregister for the event.
++ * @cb_type:	Type of callback from pm_api_cb_id,
++ *			PM_NOTIFY_CB - for Error Events,
++ *			PM_INIT_SUSPEND_CB - for suspend callback.
++ * @node_id:	Node-Id related to event.
++ * @event:	Event Mask for the Error Event.
++ * @cb_fun:	Function pointer of callback function.
++ *
++ * Return:	Returns 0 on successful unregistration else error code.
++ */
++int xlnx_unregister_event(const enum pm_api_cb_id cb_type, const u32 node_id, const u32 event,
++			  event_cb_func_t cb_fun)
++{
++	int ret;
++	u32 eve, pos;
++
++	if (event_manager_availability)
++		return event_manager_availability;
++
++	if (cb_type != PM_NOTIFY_CB && cb_type != PM_INIT_SUSPEND_CB) {
++		pr_err("%s() Unsupported Callback 0x%x\n", __func__, cb_type);
++		return -EINVAL;
++	}
++
++	if (!cb_fun)
++		return -EFAULT;
++
++	if (cb_type == PM_INIT_SUSPEND_CB) {
++		ret = xlnx_remove_cb_for_suspend(cb_fun);
++	} else {
++		/* Remove Node-Id/Event from hash table */
++		if (!xlnx_is_error_event(node_id)) {
++			xlnx_remove_cb_for_notify_event(node_id, event, cb_fun);
++		} else {
++			for (pos = 0; pos < MAX_BITS; pos++) {
++				eve = event & (1 << pos);
++				if (!eve)
++					continue;
++
++				xlnx_remove_cb_for_notify_event(node_id, eve, cb_fun);
++			}
++		}
++
++		/* Un-register for Node-Id/Event combination */
++		ret = zynqmp_pm_register_notifier(node_id, event, false, false);
++		if (ret) {
++			pr_err("%s() failed for 0x%x and 0x%x: %d\n",
++			       __func__, node_id, event, ret);
++			return ret;
++		}
++	}
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(xlnx_unregister_event);
++
++static void xlnx_call_suspend_cb_handler(const u32 *payload)
++{
++	bool is_callback_found = false;
++	struct registered_event_data *eve_data;
++	u32 cb_type = payload[0];
++
++	/* Check for existing entry in hash table for given cb_type */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, cb_type) {
++		if (eve_data->cb_type == cb_type) {
++			eve_data->eve_cb(&payload[0], eve_data->agent_data);
++			is_callback_found = true;
++		}
++	}
++	if (!is_callback_found)
++		pr_warn("Didn't find any registered callback for suspend event\n");
++}
++
++static void xlnx_call_notify_cb_handler(const u32 *payload)
++{
++	bool is_callback_found = false;
++	struct registered_event_data *eve_data;
++	u64 key = ((u64)payload[1] << 32U) | (u64)payload[2];
++	int ret;
++
++	/* Check for existing entry in hash table for given key id */
++	hash_for_each_possible(reg_driver_map, eve_data, hentry, key) {
++		if (eve_data->key == key) {
++			eve_data->eve_cb(&payload[0], eve_data->agent_data);
++			is_callback_found = true;
++
++			/* re regisfer with firmware to get future events */
++			ret = zynqmp_pm_register_notifier(payload[1], payload[2],
++							  eve_data->wake, true);
++			if (ret) {
++				pr_err("%s() failed for 0x%x and 0x%x: %d\r\n", __func__,
++				       payload[1], payload[2], ret);
++				/* Remove already registered event from hash table */
++				xlnx_remove_cb_for_notify_event(payload[1], payload[2],
++								eve_data->eve_cb);
++			}
++		}
++	}
++	if (!is_callback_found)
++		pr_warn("Didn't find any registered callback for 0x%x 0x%x\n",
++			payload[1], payload[2]);
++}
++
++static void xlnx_get_event_callback_data(u32 *buf)
++{
++	zynqmp_pm_invoke_fn(GET_CALLBACK_DATA, 0, 0, 0, 0, buf);
++}
++
++static irqreturn_t xlnx_event_handler(int irq, void *dev_id)
++{
++	u32 cb_type, node_id, event, pos;
++	u32 payload[CB_MAX_PAYLOAD_SIZE] = {0};
++	u32 event_data[CB_MAX_PAYLOAD_SIZE] = {0};
++
++	/* Get event data */
++	xlnx_get_event_callback_data(payload);
++
++	/* First element is callback type, others are callback arguments */
++	cb_type = payload[0];
++
++	if (cb_type == PM_NOTIFY_CB) {
++		node_id = payload[1];
++		event = payload[2];
++		if (!xlnx_is_error_event(node_id)) {
++			xlnx_call_notify_cb_handler(payload);
++		} else {
++			/*
++			 * Each call back function expecting payload as an input arguments.
++			 * We can get multiple error events as in one call back through error
++			 * mask. So payload[2] may can contain multiple error events.
++			 * In reg_driver_map database we store data in the combination of single
++			 * node_id-error combination.
++			 * So coping the payload message into event_data and update the
++			 * event_data[2] with Error Mask for single error event and use
++			 * event_data as input argument for registered call back function.
++			 *
++			 */
++			memcpy(event_data, payload, (4 * CB_MAX_PAYLOAD_SIZE));
++			/* Support Multiple Error Event */
++			for (pos = 0; pos < MAX_BITS; pos++) {
++				if ((0 == (event & (1 << pos))))
++					continue;
++				event_data[2] = (event & (1 << pos));
++				xlnx_call_notify_cb_handler(event_data);
++			}
++		}
++	} else if (cb_type == PM_INIT_SUSPEND_CB) {
++		xlnx_call_suspend_cb_handler(payload);
++	} else {
++		pr_err("%s() Unsupported Callback %d\n", __func__, cb_type);
++	}
++
++	return IRQ_HANDLED;
++}
++
++static int xlnx_event_cpuhp_start(unsigned int cpu)
++{
++	enable_percpu_irq(virq_sgi, IRQ_TYPE_NONE);
++
++	return 0;
++}
++
++static int xlnx_event_cpuhp_down(unsigned int cpu)
++{
++	disable_percpu_irq(virq_sgi);
++
++	return 0;
++}
++
++static void xlnx_disable_percpu_irq(void *data)
++{
++	disable_percpu_irq(virq_sgi);
++}
++
++static int xlnx_event_init_sgi(struct platform_device *pdev)
++{
++	int ret = 0;
++	int cpu = smp_processor_id();
++	/*
++	 * IRQ related structures are used for the following:
++	 * for each SGI interrupt ensure its mapped by GIC IRQ domain
++	 * and that each corresponding linux IRQ for the HW IRQ has
++	 * a handler for when receiving an interrupt from the remote
++	 * processor.
++	 */
++	struct irq_domain *domain;
++	struct irq_fwspec sgi_fwspec;
++	struct device_node *interrupt_parent = NULL;
++	struct device *parent = pdev->dev.parent;
++
++	/* Find GIC controller to map SGIs. */
++	interrupt_parent = of_irq_find_parent(parent->of_node);
++	if (!interrupt_parent) {
++		dev_err(&pdev->dev, "Failed to find property for Interrupt parent\n");
++		return -EINVAL;
++	}
++
++	/* Each SGI needs to be associated with GIC's IRQ domain. */
++	domain = irq_find_host(interrupt_parent);
++	of_node_put(interrupt_parent);
++
++	/* Each mapping needs GIC domain when finding IRQ mapping. */
++	sgi_fwspec.fwnode = domain->fwnode;
++
++	/*
++	 * When irq domain looks at mapping each arg is as follows:
++	 * 3 args for: interrupt type (SGI), interrupt # (set later), type
++	 */
++	sgi_fwspec.param_count = 1;
++
++	/* Set SGI's hwirq */
++	sgi_fwspec.param[0] = sgi_num;
++	virq_sgi = irq_create_fwspec_mapping(&sgi_fwspec);
++
++	per_cpu(cpu_number1, cpu) = cpu;
++	ret = request_percpu_irq(virq_sgi, xlnx_event_handler, "xlnx_event_mgmt",
++				 &cpu_number1);
++	WARN_ON(ret);
++	if (ret) {
++		irq_dispose_mapping(virq_sgi);
++		return ret;
++	}
++
++	irq_to_desc(virq_sgi);
++	irq_set_status_flags(virq_sgi, IRQ_PER_CPU);
++
++	return ret;
++}
++
++static void xlnx_event_cleanup_sgi(struct platform_device *pdev)
++{
++	int cpu = smp_processor_id();
++
++	per_cpu(cpu_number1, cpu) = cpu;
++
++	cpuhp_remove_state(CPUHP_AP_ONLINE_DYN);
++
++	on_each_cpu(xlnx_disable_percpu_irq, NULL, 1);
++
++	irq_clear_status_flags(virq_sgi, IRQ_PER_CPU);
++	free_percpu_irq(virq_sgi, &cpu_number1);
++	irq_dispose_mapping(virq_sgi);
++}
++
++static int xlnx_event_manager_probe(struct platform_device *pdev)
++{
++	int ret;
++
++	ret = zynqmp_pm_feature(PM_REGISTER_NOTIFIER);
++	if (ret < 0) {
++		dev_err(&pdev->dev, "Feature check failed with %d\n", ret);
++		return ret;
++	}
++
++	if ((ret & FIRMWARE_VERSION_MASK) <
++	    REGISTER_NOTIFIER_FIRMWARE_VERSION) {
++		dev_err(&pdev->dev, "Register notifier firmware version error. Expected: v%d - Found: v%d\n",
++			REGISTER_NOTIFIER_FIRMWARE_VERSION,
++			ret & FIRMWARE_VERSION_MASK);
++		return -EOPNOTSUPP;
++	}
++
++	/* Initialize the SGI */
++	ret = xlnx_event_init_sgi(pdev);
++	if (ret) {
++		dev_err(&pdev->dev, "SGI Init has been failed with %d\n", ret);
++		return ret;
++	}
++
++	/* Setup function for the CPU hot-plug cases */
++	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "soc/event:starting",
++			  xlnx_event_cpuhp_start, xlnx_event_cpuhp_down);
++
++	ret = zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_REGISTER_SGI, sgi_num,
++				  0, NULL);
++	if (ret) {
++		dev_err(&pdev->dev, "SGI Registration over ATF failed with %d\n", ret);
++		xlnx_event_cleanup_sgi(pdev);
++		return ret;
++	}
++
++	event_manager_availability = 0;
++
++	dev_info(&pdev->dev, "Xilinx Event Management driver probed\n");
++
++	return ret;
++}
++
++static int xlnx_event_manager_remove(struct platform_device *pdev)
++{
++	int i;
++	struct registered_event_data *eve_data;
++	struct hlist_node *tmp;
++	int ret;
++
++	hash_for_each_safe(reg_driver_map, i, tmp, eve_data, hentry) {
++		hash_del(&eve_data->hentry);
++		kfree(eve_data);
++	}
++
++	ret = zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_REGISTER_SGI, 0, 1, NULL);
++	if (ret)
++		dev_err(&pdev->dev, "SGI unregistration over ATF failed with %d\n", ret);
++
++	xlnx_event_cleanup_sgi(pdev);
++
++	event_manager_availability = -EACCES;
++
++	return ret;
++}
++
++static struct platform_driver xlnx_event_manager_driver = {
++	.probe = xlnx_event_manager_probe,
++	.remove = xlnx_event_manager_remove,
++	.driver = {
++		.name = "xlnx_event_manager",
++	},
++};
++module_platform_driver(xlnx_event_manager_driver);
+diff --git a/drivers/soc/xilinx/xlnx_vcu.c b/drivers/soc/xilinx/xlnx_vcu.c
+index a3aa40996..5e3eb559a 100644
+--- a/drivers/soc/xilinx/xlnx_vcu.c
++++ b/drivers/soc/xilinx/xlnx_vcu.c
+@@ -9,40 +9,14 @@
+ #include <linux/clk.h>
+ #include <linux/device.h>
+ #include <linux/errno.h>
++#include <linux/gpio/consumer.h>
+ #include <linux/io.h>
++#include <linux/mfd/syscon.h>
++#include <linux/mfd/syscon/xlnx-vcu.h>
+ #include <linux/module.h>
+ #include <linux/of_platform.h>
+ #include <linux/platform_device.h>
+-
+-/* Address map for different registers implemented in the VCU LogiCORE IP. */
+-#define VCU_ECODER_ENABLE		0x00
+-#define VCU_DECODER_ENABLE		0x04
+-#define VCU_MEMORY_DEPTH		0x08
+-#define VCU_ENC_COLOR_DEPTH		0x0c
+-#define VCU_ENC_VERTICAL_RANGE		0x10
+-#define VCU_ENC_FRAME_SIZE_X		0x14
+-#define VCU_ENC_FRAME_SIZE_Y		0x18
+-#define VCU_ENC_COLOR_FORMAT		0x1c
+-#define VCU_ENC_FPS			0x20
+-#define VCU_MCU_CLK			0x24
+-#define VCU_CORE_CLK			0x28
+-#define VCU_PLL_BYPASS			0x2c
+-#define VCU_ENC_CLK			0x30
+-#define VCU_PLL_CLK			0x34
+-#define VCU_ENC_VIDEO_STANDARD		0x38
+-#define VCU_STATUS			0x3c
+-#define VCU_AXI_ENC_CLK			0x40
+-#define VCU_AXI_DEC_CLK			0x44
+-#define VCU_AXI_MCU_CLK			0x48
+-#define VCU_DEC_VIDEO_STANDARD		0x4c
+-#define VCU_DEC_FRAME_SIZE_X		0x50
+-#define VCU_DEC_FRAME_SIZE_Y		0x54
+-#define VCU_DEC_FPS			0x58
+-#define VCU_BUFFER_B_FRAME		0x5c
+-#define VCU_WPP_EN			0x60
+-#define VCU_PLL_CLK_DEC			0x64
+-#define VCU_GASKET_INIT			0x74
+-#define VCU_GASKET_VALUE		0x03
++#include <linux/regmap.h>
+ 
+ /* vcu slcr registers, bitmask and shift */
+ #define VCU_PLL_CTRL			0x24
+@@ -93,22 +67,13 @@
+ #define FRAC				100
+ #define LIMIT				(10 * MHZ)
+ 
+-/**
+- * struct xvcu_device - Xilinx VCU init device structure
+- * @dev: Platform device
+- * @pll_ref: pll ref clock source
+- * @aclk: axi clock source
+- * @logicore_reg_ba: logicore reg base address
+- * @vcu_slcr_ba: vcu_slcr Register base address
+- * @coreclk: core clock frequency
+- */
+-struct xvcu_device {
+-	struct device *dev;
+-	struct clk *pll_ref;
+-	struct clk *aclk;
+-	void __iomem *logicore_reg_ba;
+-	void __iomem *vcu_slcr_ba;
+-	u32 coreclk;
++static struct regmap_config vcu_settings_regmap_config = {
++	.name = "regmap",
++	.reg_bits = 32,
++	.val_bits = 32,
++	.reg_stride = 4,
++	.max_register = 0xfff,
++	.cache_type = REGCACHE_NONE,
+ };
+ 
+ /**
+@@ -276,6 +241,78 @@ static void xvcu_write_field_reg(void __iomem *iomem, int offset,
+ 	xvcu_write(iomem, offset, val);
+ }
+ 
++/**
++ * xvcu_get_color_depth - read the color depth register
++ * @xvcu:	Pointer to the xvcu_device structure
++ *
++ * Return:	Returns 32bit value
++ *
++ */
++u32 xvcu_get_color_depth(struct xvcu_device *xvcu)
++{
++	u32 value;
++
++	if (!regmap_read(xvcu->logicore_reg_ba, VCU_ENC_COLOR_DEPTH, &value))
++		return value;
++	else
++		return 0;
++}
++EXPORT_SYMBOL_GPL(xvcu_get_color_depth);
++
++/**
++ * xvcu_get_memory_depth - read the memory depth register
++ * @xvcu:	Pointer to the xvcu_device structure
++ *
++ * Return:	Returns 32bit value
++ *
++ */
++u32 xvcu_get_memory_depth(struct xvcu_device *xvcu)
++{
++	u32 value;
++
++	if (!regmap_read(xvcu->logicore_reg_ba, VCU_MEMORY_DEPTH, &value))
++		return value;
++	else
++		return 0;
++}
++EXPORT_SYMBOL_GPL(xvcu_get_memory_depth);
++
++/**
++ * xvcu_get_clock_frequency - provide the core clock frequency
++ * @xvcu:	Pointer to the xvcu_device structure
++ *
++ * Return:	Returns 32bit value
++ *
++ */
++u32 xvcu_get_clock_frequency(struct xvcu_device *xvcu)
++{
++	u32 value;
++
++	if (!regmap_read(xvcu->logicore_reg_ba, VCU_CORE_CLK, &value))
++		return value * MHZ;
++	else
++		return 0;
++}
++EXPORT_SYMBOL_GPL(xvcu_get_clock_frequency);
++
++/**
++ * xvcu_get_num_cores - read the number of core register
++ * @xvcu:	Pointer to the xvcu_device structure
++ *
++ * Return:	Returns 32bit value
++ *
++ */
++u32 xvcu_get_num_cores(struct xvcu_device *xvcu)
++{
++	u32 value;
++
++	if (!regmap_read(xvcu->logicore_reg_ba, VCU_NUM_CORE, &value))
++		return value;
++	else
++		return 0;
++}
++EXPORT_SYMBOL_GPL(xvcu_get_num_cores);
++
+ /**
+  * xvcu_set_vcu_pll_info - Set the VCU PLL info
+  * @xvcu:	Pointer to the xvcu_device structure
+@@ -297,13 +334,16 @@ static int xvcu_set_vcu_pll_info(struct xvcu_device *xvcu)
+ 	u32 divisor_mcu, divisor_core, fvco;
+ 	u32 clkoutdiv, vcu_pll_ctrl, pll_clk;
+ 	u32 cfg_val, mod, ctrl;
++	u32 fbdiv_max, fbdiv_min;
+ 	int ret, i;
+ 	const struct xvcu_pll_cfg *found = NULL;
+ 
+-	inte = xvcu_read(xvcu->logicore_reg_ba, VCU_PLL_CLK);
+-	deci = xvcu_read(xvcu->logicore_reg_ba, VCU_PLL_CLK_DEC);
+-	coreclk = xvcu_read(xvcu->logicore_reg_ba, VCU_CORE_CLK) * MHZ;
+-	mcuclk = xvcu_read(xvcu->logicore_reg_ba, VCU_MCU_CLK) * MHZ;
++	regmap_read(xvcu->logicore_reg_ba, VCU_PLL_CLK, &inte);
++	regmap_read(xvcu->logicore_reg_ba, VCU_PLL_CLK_DEC, &deci);
++	regmap_read(xvcu->logicore_reg_ba, VCU_CORE_CLK, &coreclk);
++	coreclk *= MHZ;
++	regmap_read(xvcu->logicore_reg_ba, VCU_MCU_CLK, &mcuclk);
++	mcuclk *= MHZ;
+ 	if (!mcuclk || !coreclk) {
+ 		dev_err(xvcu->dev, "Invalid mcu and core clock data\n");
+ 		return -EINVAL;
+@@ -327,6 +367,15 @@ static int xvcu_set_vcu_pll_info(struct xvcu_device *xvcu)
+ 
+ 	refclk = clk_get_rate(xvcu->pll_ref);
+ 
++	/* Calculate max and min possible FBDIV value */
++	fbdiv_max = FVCO_MAX / refclk;
++	if (fbdiv_max >= ARRAY_SIZE(xvcu_pll_cfg))
++		fbdiv_max = ARRAY_SIZE(xvcu_pll_cfg) - 1;
++
++	fbdiv_min = DIV_ROUND_UP(FVCO_MIN, refclk);
++	dev_dbg(xvcu->dev, "Maximum possible fbdiv value is %u\n", fbdiv_max);
++	dev_dbg(xvcu->dev, "Minimum possible fbdiv value is %u\n", fbdiv_min);
++
+ 	/*
+ 	 * The divide-by-2 should be always enabled (==1)
+ 	 * to meet the timing in the design.
+@@ -340,32 +389,30 @@ static int xvcu_set_vcu_pll_info(struct xvcu_device *xvcu)
+ 		return -EINVAL;
+ 	}
+ 
+-	for (i = ARRAY_SIZE(xvcu_pll_cfg) - 1; i >= 0; i--) {
++	for (i = fbdiv_max; i >= fbdiv_min; i--) {
+ 		const struct xvcu_pll_cfg *cfg = &xvcu_pll_cfg[i];
+ 
+ 		fvco = cfg->fbdiv * refclk;
+-		if (fvco >= FVCO_MIN && fvco <= FVCO_MAX) {
+-			pll_clk = fvco / VCU_PLL_DIV2;
+-			if (fvco % VCU_PLL_DIV2 != 0)
+-				pll_clk++;
+-			mod = pll_clk % coreclk;
+-			if (mod < LIMIT) {
+-				divisor_core = pll_clk / coreclk;
+-			} else if (coreclk - mod < LIMIT) {
+-				divisor_core = pll_clk / coreclk;
+-				divisor_core++;
+-			} else {
+-				continue;
+-			}
+-			if (divisor_core >= DIVISOR_MIN &&
+-			    divisor_core <= DIVISOR_MAX) {
+-				found = cfg;
+-				divisor_mcu = pll_clk / mcuclk;
+-				mod = pll_clk % mcuclk;
+-				if (mcuclk - mod < LIMIT)
+-					divisor_mcu++;
+-				break;
+-			}
++		pll_clk = fvco / VCU_PLL_DIV2;
++		if (fvco % VCU_PLL_DIV2 != 0)
++			pll_clk++;
++		mod = pll_clk % coreclk;
++		if (mod < LIMIT) {
++			divisor_core = pll_clk / coreclk;
++		} else if (coreclk - mod < LIMIT) {
++			divisor_core = pll_clk / coreclk;
++			divisor_core++;
++		} else {
++			continue;
++		}
++		if (divisor_core >= DIVISOR_MIN &&
++		    divisor_core <= DIVISOR_MAX) {
++			found = cfg;
++			divisor_mcu = pll_clk / mcuclk;
++			mod = pll_clk % mcuclk;
++			if (mod != 0)
++				divisor_mcu++;
++			break;
+ 		}
+ 	}
+ 
+@@ -498,6 +545,7 @@ static int xvcu_probe(struct platform_device *pdev)
+ {
+ 	struct resource *res;
+ 	struct xvcu_device *xvcu;
++	void __iomem *regs;
+ 	int ret;
+ 
+ 	xvcu = devm_kzalloc(&pdev->dev, sizeof(*xvcu), GFP_KERNEL);
+@@ -518,17 +566,32 @@ static int xvcu_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 	}
+ 
+-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "logicore");
+-	if (!res) {
+-		dev_err(&pdev->dev, "get logicore memory resource failed.\n");
+-		return -ENODEV;
+-	}
++	xvcu->logicore_reg_ba =
++		syscon_regmap_lookup_by_compatible("xlnx,vcu-settings");
++	if (IS_ERR(xvcu->logicore_reg_ba)) {
++		dev_info(&pdev->dev,
++			 "could not find xlnx,vcu-settings: trying direct register access\n");
++
++		res = platform_get_resource_byname(pdev,
++						   IORESOURCE_MEM, "logicore");
++		if (!res) {
++			dev_err(&pdev->dev, "get logicore memory resource failed.\n");
++			return -ENODEV;
++		}
+ 
+-	xvcu->logicore_reg_ba = devm_ioremap(&pdev->dev, res->start,
+-						     resource_size(res));
+-	if (!xvcu->logicore_reg_ba) {
+-		dev_err(&pdev->dev, "logicore register mapping failed.\n");
+-		return -ENOMEM;
++		regs = devm_ioremap(&pdev->dev, res->start, resource_size(res));
++		if (!regs) {
++			dev_err(&pdev->dev, "logicore register mapping failed.\n");
++			return -ENOMEM;
++		}
++
++		xvcu->logicore_reg_ba =
++			devm_regmap_init_mmio(&pdev->dev, regs,
++					      &vcu_settings_regmap_config);
++		if (IS_ERR(xvcu->logicore_reg_ba)) {
++			dev_err(&pdev->dev, "failed to init regmap\n");
++			return PTR_ERR(xvcu->logicore_reg_ba);
++		}
+ 	}
+ 
+ 	xvcu->aclk = devm_clk_get(&pdev->dev, "aclk");
+@@ -560,7 +623,25 @@ static int xvcu_probe(struct platform_device *pdev)
+ 	 * Bit 0 : Gasket isolation
+ 	 * Bit 1 : put VCU out of reset
+ 	 */
+-	xvcu_write(xvcu->logicore_reg_ba, VCU_GASKET_INIT, VCU_GASKET_VALUE);
++	xvcu->reset_gpio = devm_gpiod_get_optional(&pdev->dev, "reset",
++						   GPIOD_OUT_LOW);
++	if (IS_ERR(xvcu->reset_gpio)) {
++		ret = PTR_ERR(xvcu->reset_gpio);
++		dev_err(&pdev->dev, "failed to get reset gpio for vcu.\n");
++		return ret;
++	}
++
++	if (xvcu->reset_gpio) {
++		gpiod_set_value(xvcu->reset_gpio, 0);
++		/* min 2 clock cycle of vcu pll_ref, slowest freq is 33.33KHz */
++		usleep_range(60, 120);
++		gpiod_set_value(xvcu->reset_gpio, 1);
++		usleep_range(60, 120);
++	} else {
++		dev_warn(&pdev->dev, "No reset gpio info from dts for vcu. This may lead to incorrect functionality if VCU isolation is removed post initialization.\n");
++	}
++
++	regmap_write(xvcu->logicore_reg_ba, VCU_GASKET_INIT, VCU_GASKET_VALUE);
+ 
+ 	/* Do the PLL Settings based on the ref clk,core and mcu clk freq */
+ 	ret = xvcu_set_pll(xvcu);
+@@ -571,7 +652,11 @@ static int xvcu_probe(struct platform_device *pdev)
+ 
+ 	dev_set_drvdata(&pdev->dev, xvcu);
+ 
+-	dev_info(&pdev->dev, "%s: Probed successfully\n", __func__);
++	ret = devm_of_platform_populate(&pdev->dev);
++	if (ret) {
++		dev_err(&pdev->dev, "Failed to register allegro codecs\n");
++		return ret;
++	}
+ 
+ 	return 0;
+ 
+@@ -599,7 +684,14 @@ static int xvcu_remove(struct platform_device *pdev)
+ 		return -ENODEV;
+ 
+ 	/* Add the the Gasket isolation and put the VCU in reset. */
+-	xvcu_write(xvcu->logicore_reg_ba, VCU_GASKET_INIT, 0);
++	if (xvcu->reset_gpio) {
++		gpiod_set_value(xvcu->reset_gpio, 0);
++		/* min 2 clock cycle of vcu pll_ref, slowest freq is 33.33KHz */
++		usleep_range(60, 120);
++		gpiod_set_value(xvcu->reset_gpio, 1);
++		usleep_range(60, 120);
++	}
++	regmap_write(xvcu->logicore_reg_ba, VCU_GASKET_INIT, 0);
+ 
+ 	clk_disable_unprepare(xvcu->pll_ref);
+ 	clk_disable_unprepare(xvcu->aclk);
+diff --git a/drivers/soc/xilinx/zynqmp_power.c b/drivers/soc/xilinx/zynqmp_power.c
+index c556623da..5e00b2aa2 100644
+--- a/drivers/soc/xilinx/zynqmp_power.c
++++ b/drivers/soc/xilinx/zynqmp_power.c
+@@ -16,6 +16,7 @@
+ #include <linux/suspend.h>
+ 
+ #include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/firmware/xlnx-event-manager.h>
+ #include <linux/mailbox/zynqmp-ipi-message.h>
+ 
+ /**
+@@ -30,6 +31,7 @@ struct zynqmp_pm_work_struct {
+ 
+ static struct zynqmp_pm_work_struct *zynqmp_pm_init_suspend_work;
+ static struct mbox_chan *rx_chan;
++static bool event_registered;
+ 
+ enum pm_suspend_mode {
+ 	PM_SUSPEND_MODE_FIRST = 0,
+@@ -46,17 +48,24 @@ static const char *const suspend_modes[] = {
+ 
+ static enum pm_suspend_mode suspend_mode = PM_SUSPEND_MODE_STD;
+ 
+-enum pm_api_cb_id {
+-	PM_INIT_SUSPEND_CB = 30,
+-	PM_ACKNOWLEDGE_CB,
+-	PM_NOTIFY_CB,
+-};
+-
+ static void zynqmp_pm_get_callback_data(u32 *buf)
+ {
+ 	zynqmp_pm_invoke_fn(GET_CALLBACK_DATA, 0, 0, 0, 0, buf);
+ }
+ 
++static void suspend_event_callback(const u32 *payload, void *data)
++{
++	/* First element is callback API ID, others are callback arguments */
++	if (work_pending(&zynqmp_pm_init_suspend_work->callback_work))
++		return;
++
++	/* Copy callback arguments into work's structure */
++	memcpy(zynqmp_pm_init_suspend_work->args, &payload[1],
++	       sizeof(zynqmp_pm_init_suspend_work->args));
++
++	queue_work(system_unbound_wq, &zynqmp_pm_init_suspend_work->callback_work);
++}
++
+ static irqreturn_t zynqmp_pm_isr(int irq, void *data)
+ {
+ 	u32 payload[CB_PAYLOAD_SIZE];
+@@ -178,14 +187,38 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
+ 	u32 pm_api_version;
+ 	struct mbox_client *client;
+ 
+-	zynqmp_pm_init_finalize();
+ 	zynqmp_pm_get_api_version(&pm_api_version);
+ 
+ 	/* Check PM API version number */
+ 	if (pm_api_version < ZYNQMP_PM_VERSION)
+ 		return -ENODEV;
+ 
+-	if (of_find_property(pdev->dev.of_node, "mboxes", NULL)) {
++	/*
++	 * First try to use Xilinx Event Manager by registering suspend_event_callback
++	 * for suspend/shutdown event.
++	 * If xlnx_register_event() returns -EACCES (Xilinx Event Manager
++	 * is not available to use) or -ENODEV(Xilinx Event Manager not compiled),
++	 * then use ipi-mailbox or interrupt method.
++	 */
++	ret = xlnx_register_event(PM_INIT_SUSPEND_CB, 0, 0, false,
++				  suspend_event_callback, NULL);
++	if (!ret) {
++		zynqmp_pm_init_suspend_work = devm_kzalloc(&pdev->dev,
++							   sizeof(struct zynqmp_pm_work_struct),
++							   GFP_KERNEL);
++		if (!zynqmp_pm_init_suspend_work) {
++			xlnx_unregister_event(PM_INIT_SUSPEND_CB, 0, 0,
++					      suspend_event_callback);
++			return -ENOMEM;
++		}
++		event_registered = true;
++
++		INIT_WORK(&zynqmp_pm_init_suspend_work->callback_work,
++			  zynqmp_pm_init_suspend_work_fn);
++	} else if (ret != -EACCES && ret != -ENODEV) {
++		dev_err(&pdev->dev, "Failed to Register with Xilinx Event manager %d\n", ret);
++		return ret;
++	} else if (of_find_property(pdev->dev.of_node, "mboxes", NULL)) {
+ 		zynqmp_pm_init_suspend_work =
+ 			devm_kzalloc(&pdev->dev,
+ 				     sizeof(struct zynqmp_pm_work_struct),
+@@ -229,6 +262,10 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
+ 
+ 	ret = sysfs_create_file(&pdev->dev.kobj, &dev_attr_suspend_mode.attr);
+ 	if (ret) {
++		if (event_registered) {
++			xlnx_unregister_event(PM_INIT_SUSPEND_CB, 0, 0, suspend_event_callback);
++			event_registered = false;
++		}
+ 		dev_err(&pdev->dev, "unable to create sysfs interface\n");
+ 		return ret;
+ 	}
+@@ -239,6 +276,8 @@ static int zynqmp_pm_probe(struct platform_device *pdev)
+ static int zynqmp_pm_remove(struct platform_device *pdev)
+ {
+ 	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_suspend_mode.attr);
++	if (event_registered)
++		xlnx_unregister_event(PM_INIT_SUSPEND_CB, 0, 0, suspend_event_callback);
+ 
+ 	if (!rx_chan)
+ 		mbox_free_channel(rx_chan);
+@@ -246,6 +285,23 @@ static int zynqmp_pm_remove(struct platform_device *pdev)
+ 	return 0;
+ }
+ 
++static int __init do_init_finalize(void)
++{
++       struct device_node *np;
++
++       np = of_find_compatible_node(NULL, NULL, "xlnx,zynqmp");
++       if (!np) {
++               np = of_find_compatible_node(NULL, NULL, "xlnx,versal");
++               if (!np)
++                       return 0;
++       }
++       of_node_put(np);
++
++       return zynqmp_pm_init_finalize();
++}
++
++late_initcall_sync(do_init_finalize);
++
+ static const struct of_device_id pm_of_match[] = {
+ 	{ .compatible = "xlnx,zynqmp-power", },
+ 	{ /* end of table */ },
+diff --git a/include/dt-bindings/power/xlnx-versal-power.h b/include/dt-bindings/power/xlnx-versal-power.h
+new file mode 100644
+index 000000000..1b75175ed
+--- /dev/null
++++ b/include/dt-bindings/power/xlnx-versal-power.h
+@@ -0,0 +1,42 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ *  Copyright (C) 2019 - 2020 Xilinx, Inc.
++ */
++
++#ifndef _DT_BINDINGS_VERSAL_POWER_H
++#define _DT_BINDINGS_VERSAL_POWER_H
++
++#define PM_DEV_USB_0				(0x18224018U)
++#define PM_DEV_GEM_0				(0x18224019U)
++#define PM_DEV_GEM_1				(0x1822401aU)
++#define PM_DEV_SPI_0				(0x1822401bU)
++#define PM_DEV_SPI_1				(0x1822401cU)
++#define PM_DEV_I2C_0				(0x1822401dU)
++#define PM_DEV_I2C_1				(0x1822401eU)
++#define PM_DEV_CAN_FD_0				(0x1822401fU)
++#define PM_DEV_CAN_FD_1				(0x18224020U)
++#define PM_DEV_UART_0				(0x18224021U)
++#define PM_DEV_UART_1				(0x18224022U)
++#define PM_DEV_GPIO				(0x18224023U)
++#define PM_DEV_TTC_0				(0x18224024U)
++#define PM_DEV_TTC_1				(0x18224025U)
++#define PM_DEV_TTC_2				(0x18224026U)
++#define PM_DEV_TTC_3				(0x18224027U)
++#define PM_DEV_SWDT_FPD				(0x18224029U)
++#define PM_DEV_OSPI				(0x1822402aU)
++#define PM_DEV_QSPI				(0x1822402bU)
++#define PM_DEV_GPIO_PMC				(0x1822402cU)
++#define PM_DEV_SDIO_0				(0x1822402eU)
++#define PM_DEV_SDIO_1				(0x1822402fU)
++#define PM_DEV_RTC				(0x18224034U)
++#define PM_DEV_ADMA_0				(0x18224035U)
++#define PM_DEV_ADMA_1				(0x18224036U)
++#define PM_DEV_ADMA_2				(0x18224037U)
++#define PM_DEV_ADMA_3				(0x18224038U)
++#define PM_DEV_ADMA_4				(0x18224039U)
++#define PM_DEV_ADMA_5				(0x1822403aU)
++#define PM_DEV_ADMA_6				(0x1822403bU)
++#define PM_DEV_ADMA_7				(0x1822403cU)
++#define PM_DEV_AI				(0x18224072U)
++
++#endif
+diff --git a/include/dt-bindings/power/xlnx-zynqmp-power.h b/include/dt-bindings/power/xlnx-zynqmp-power.h
+index 0d9a412fd..5f718759c 100644
+--- a/include/dt-bindings/power/xlnx-zynqmp-power.h
++++ b/include/dt-bindings/power/xlnx-zynqmp-power.h
+@@ -35,5 +35,6 @@
+ #define		PD_CAN_1	48
+ #define		PD_GPU		58
+ #define		PD_PCIE		59
++#define		PD_PL		69
+ 
+ #endif
+diff --git a/include/linux/mfd/syscon/xlnx-vcu.h b/include/linux/mfd/syscon/xlnx-vcu.h
+new file mode 100644
+index 000000000..3c095645a
+--- /dev/null
++++ b/include/linux/mfd/syscon/xlnx-vcu.h
+@@ -0,0 +1,64 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * Copyright (C) 2020 Pengutronix, Michael Tretter <kernel@pengutronix.de>
++ */
++
++#ifndef __XLNX_VCU_H
++#define __XLNX_VCU_H
++
++#define VCU_ECODER_ENABLE		0x00
++#define VCU_DECODER_ENABLE		0x04
++#define VCU_MEMORY_DEPTH		0x08
++#define VCU_ENC_COLOR_DEPTH		0x0c
++#define VCU_ENC_VERTICAL_RANGE		0x10
++#define VCU_ENC_FRAME_SIZE_X		0x14
++#define VCU_ENC_FRAME_SIZE_Y		0x18
++#define VCU_ENC_COLOR_FORMAT		0x1c
++#define VCU_ENC_FPS			0x20
++#define VCU_MCU_CLK			0x24
++#define VCU_CORE_CLK			0x28
++#define VCU_PLL_BYPASS			0x2c
++#define VCU_ENC_CLK			0x30
++#define VCU_PLL_CLK			0x34
++#define VCU_ENC_VIDEO_STANDARD		0x38
++#define VCU_STATUS			0x3c
++#define VCU_AXI_ENC_CLK			0x40
++#define VCU_AXI_DEC_CLK			0x44
++#define VCU_AXI_MCU_CLK			0x48
++#define VCU_DEC_VIDEO_STANDARD		0x4c
++#define VCU_DEC_FRAME_SIZE_X		0x50
++#define VCU_DEC_FRAME_SIZE_Y		0x54
++#define VCU_DEC_FPS			0x58
++#define VCU_BUFFER_B_FRAME		0x5c
++#define VCU_WPP_EN			0x60
++#define VCU_PLL_CLK_DEC			0x64
++#define VCU_NUM_CORE			0x6c
++#define VCU_GASKET_INIT			0x74
++#define VCU_GASKET_VALUE		0x03
++
++/**
++ * struct xvcu_device - Xilinx VCU init device structure
++ * @dev: Platform device
++ * @pll_ref: pll ref clock source
++ * @reset_gpio: vcu reset gpio
++ * @aclk: axi clock source
++ * @logicore_reg_ba: logicore reg base address
++ * @vcu_slcr_ba: vcu_slcr Register base address
++ * @coreclk: core clock frequency
++ */
++struct xvcu_device {
++	struct device *dev;
++	struct clk *pll_ref;
++	struct clk *aclk;
++	struct gpio_desc *reset_gpio;
++	struct regmap *logicore_reg_ba;
++	void __iomem *vcu_slcr_ba;
++	u32 coreclk;
++};
++
++u32 xvcu_get_color_depth(struct xvcu_device *xvcu);
++u32 xvcu_get_memory_depth(struct xvcu_device *xvcu);
++u32 xvcu_get_clock_frequency(struct xvcu_device *xvcu);
++u32 xvcu_get_num_cores(struct xvcu_device *xvcu);
++
++#endif /* __XLNX_VCU_H */

@@ -1,0 +1,1692 @@
+diff --git a/Documentation/devicetree/bindings/pinctrl/xlnx,zynq-pinctrl.yaml b/Documentation/devicetree/bindings/pinctrl/xlnx,zynq-pinctrl.yaml
+new file mode 100644
+index 000000000..ac97dbf69
+--- /dev/null
++++ b/Documentation/devicetree/bindings/pinctrl/xlnx,zynq-pinctrl.yaml
+@@ -0,0 +1,214 @@
++# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/pinctrl/xlnx,zynq-pinctrl.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Zynq Pinctrl
++
++maintainers:
++  - Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>
++
++description: |
++  Please refer to pinctrl-bindings.txt in this directory for details of the
++  common pinctrl bindings used by client devices, including the meaning of the
++  phrase "pin configuration node".
++
++  Zynq's pin configuration nodes act as a container for an arbitrary number of
++  subnodes. Each of these subnodes represents some desired configuration for a
++  pin, a group, or a list of pins or groups. This configuration can include the
++  mux function to select on those pin(s)/group(s), and various pin configuration
++  parameters, such as pull-up, slew rate, etc.
++
++  Each configuration node can consist of multiple nodes describing the pinmux and
++  pinconf options. Those nodes can be pinmux nodes or pinconf nodes.
++
++  The name of each subnode is not important; all subnodes should be enumerated
++  and processed purely based on their content.
++
++properties:
++  compatible:
++    const: xlnx,zynq-pinctrl
++
++  reg:
++    description: Specifies the base address and size of the SLCR space.
++    maxItems: 1
++
++  syscon:
++    description:
++      phandle to the SLCR.
++
++patternProperties:
++  '^(.*-)?(default|gpio)$':
++    type: object
++    patternProperties:
++      '^mux':
++        type: object
++        description:
++          Pinctrl node's client devices use subnodes for pin muxes,
++          which in turn use below standard properties.
++        $ref: pinmux-node.yaml#
++
++        properties:
++          groups:
++            description:
++              List of groups to select (either this or "pins" must be
++              specified), available groups for this subnode.
++            items:
++              enum: [ethernet0_0_grp, ethernet1_0_grp, mdio0_0_grp,
++                     mdio1_0_grp, qspi0_0_grp, qspi1_0_grp, qspi_fbclk,
++                     qspi_cs1_grp, spi0_0_grp, spi0_1_grp, spi0_2_grp,
++                     spi0_0_ss0, spi0_0_ss1, spi0_0_ss2, spi0_1_ss0,
++                     spi0_1_ss1, spi0_1_ss2, spi0_2_ss0, spi0_2_ss1,
++                     spi0_2_ss2, spi1_0_grp, spi1_1_grp, spi1_2_grp,
++                     spi1_3_grp, spi1_0_ss0, spi1_0_ss1, spi1_0_ss2,
++                     spi1_1_ss0, spi1_1_ss1, spi1_1_ss2, spi1_2_ss0,
++                     spi1_2_ss1, spi1_2_ss2, spi1_3_ss0, spi1_3_ss1,
++                     spi1_3_ss2, sdio0_0_grp, sdio0_1_grp, sdio0_2_grp,
++                     sdio1_0_grp, sdio1_1_grp, sdio1_2_grp, sdio1_3_grp,
++                     sdio0_emio_wp, sdio0_emio_cd, sdio1_emio_wp,
++                     sdio1_emio_cd, smc0_nor, smc0_nor_cs1_grp,
++                     smc0_nor_addr25_grp, smc0_nand, can0_0_grp, can0_1_grp,
++                     can0_2_grp, can0_3_grp, can0_4_grp, can0_5_grp,
++                     can0_6_grp, can0_7_grp, can0_8_grp, can0_9_grp,
++                     can0_10_grp, can1_0_grp, can1_1_grp, can1_2_grp,
++                     can1_3_grp, can1_4_grp, can1_5_grp, can1_6_grp,
++                     can1_7_grp, can1_8_grp, can1_9_grp, can1_10_grp,
++                     can1_11_grp, uart0_0_grp, uart0_1_grp, uart0_2_grp,
++                     uart0_3_grp, uart0_4_grp, uart0_5_grp, uart0_6_grp,
++                     uart0_7_grp, uart0_8_grp, uart0_9_grp, uart0_10_grp,
++                     uart1_0_grp, uart1_1_grp, uart1_2_grp, uart1_3_grp,
++                     uart1_4_grp, uart1_5_grp, uart1_6_grp, uart1_7_grp,
++                     uart1_8_grp, uart1_9_grp, uart1_10_grp, uart1_11_grp,
++                     i2c0_0_grp, i2c0_1_grp, i2c0_2_grp, i2c0_3_grp,
++                     i2c0_4_grp, i2c0_5_grp, i2c0_6_grp, i2c0_7_grp,
++                     i2c0_8_grp, i2c0_9_grp, i2c0_10_grp, i2c1_0_grp,
++                     i2c1_1_grp, i2c1_2_grp, i2c1_3_grp, i2c1_4_grp,
++                     i2c1_5_grp, i2c1_6_grp, i2c1_7_grp, i2c1_8_grp,
++                     i2c1_9_grp, i2c1_10_grp, ttc0_0_grp, ttc0_1_grp,
++                     ttc0_2_grp, ttc1_0_grp, ttc1_1_grp, ttc1_2_grp,
++                     swdt0_0_grp, swdt0_1_grp, swdt0_2_grp, swdt0_3_grp,
++                     swdt0_4_grp, gpio0_0_grp, gpio0_1_grp, gpio0_2_grp,
++                     gpio0_3_grp, gpio0_4_grp, gpio0_5_grp, gpio0_6_grp,
++                     gpio0_7_grp, gpio0_8_grp, gpio0_9_grp, gpio0_10_grp,
++                     gpio0_11_grp, gpio0_12_grp, gpio0_13_grp, gpio0_14_grp,
++                     gpio0_15_grp, gpio0_16_grp, gpio0_17_grp, gpio0_18_grp,
++                     gpio0_19_grp, gpio0_20_grp, gpio0_21_grp, gpio0_22_grp,
++                     gpio0_23_grp, gpio0_24_grp, gpio0_25_grp, gpio0_26_grp,
++                     gpio0_27_grp, gpio0_28_grp, gpio0_29_grp, gpio0_30_grp,
++                     gpio0_31_grp, gpio0_32_grp, gpio0_33_grp, gpio0_34_grp,
++                     gpio0_35_grp, gpio0_36_grp, gpio0_37_grp, gpio0_38_grp,
++                     gpio0_39_grp, gpio0_40_grp, gpio0_41_grp, gpio0_42_grp,
++                     gpio0_43_grp, gpio0_44_grp, gpio0_45_grp, gpio0_46_grp,
++                     gpio0_47_grp, gpio0_48_grp, gpio0_49_grp, gpio0_50_grp,
++                     gpio0_51_grp, gpio0_52_grp, gpio0_53_grp, usb0_0_grp,
++                     usb1_0_grp]
++            maxItems: 54
++
++          function:
++            description:
++              Specify the alternative function to be configured for the
++              given pin groups.
++            enum: [ethernet0, ethernet1, mdio0, mdio1, qspi0, qspi1, qspi_fbclk,
++                   qspi_cs1, spi0, spi0_ss, spi1, spi1_ss, sdio0, sdio0_pc,
++                   sdio0_cd, sdio0_wp, sdio1, sdio1_pc, sdio1_cd, sdio1_wp,
++                   smc0_nor, smc0_nor_cs1, smc0_nor_addr25, smc0_nand, can0,
++                   can1, uart0, uart1, i2c0, i2c1, ttc0, ttc1, swdt0, gpio0,
++                   usb0, usb1]
++
++        required:
++          - groups
++          - function
++
++        additionalProperties: false
++
++      '^conf':
++        type: object
++        description:
++          Pinctrl node's client devices use subnodes for pin configurations,
++          which in turn use the standard properties below.
++        $ref: pincfg-node.yaml#
++
++        properties:
++          groups:
++            description:
++              List of pin groups as mentioned above.
++
++          pins:
++            description:
++              List of pin names to select in this subnode.
++            items:
++              pattern: '^MIO([0-9]|[1-4][0-9]|5[0-3])$'
++            maxItems: 54
++
++          bias-pull-up: true
++
++          bias-pull-down: true
++
++          bias-disable: true
++
++          bias-high-impedance: true
++
++          low-power-enable: true
++
++          low-power-disable: true
++
++          slew-rate:
++            enum: [0, 1]
++
++          power-source:
++            enum: [1, 2, 3, 4]
++
++        oneOf:
++          - required: [ groups ]
++          - required: [ pins ]
++
++        additionalProperties: false
++
++    additionalProperties: false
++
++required:
++  - compatible
++  - reg
++  - syscon
++
++additionalProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/pinctrl/pinctrl-zynq.h>
++    pinctrl0: pinctrl@700 {
++       compatible = "xlnx,zynq-pinctrl";
++       reg = <0x700 0x200>;
++       syscon = <&slcr>;
++
++       pinctrl_uart1_default: uart1-default {
++           mux {
++               groups = "uart1_10_grp";
++               function = "uart1";
++           };
++
++           conf {
++               groups = "uart1_10_grp";
++               slew-rate = <0>;
++               power-source = <IO_STANDARD_LVCMOS18>;
++           };
++
++           conf-rx {
++               pins = "MIO49";
++               bias-high-impedance;
++           };
++
++           conf-tx {
++               pins = "MIO48";
++               bias-disable;
++           };
++       };
++    };
++
++    uart1 {
++         pinctrl-names = "default";
++         pinctrl-0 = <&pinctrl_uart1_default>;
++    };
++
++...
+diff --git a/Documentation/devicetree/bindings/pinctrl/xlnx,zynqmp-pinctrl.yaml b/Documentation/devicetree/bindings/pinctrl/xlnx,zynqmp-pinctrl.yaml
+new file mode 100644
+index 000000000..8ef0d07d3
+--- /dev/null
++++ b/Documentation/devicetree/bindings/pinctrl/xlnx,zynqmp-pinctrl.yaml
+@@ -0,0 +1,336 @@
++# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/pinctrl/xlnx,zynqmp-pinctrl.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx ZynqMP Pinctrl
++
++maintainers:
++  - Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>
++  - Rajan Vaja <rajan.vaja@xilinx.com>
++
++description: |
++  Please refer to pinctrl-bindings.txt in this directory for details of the
++  common pinctrl bindings used by client devices, including the meaning of the
++  phrase "pin configuration node".
++
++  ZynqMP's pin configuration nodes act as a container for an arbitrary number of
++  subnodes. Each of these subnodes represents some desired configuration for a
++  pin, a group, or a list of pins or groups. This configuration can include the
++  mux function to select on those pin(s)/group(s), and various pin configuration
++  parameters, such as pull-up, slew rate, etc.
++
++  Each configuration node can consist of multiple nodes describing the pinmux and
++  pinconf options. Those nodes can be pinmux nodes or pinconf nodes.
++
++  The name of each subnode is not important; all subnodes should be enumerated
++  and processed purely based on their content.
++
++properties:
++  compatible:
++    const: xlnx,zynqmp-pinctrl
++
++patternProperties:
++  '^(.*-)?(default|gpio)$':
++    type: object
++    patternProperties:
++      '^mux':
++        type: object
++        description:
++          Pinctrl node's client devices use subnodes for pin muxes,
++          which in turn use below standard properties.
++        $ref: pinmux-node.yaml#
++
++        properties:
++          groups:
++            description:
++              List of groups to select (either this or "pins" must be
++              specified), available groups for this subnode.
++            items:
++              enum: [ethernet0_0_grp, ethernet1_0_grp, ethernet2_0_grp,
++                     ethernet3_0_grp, gemtsu0_0_grp, gemtsu0_1_grp,
++                     gemtsu0_2_grp, mdio0_0_grp, mdio1_0_grp,
++                     mdio1_1_grp, mdio2_0_grp, mdio3_0_grp,
++                     qspi0_0_grp, qspi_ss_0_grp, qspi_fbclk_0_grp,
++                     spi0_0_grp, spi0_ss_0_grp, spi0_ss_1_grp,
++                     spi0_ss_2_grp, spi0_1_grp, spi0_ss_3_grp,
++                     spi0_ss_4_grp, spi0_ss_5_grp, spi0_2_grp,
++                     spi0_ss_6_grp, spi0_ss_7_grp, spi0_ss_8_grp,
++                     spi0_3_grp, spi0_ss_9_grp, spi0_ss_10_grp,
++                     spi0_ss_11_grp, spi0_4_grp, spi0_ss_12_grp,
++                     spi0_ss_13_grp, spi0_ss_14_grp, spi0_5_grp,
++                     spi0_ss_15_grp, spi0_ss_16_grp, spi0_ss_17_grp,
++                     spi1_0_grp, spi1_ss_0_grp, spi1_ss_1_grp,
++                     spi1_ss_2_grp, spi1_1_grp, spi1_ss_3_grp,
++                     spi1_ss_4_grp, spi1_ss_5_grp, spi1_2_grp,
++                     spi1_ss_6_grp, spi1_ss_7_grp, spi1_ss_8_grp,
++                     spi1_3_grp, spi1_ss_9_grp, spi1_ss_10_grp,
++                     spi1_ss_11_grp, spi1_4_grp, spi1_ss_12_grp,
++                     spi1_ss_13_grp, spi1_ss_14_grp, spi1_5_grp,
++                     spi1_ss_15_grp, spi1_ss_16_grp, spi1_ss_17_grp,
++                     sdio0_0_grp, sdio0_1_grp, sdio0_2_grp,
++                     sdio0_3_grp, sdio0_4_grp, sdio0_5_grp,
++                     sdio0_6_grp, sdio0_7_grp, sdio0_8_grp,
++                     sdio0_9_grp, sdio0_10_grp, sdio0_11_grp,
++                     sdio0_12_grp, sdio0_13_grp, sdio0_14_grp,
++                     sdio0_15_grp, sdio0_16_grp, sdio0_17_grp,
++                     sdio0_18_grp, sdio0_19_grp, sdio0_20_grp,
++                     sdio0_21_grp, sdio0_22_grp, sdio0_23_grp,
++                     sdio0_24_grp, sdio0_25_grp, sdio0_26_grp,
++                     sdio0_27_grp, sdio0_28_grp, sdio0_29_grp,
++                     sdio0_30_grp, sdio0_31_grp, sdio0_32_grp,
++                     sdio0_pc_0_grp, sdio0_cd_0_grp, sdio0_wp_0_grp,
++                     sdio0_pc_1_grp, sdio0_cd_1_grp, sdio0_wp_1_grp,
++                     sdio0_pc_2_grp, sdio0_cd_2_grp, sdio0_wp_2_grp,
++                     sdio1_0_grp, sdio1_1_grp, sdio1_2_grp,
++                     sdio1_3_grp, sdio1_4_grp, sdio1_5_grp,
++                     sdio1_6_grp, sdio1_7_grp, sdio1_8_grp,
++                     sdio1_9_grp, sdio1_10_grp, sdio1_11_grp,
++                     sdio1_12_grp, sdio1_13_grp, sdio1_14_grp,
++                     sdio1_15_grp, sdio1_pc_0_grp, sdio1_cd_0_grp,
++                     sdio1_wp_0_grp, sdio1_pc_1_grp, sdio1_cd_1_grp,
++                     sdio1_wp_1_grp, nand0_0_grp, nand0_ce_0_grp,
++                     nand0_rb_0_grp, nand0_dqs_0_grp, nand0_ce_1_grp,
++                     nand0_rb_1_grp, nand0_dqs_1_grp, can0_0_grp,
++                     can0_1_grp, can0_2_grp, can0_3_grp,
++                     can0_4_grp, can0_5_grp, can0_6_grp,
++                     can0_7_grp, can0_8_grp, can0_9_grp,
++                     can0_10_grp, can0_11_grp, can0_12_grp,
++                     can0_13_grp, can0_14_grp, can0_15_grp,
++                     can0_16_grp, can0_17_grp, can0_18_grp,
++                     can1_0_grp, can1_1_grp, can1_2_grp,
++                     can1_3_grp, can1_4_grp, can1_5_grp,
++                     can1_6_grp, can1_7_grp, can1_8_grp,
++                     can1_9_grp, can1_10_grp, can1_11_grp,
++                     can1_12_grp, can1_13_grp, can1_14_grp,
++                     can1_15_grp, can1_16_grp, can1_17_grp,
++                     can1_18_grp, can1_19_grp, uart0_0_grp,
++                     uart0_1_grp, uart0_2_grp, uart0_3_grp,
++                     uart0_4_grp, uart0_5_grp, uart0_6_grp,
++                     uart0_7_grp, uart0_8_grp, uart0_9_grp,
++                     uart0_10_grp, uart0_11_grp, uart0_12_grp,
++                     uart0_13_grp, uart0_14_grp, uart0_15_grp,
++                     uart0_16_grp, uart0_17_grp, uart0_18_grp,
++                     uart1_0_grp, uart1_1_grp, uart1_2_grp,
++                     uart1_3_grp, uart1_4_grp, uart1_5_grp,
++                     uart1_6_grp, uart1_7_grp, uart1_8_grp,
++                     uart1_9_grp, uart1_10_grp, uart1_11_grp,
++                     uart1_12_grp, uart1_13_grp, uart1_14_grp,
++                     uart1_15_grp, uart1_16_grp, uart1_17_grp,
++                     uart1_18_grp, i2c0_0_grp, i2c0_1_grp,
++                     i2c0_2_grp, i2c0_3_grp, i2c0_4_grp,
++                     i2c0_5_grp, i2c0_6_grp, i2c0_7_grp,
++                     i2c0_8_grp, i2c0_9_grp, i2c0_10_grp,
++                     i2c0_11_grp, i2c0_12_grp, i2c0_13_grp,
++                     i2c0_14_grp, i2c0_15_grp, i2c0_16_grp,
++                     i2c0_17_grp, i2c0_18_grp, i2c1_0_grp,
++                     i2c1_1_grp, i2c1_2_grp, i2c1_3_grp,
++                     i2c1_4_grp, i2c1_5_grp, i2c1_6_grp,
++                     i2c1_7_grp, i2c1_8_grp, i2c1_9_grp,
++                     i2c1_10_grp, i2c1_11_grp, i2c1_12_grp,
++                     i2c1_13_grp, i2c1_14_grp, i2c1_15_grp,
++                     i2c1_16_grp, i2c1_17_grp, i2c1_18_grp,
++                     i2c1_19_grp, ttc0_clk_0_grp, ttc0_wav_0_grp,
++                     ttc0_clk_1_grp, ttc0_wav_1_grp, ttc0_clk_2_grp,
++                     ttc0_wav_2_grp, ttc0_clk_3_grp, ttc0_wav_3_grp,
++                     ttc0_clk_4_grp, ttc0_wav_4_grp, ttc0_clk_5_grp,
++                     ttc0_wav_5_grp, ttc0_clk_6_grp, ttc0_wav_6_grp,
++                     ttc0_clk_7_grp, ttc0_wav_7_grp, ttc0_clk_8_grp,
++                     ttc0_wav_8_grp, ttc1_clk_0_grp, ttc1_wav_0_grp,
++                     ttc1_clk_1_grp, ttc1_wav_1_grp, ttc1_clk_2_grp,
++                     ttc1_wav_2_grp, ttc1_clk_3_grp, ttc1_wav_3_grp,
++                     ttc1_clk_4_grp, ttc1_wav_4_grp, ttc1_clk_5_grp,
++                     ttc1_wav_5_grp, ttc1_clk_6_grp, ttc1_wav_6_grp,
++                     ttc1_clk_7_grp, ttc1_wav_7_grp, ttc1_clk_8_grp,
++                     ttc1_wav_8_grp, ttc2_clk_0_grp, ttc2_wav_0_grp,
++                     ttc2_clk_1_grp, ttc2_wav_1_grp, ttc2_clk_2_grp,
++                     ttc2_wav_2_grp, ttc2_clk_3_grp, ttc2_wav_3_grp,
++                     ttc2_clk_4_grp, ttc2_wav_4_grp, ttc2_clk_5_grp,
++                     ttc2_wav_5_grp, ttc2_clk_6_grp, ttc2_wav_6_grp,
++                     ttc2_clk_7_grp, ttc2_wav_7_grp, ttc2_clk_8_grp,
++                     ttc2_wav_8_grp, ttc3_clk_0_grp, ttc3_wav_0_grp,
++                     ttc3_clk_1_grp, ttc3_wav_1_grp, ttc3_clk_2_grp,
++                     ttc3_wav_2_grp, ttc3_clk_3_grp, ttc3_wav_3_grp,
++                     ttc3_clk_4_grp, ttc3_wav_4_grp, ttc3_clk_5_grp,
++                     ttc3_wav_5_grp, ttc3_clk_6_grp, ttc3_wav_6_grp,
++                     ttc3_clk_7_grp, ttc3_wav_7_grp, ttc3_clk_8_grp,
++                     ttc3_wav_8_grp, swdt0_clk_0_grp, swdt0_rst_0_grp,
++                     swdt0_clk_1_grp, swdt0_rst_1_grp, swdt0_clk_2_grp,
++                     swdt0_rst_2_grp, swdt0_clk_3_grp, swdt0_rst_3_grp,
++                     swdt0_clk_4_grp, swdt0_rst_4_grp, swdt0_clk_5_grp,
++                     swdt0_rst_5_grp, swdt0_clk_6_grp, swdt0_rst_6_grp,
++                     swdt0_clk_7_grp, swdt0_rst_7_grp, swdt0_clk_8_grp,
++                     swdt0_rst_8_grp, swdt0_clk_9_grp, swdt0_rst_9_grp,
++                     swdt0_clk_10_grp, swdt0_rst_10_grp, swdt0_clk_11_grp,
++                     swdt0_rst_11_grp, swdt0_clk_12_grp, swdt0_rst_12_grp,
++                     swdt1_clk_0_grp, swdt1_rst_0_grp, swdt1_clk_1_grp,
++                     swdt1_rst_1_grp, swdt1_clk_2_grp, swdt1_rst_2_grp,
++                     swdt1_clk_3_grp, swdt1_rst_3_grp, swdt1_clk_4_grp,
++                     swdt1_rst_4_grp, swdt1_clk_5_grp, swdt1_rst_5_grp,
++                     swdt1_clk_6_grp, swdt1_rst_6_grp, swdt1_clk_7_grp,
++                     swdt1_rst_7_grp, swdt1_clk_8_grp, swdt1_rst_8_grp,
++                     swdt1_clk_9_grp, swdt1_rst_9_grp, swdt1_clk_10_grp,
++                     swdt1_rst_10_grp, swdt1_clk_11_grp, swdt1_rst_11_grp,
++                     swdt1_clk_12_grp, swdt1_rst_12_grp, gpio0_0_grp,
++                     gpio0_1_grp, gpio0_2_grp, gpio0_3_grp,
++                     gpio0_4_grp, gpio0_5_grp, gpio0_6_grp,
++                     gpio0_7_grp, gpio0_8_grp, gpio0_9_grp,
++                     gpio0_10_grp, gpio0_11_grp, gpio0_12_grp,
++                     gpio0_13_grp, gpio0_14_grp, gpio0_15_grp,
++                     gpio0_16_grp, gpio0_17_grp, gpio0_18_grp,
++                     gpio0_19_grp, gpio0_20_grp, gpio0_21_grp,
++                     gpio0_22_grp, gpio0_23_grp, gpio0_24_grp,
++                     gpio0_25_grp, gpio0_26_grp, gpio0_27_grp,
++                     gpio0_28_grp, gpio0_29_grp, gpio0_30_grp,
++                     gpio0_31_grp, gpio0_32_grp, gpio0_33_grp,
++                     gpio0_34_grp, gpio0_35_grp, gpio0_36_grp,
++                     gpio0_37_grp, gpio0_38_grp, gpio0_39_grp,
++                     gpio0_40_grp, gpio0_41_grp, gpio0_42_grp,
++                     gpio0_43_grp, gpio0_44_grp, gpio0_45_grp,
++                     gpio0_46_grp, gpio0_47_grp, gpio0_48_grp,
++                     gpio0_49_grp, gpio0_50_grp, gpio0_51_grp,
++                     gpio0_52_grp, gpio0_53_grp, gpio0_54_grp,
++                     gpio0_55_grp, gpio0_56_grp, gpio0_57_grp,
++                     gpio0_58_grp, gpio0_59_grp, gpio0_60_grp,
++                     gpio0_61_grp, gpio0_62_grp, gpio0_63_grp,
++                     gpio0_64_grp, gpio0_65_grp, gpio0_66_grp,
++                     gpio0_67_grp, gpio0_68_grp, gpio0_69_grp,
++                     gpio0_70_grp, gpio0_71_grp, gpio0_72_grp,
++                     gpio0_73_grp, gpio0_74_grp, gpio0_75_grp,
++                     gpio0_76_grp, gpio0_77_grp, usb0_0_grp,
++                     usb1_0_grp, pmu0_0_grp, pmu0_1_grp,
++                     pmu0_2_grp, pmu0_3_grp, pmu0_4_grp,
++                     pmu0_5_grp, pmu0_6_grp, pmu0_7_grp,
++                     pmu0_8_grp, pmu0_9_grp, pmu0_10_grp,
++                     pmu0_11_grp, pcie0_0_grp, pcie0_1_grp,
++                     pcie0_2_grp, pcie0_3_grp, pcie0_4_grp,
++                     pcie0_5_grp, pcie0_6_grp, pcie0_7_grp,
++                     csu0_0_grp, csu0_1_grp, csu0_2_grp,
++                     csu0_3_grp, csu0_4_grp, csu0_5_grp,
++                     csu0_6_grp, csu0_7_grp, csu0_8_grp,
++                     csu0_9_grp, csu0_10_grp, csu0_11_grp,
++                     dpaux0_0_grp, dpaux0_1_grp, dpaux0_2_grp,
++                     dpaux0_3_grp, pjtag0_0_grp, pjtag0_1_grp,
++                     pjtag0_2_grp, pjtag0_3_grp, pjtag0_4_grp,
++                     pjtag0_5_grp, trace0_0_grp, trace0_clk_0_grp,
++                     trace0_1_grp, trace0_clk_1_grp, trace0_2_grp,
++                     trace0_clk_2_grp, testscan0_0_grp]
++            maxItems: 78
++
++          function:
++            description:
++              Specify the alternative function to be configured for the
++              given pin groups.
++            enum: [ethernet0, ethernet1, ethernet2, ethernet3, gemtsu0, usb0, usb1, mdio0,
++                   mdio1, mdio2, mdio3, qspi0, qspi_fbclk, qspi_ss, spi0, spi1, spi0_ss,
++                   spi1_ss, sdio0, sdio0_pc, sdio0_wp, sdio0_cd, sdio1, sdio1_pc, sdio1_wp,
++                   sdio1_cd, nand0, nand0_ce, nand0_rb, nand0_dqs, can0, can1, uart0, uart1,
++                   i2c0, i2c1, ttc0_clk, ttc0_wav, ttc1_clk, ttc1_wav, ttc2_clk, ttc2_wav,
++                   ttc3_clk, ttc3_wav, swdt0_clk, swdt0_rst, swdt1_clk, swdt1_rst, gpio0, pmu0,
++                   pcie0, csu0, dpaux0, pjtag0, trace0, trace0_clk, testscan0]
++
++        required:
++          - groups
++          - function
++
++        additionalProperties: false
++
++      '^conf':
++        type: object
++        description:
++          Pinctrl node's client devices use subnodes for pin configurations,
++          which in turn use the standard properties below.
++        $ref: pincfg-node.yaml#
++
++        properties:
++          groups:
++            description:
++              List of pin groups as mentioned above.
++
++          pins:
++            description:
++              List of pin names to select in this subnode.
++            items:
++              pattern: '^MIO([0-9]|[1-6][0-9]|7[0-7])$'
++            maxItems: 78
++
++          bias-pull-up: true
++
++          bias-pull-down: true
++
++          bias-disable: true
++
++          input-schmitt-enable: true
++
++          input-schmitt-disable: true
++
++          bias-high-impedance: true
++
++          low-power-enable: true
++
++          low-power-disable: true
++
++          slew-rate:
++            enum: [0, 1]
++
++          drive-strength:
++            description:
++              Selects the drive strength for MIO pins, in mA.
++            enum: [2, 4, 8, 12]
++
++          power-source:
++            enum: [0, 1]
++
++        oneOf:
++          - required: [ groups ]
++          - required: [ pins ]
++
++        additionalProperties: false
++
++    additionalProperties: false
++
++required:
++  - compatible
++
++additionalProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/pinctrl/pinctrl-zynqmp.h>
++    zynqmp_firmware: zynqmp-firmware {
++        pinctrl0: pinctrl {
++          compatible = "xlnx,zynqmp-pinctrl";
++
++          pinctrl_uart1_default: uart1-default {
++             mux {
++                 groups = "uart0_4_grp", "uart0_5_grp";
++                 function = "uart0";
++             };
++
++             conf {
++                groups = "uart0_4_grp";
++                slew-rate = <SLEW_RATE_SLOW>;
++                power-source = <IO_STANDARD_LVCMOS18>;
++             };
++
++             conf-rx {
++                pins = "MIO18";
++                bias-pull-up;
++             };
++
++             conf-tx {
++                pins = "MIO19";
++                bias-disable;
++                input-schmitt-disable;
++             };
++          };
++        };
++    };
++
++    uart1 {
++         pinctrl-names = "default";
++         pinctrl-0 = <&pinctrl_uart1_default>;
++    };
++
++...
+diff --git a/drivers/pinctrl/Kconfig b/drivers/pinctrl/Kconfig
+index 815095326..d6c1117c8 100644
+--- a/drivers/pinctrl/Kconfig
++++ b/drivers/pinctrl/Kconfig
+@@ -341,6 +341,22 @@ config PINCTRL_ZYNQ
+ 	help
+ 	  This selects the pinctrl driver for Xilinx Zynq.
+ 
++config PINCTRL_ZYNQMP
++	tristate "Pinctrl driver for Xilinx ZynqMP"
++	depends on ZYNQMP_FIRMWARE
++	select PINMUX
++	select GENERIC_PINCONF
++	default ZYNQMP_FIRMWARE
++	help
++	  This selects the pinctrl driver for Xilinx ZynqMP platform.
++	  This driver will query the pin information from the firmware
++	  and allow configuring the pins.
++	  Configuration can include the mux function to select on those
++	  pin(s)/group(s), and various pin configuration parameters
++	  such as pull-up, slew rate, etc.
++	  This driver can also be built as a module. If so, the module
++	  will be called pinctrl-zynqmp.
++
+ config PINCTRL_INGENIC
+ 	bool "Pinctrl driver for the Ingenic JZ47xx SoCs"
+ 	default MACH_INGENIC
+diff --git a/drivers/pinctrl/Makefile b/drivers/pinctrl/Makefile
+index f53933b2f..cd28423fd 100644
+--- a/drivers/pinctrl/Makefile
++++ b/drivers/pinctrl/Makefile
+@@ -43,6 +43,7 @@ obj-$(CONFIG_PINCTRL_TB10X)	+= pinctrl-tb10x.o
+ obj-$(CONFIG_PINCTRL_ST) 	+= pinctrl-st.o
+ obj-$(CONFIG_PINCTRL_STMFX) 	+= pinctrl-stmfx.o
+ obj-$(CONFIG_PINCTRL_ZYNQ)	+= pinctrl-zynq.o
++obj-$(CONFIG_PINCTRL_ZYNQMP)	+= pinctrl-zynqmp.o
+ obj-$(CONFIG_PINCTRL_INGENIC)	+= pinctrl-ingenic.o
+ obj-$(CONFIG_PINCTRL_RK805)	+= pinctrl-rk805.o
+ obj-$(CONFIG_PINCTRL_OCELOT)	+= pinctrl-ocelot.o
+diff --git a/drivers/pinctrl/core.c b/drivers/pinctrl/core.c
+index 840000870..a3097f007 100644
+--- a/drivers/pinctrl/core.c
++++ b/drivers/pinctrl/core.c
+@@ -1258,13 +1258,36 @@ static int pinctrl_commit_state(struct pinctrl *p, struct pinctrl_state *state)
+ 
+ 	p->state = NULL;
+ 
+-	/* Apply all the settings for the new state */
++	/* Apply all the settings for the new state - pinmux first */
+ 	list_for_each_entry(setting, &state->settings, node) {
+ 		switch (setting->type) {
+ 		case PIN_MAP_TYPE_MUX_GROUP:
+ 			ret = pinmux_enable_setting(setting);
+ 			break;
+ 		case PIN_MAP_TYPE_CONFIGS_PIN:
++		case PIN_MAP_TYPE_CONFIGS_GROUP:
++			ret = 0;
++			break;
++		default:
++			ret = -EINVAL;
++			break;
++		}
++
++		if (ret < 0)
++			goto unapply_new_state;
++
++		/* Do not link hogs (circular dependency) */
++		if (p != setting->pctldev->p)
++			pinctrl_link_add(setting->pctldev, p->dev);
++	}
++
++	/* Apply all the settings for the new state - pinconf after */
++	list_for_each_entry(setting, &state->settings, node) {
++		switch (setting->type) {
++		case PIN_MAP_TYPE_MUX_GROUP:
++			ret = 0;
++			break;
++		case PIN_MAP_TYPE_CONFIGS_PIN:
+ 		case PIN_MAP_TYPE_CONFIGS_GROUP:
+ 			ret = pinconf_apply_setting(setting);
+ 			break;
+diff --git a/drivers/pinctrl/pinctrl-zynq.c b/drivers/pinctrl/pinctrl-zynq.c
+index c6052a0e8..4c3cf8c2f 100644
+--- a/drivers/pinctrl/pinctrl-zynq.c
++++ b/drivers/pinctrl/pinctrl-zynq.c
+@@ -8,6 +8,7 @@
+  */
+ #include <linux/io.h>
+ #include <linux/mfd/syscon.h>
++#include <linux/module.h>
+ #include <linux/init.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
+@@ -1028,6 +1029,7 @@ static int zynq_pinconf_cfg_get(struct pinctrl_dev *pctldev,
+ 		break;
+ 	}
+ 	case PIN_CONFIG_IOSTANDARD:
++	case PIN_CONFIG_POWER_SOURCE:
+ 		arg = zynq_pinconf_iostd_get(reg);
+ 		break;
+ 	default:
+@@ -1078,6 +1080,7 @@ static int zynq_pinconf_cfg_set(struct pinctrl_dev *pctldev,
+ 
+ 			break;
+ 		case PIN_CONFIG_IOSTANDARD:
++		case PIN_CONFIG_POWER_SOURCE:
+ 			if (arg <= zynq_iostd_min || arg >= zynq_iostd_max) {
+ 				dev_warn(pctldev->dev,
+ 					 "unsupported IO standard '%u'\n",
+@@ -1208,8 +1211,4 @@ static struct platform_driver zynq_pinctrl_driver = {
+ 	.probe = zynq_pinctrl_probe,
+ };
+ 
+-static int __init zynq_pinctrl_init(void)
+-{
+-	return platform_driver_register(&zynq_pinctrl_driver);
+-}
+-arch_initcall(zynq_pinctrl_init);
++module_platform_driver(zynq_pinctrl_driver);
+diff --git a/drivers/pinctrl/pinctrl-zynqmp.c b/drivers/pinctrl/pinctrl-zynqmp.c
+new file mode 100644
+index 000000000..9ed14ebe9
+--- /dev/null
++++ b/drivers/pinctrl/pinctrl-zynqmp.c
+@@ -0,0 +1,947 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * ZynqMP pin controller
++ *
++ * Copyright (C) 2020, 2021 Xilinx, Inc.
++ *
++ * Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>
++ * Rajan Vaja <rajan.vaja@xilinx.com>
++ */
++
++#include <dt-bindings/pinctrl/pinctrl-zynqmp.h>
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/of_address.h>
++#include <linux/platform_device.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++
++#include <linux/pinctrl/pinmux.h>
++#include <linux/pinctrl/pinconf-generic.h>
++
++#include "core.h"
++#include "pinctrl-utils.h"
++
++#define ZYNQMP_PIN_PREFIX			"MIO"
++#define PINCTRL_GET_FUNC_NAME_RESP_LEN		16
++#define MAX_FUNC_NAME_LEN			16
++#define MAX_GROUP_PIN				50
++#define MAX_PIN_GROUPS				50
++#define END_OF_FUNCTIONS			"END_OF_FUNCTIONS"
++#define NUM_GROUPS_PER_RESP			6
++
++#define PINCTRL_GET_FUNC_GROUPS_RESP_LEN	12
++#define PINCTRL_GET_PIN_GROUPS_RESP_LEN		12
++#define NA_GROUP				0xFFFF
++#define RESERVED_GROUP				0xFFFE
++
++#define DRIVE_STRENGTH_2MA	2
++#define DRIVE_STRENGTH_4MA	4
++#define DRIVE_STRENGTH_8MA	8
++#define DRIVE_STRENGTH_12MA	12
++
++/**
++ * struct zynqmp_pmux_function - a pinmux function
++ * @name:	Name of the pin mux function
++ * @groups:	List of pin groups for this function
++ * @ngroups:	Number of entries in @groups
++ * @node:	Firmware node matching with the function
++ *
++ * This structure holds information about pin control function
++ * and function group names supporting that function.
++ */
++struct zynqmp_pmux_function {
++	char name[MAX_FUNC_NAME_LEN];
++	const char * const *groups;
++	unsigned int ngroups;
++};
++
++/**
++ * struct zynqmp_pinctrl - driver data
++ * @pctrl:	Pin control device
++ * @groups:	Pin groups
++ * @ngroups:	Number of @groups
++ * @funcs:	Pin mux functions
++ * @nfuncs:	Number of @funcs
++ *
++ * This struct is stored as driver data and used to retrieve
++ * information regarding pin control functions, groups and
++ * group pins.
++ */
++struct zynqmp_pinctrl {
++	struct pinctrl_dev *pctrl;
++	const struct zynqmp_pctrl_group *groups;
++	unsigned int ngroups;
++	const struct zynqmp_pmux_function *funcs;
++	unsigned int nfuncs;
++};
++
++/**
++ * struct zynqmp_pctrl_group - Pin control group info
++ * @name:	Group name
++ * @pins:	Group pin numbers
++ * @npins:	Number of pins in the group
++ */
++struct zynqmp_pctrl_group {
++	const char *name;
++	unsigned int pins[MAX_GROUP_PIN];
++	unsigned int npins;
++};
++
++/**
++ * enum zynqmp_pin_config_param - possible pin configuration parameters
++ * @PIN_CONFIG_IOSTANDARD:	if the pin can select an IO standard,
++ *				the argument to this parameter (on a
++ *				custom format) tells the driver which
++ *				alternative IO standard to use
++ * @PIN_CONFIG_SCHMITTCMOS:	this parameter (on a custom format) allows
++ *				to select schmitt or cmos input for MIO pins
++ */
++enum zynqmp_pin_config_param {
++	PIN_CONFIG_IOSTANDARD = PIN_CONFIG_END + 1,
++	PIN_CONFIG_SCHMITTCMOS,
++};
++
++static const struct pinconf_generic_params zynqmp_dt_params[] = {
++	{"io-standard", PIN_CONFIG_IOSTANDARD, IO_STANDARD_LVCMOS18},
++	{"schmitt-cmos", PIN_CONFIG_SCHMITTCMOS, PIN_INPUT_TYPE_SCHMITT},
++};
++
++#ifdef CONFIG_DEBUG_FS
++static const struct
++pin_config_item zynqmp_conf_items[ARRAY_SIZE(zynqmp_dt_params)] = {
++	PCONFDUMP(PIN_CONFIG_IOSTANDARD, "IO-standard", NULL, true),
++	PCONFDUMP(PIN_CONFIG_SCHMITTCMOS, "schmitt-cmos", NULL, true),
++};
++#endif
++
++static struct pinctrl_desc zynqmp_desc;
++
++static int zynqmp_pctrl_get_groups_count(struct pinctrl_dev *pctldev)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	return pctrl->ngroups;
++}
++
++static const char *zynqmp_pctrl_get_group_name(struct pinctrl_dev *pctldev,
++					       unsigned int selector)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	return pctrl->groups[selector].name;
++}
++
++static int zynqmp_pctrl_get_group_pins(struct pinctrl_dev *pctldev,
++				       unsigned int selector,
++				       const unsigned int **pins,
++				       unsigned int *npins)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	*pins = pctrl->groups[selector].pins;
++	*npins = pctrl->groups[selector].npins;
++
++	return 0;
++}
++
++static const struct pinctrl_ops zynqmp_pctrl_ops = {
++	.get_groups_count = zynqmp_pctrl_get_groups_count,
++	.get_group_name = zynqmp_pctrl_get_group_name,
++	.get_group_pins = zynqmp_pctrl_get_group_pins,
++	.dt_node_to_map = pinconf_generic_dt_node_to_map_all,
++	.dt_free_map = pinctrl_utils_free_map,
++};
++
++static int zynqmp_pinmux_request_pin(struct pinctrl_dev *pctldev,
++				     unsigned int pin)
++{
++	int ret;
++
++	ret = zynqmp_pm_pinctrl_request(pin);
++	if (ret) {
++		dev_err(pctldev->dev, "request failed for pin %u\n", pin);
++		return ret;
++	}
++
++	return 0;
++}
++
++static int zynqmp_pmux_get_functions_count(struct pinctrl_dev *pctldev)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	return pctrl->nfuncs;
++}
++
++static const char *zynqmp_pmux_get_function_name(struct pinctrl_dev *pctldev,
++						 unsigned int selector)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	return pctrl->funcs[selector].name;
++}
++
++/**
++ * zynqmp_pmux_get_function_groups() - Get groups for the function
++ * @pctldev:	Pincontrol device pointer.
++ * @selector:	Function ID
++ * @groups:	Group names.
++ * @num_groups:	Number of function groups.
++ *
++ * Get function's group count and group names.
++ */
++static int zynqmp_pmux_get_function_groups(struct pinctrl_dev *pctldev,
++					   unsigned int selector,
++					   const char * const **groups,
++					   unsigned * const num_groups)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++
++	*groups = pctrl->funcs[selector].groups;
++	*num_groups = pctrl->funcs[selector].ngroups;
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinmux_set_mux() - Set requested function for the group
++ * @pctldev:	Pincontrol device pointer.
++ * @function:	Function ID.
++ * @group:	Group ID.
++ *
++ * Loop through all pins of the group and call firmware API
++ * to set requested function for all pins in the group.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinmux_set_mux(struct pinctrl_dev *pctldev,
++				 unsigned int function,
++				 unsigned int group)
++{
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++	const struct zynqmp_pctrl_group *pgrp = &pctrl->groups[group];
++	int ret, i;
++
++	for (i = 0; i < pgrp->npins; i++) {
++		unsigned int pin = pgrp->pins[i];
++
++		ret = zynqmp_pm_pinctrl_set_function(pin, function);
++		if (ret) {
++			dev_err(pctldev->dev, "set mux failed for pin %u\n",
++				pin);
++			return ret;
++		}
++	}
++
++	return 0;
++}
++
++static int zynqmp_pinmux_release_pin(struct pinctrl_dev *pctldev,
++				     unsigned int pin)
++{
++	int ret;
++
++	ret = zynqmp_pm_pinctrl_release(pin);
++	if (ret) {
++		dev_err(pctldev->dev, "free pin failed for pin %u\n",
++			pin);
++		return ret;
++	}
++
++	return 0;
++}
++
++static const struct pinmux_ops zynqmp_pinmux_ops = {
++	.request = zynqmp_pinmux_request_pin,
++	.get_functions_count = zynqmp_pmux_get_functions_count,
++	.get_function_name = zynqmp_pmux_get_function_name,
++	.get_function_groups = zynqmp_pmux_get_function_groups,
++	.set_mux = zynqmp_pinmux_set_mux,
++	.free = zynqmp_pinmux_release_pin,
++};
++
++/**
++ * zynqmp_pinconf_cfg_get() - get config value for the pin
++ * @pctldev:	Pin control device pointer.
++ * @pin:	Pin number.
++ * @config:	Value of config param.
++ *
++ * Get value of the requested configuration parameter for the
++ * given pin.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinconf_cfg_get(struct pinctrl_dev *pctldev,
++				  unsigned int pin,
++				  unsigned long *config)
++{
++	unsigned int arg, param = pinconf_to_config_param(*config);
++	int ret;
++
++	switch (param) {
++	case PIN_CONFIG_SLEW_RATE:
++		param = PM_PINCTRL_CONFIG_SLEW_RATE;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		break;
++	case PIN_CONFIG_BIAS_PULL_UP:
++		param = PM_PINCTRL_CONFIG_PULL_CTRL;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		if (arg != PM_PINCTRL_BIAS_PULL_UP)
++			return -EINVAL;
++
++		arg = 1;
++		break;
++	case PIN_CONFIG_BIAS_PULL_DOWN:
++		param = PM_PINCTRL_CONFIG_PULL_CTRL;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		if (arg != PM_PINCTRL_BIAS_PULL_DOWN)
++			return -EINVAL;
++
++		arg = 1;
++		break;
++	case PIN_CONFIG_BIAS_DISABLE:
++		param = PM_PINCTRL_CONFIG_BIAS_STATUS;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		if (arg != PM_PINCTRL_BIAS_DISABLE)
++			return -EINVAL;
++
++		arg = 1;
++		break;
++	case PIN_CONFIG_IOSTANDARD:
++		dev_warn(pctldev->dev,
++			 "'io-standard' will be deprecated post 2021.2 release, instead use 'power-source'.\n");
++		param = PM_PINCTRL_CONFIG_VOLTAGE_STATUS;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		break;
++	case PIN_CONFIG_POWER_SOURCE:
++		param = PM_PINCTRL_CONFIG_VOLTAGE_STATUS;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		break;
++	case PIN_CONFIG_SCHMITTCMOS:
++		dev_warn(pctldev->dev,
++			 "'schmitt-cmos' will be deprecated post 2021.2 release, instead use 'input-schmitt-enable/disable'.\n");
++		param = PM_PINCTRL_CONFIG_SCHMITT_CMOS;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		break;
++	case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
++		param = PM_PINCTRL_CONFIG_SCHMITT_CMOS;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		break;
++	case PIN_CONFIG_DRIVE_STRENGTH:
++		param = PM_PINCTRL_CONFIG_DRIVE_STRENGTH;
++		ret = zynqmp_pm_pinctrl_get_config(pin, param, &arg);
++		switch (arg) {
++		case PM_PINCTRL_DRIVE_STRENGTH_2MA:
++			arg = DRIVE_STRENGTH_2MA;
++			break;
++		case PM_PINCTRL_DRIVE_STRENGTH_4MA:
++			arg = DRIVE_STRENGTH_4MA;
++			break;
++		case PM_PINCTRL_DRIVE_STRENGTH_8MA:
++			arg = DRIVE_STRENGTH_8MA;
++			break;
++		case PM_PINCTRL_DRIVE_STRENGTH_12MA:
++			arg = DRIVE_STRENGTH_12MA;
++			break;
++		default:
++			/* Invalid drive strength */
++			dev_warn(pctldev->dev,
++				 "Invalid drive strength for pin %d\n",
++				 pin);
++			return -EINVAL;
++		}
++		break;
++	default:
++		ret = -ENOTSUPP;
++		break;
++	}
++
++	if (ret)
++		return ret;
++
++	param = pinconf_to_config_param(*config);
++	*config = pinconf_to_config_packed(param, arg);
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinconf_cfg_set() - Set requested config for the pin
++ * @pctldev:		Pincontrol device pointer.
++ * @pin:		Pin number.
++ * @configs:		Configuration to set.
++ * @num_configs:	Number of configurations.
++ *
++ * Loop through all configurations and call firmware API
++ * to set requested configurations for the pin.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinconf_cfg_set(struct pinctrl_dev *pctldev,
++				  unsigned int pin, unsigned long *configs,
++				  unsigned int num_configs)
++{
++	int i, ret;
++
++	for (i = 0; i < num_configs; i++) {
++		unsigned int param = pinconf_to_config_param(configs[i]);
++		unsigned int arg = pinconf_to_config_argument(configs[i]);
++		unsigned int value;
++
++		switch (param) {
++		case PIN_CONFIG_SLEW_RATE:
++			param = PM_PINCTRL_CONFIG_SLEW_RATE;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_BIAS_PULL_UP:
++			param = PM_PINCTRL_CONFIG_PULL_CTRL;
++			arg = PM_PINCTRL_BIAS_PULL_UP;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_BIAS_PULL_DOWN:
++			param = PM_PINCTRL_CONFIG_PULL_CTRL;
++			arg = PM_PINCTRL_BIAS_PULL_DOWN;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_BIAS_DISABLE:
++			param = PM_PINCTRL_CONFIG_BIAS_STATUS;
++			arg = PM_PINCTRL_BIAS_DISABLE;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_SCHMITTCMOS:
++			dev_warn(pctldev->dev,
++				 "'schmitt-cmos' will be deprecated post 2021.2 release, instead use 'input-schmitt-enable/disable'.\n");
++			param = PM_PINCTRL_CONFIG_SCHMITT_CMOS;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
++			param = PM_PINCTRL_CONFIG_SCHMITT_CMOS;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, arg);
++			break;
++		case PIN_CONFIG_DRIVE_STRENGTH:
++			switch (arg) {
++			case DRIVE_STRENGTH_2MA:
++				value = PM_PINCTRL_DRIVE_STRENGTH_2MA;
++				break;
++			case DRIVE_STRENGTH_4MA:
++				value = PM_PINCTRL_DRIVE_STRENGTH_4MA;
++				break;
++			case DRIVE_STRENGTH_8MA:
++				value = PM_PINCTRL_DRIVE_STRENGTH_8MA;
++				break;
++			case DRIVE_STRENGTH_12MA:
++				value = PM_PINCTRL_DRIVE_STRENGTH_12MA;
++				break;
++			default:
++				/* Invalid drive strength */
++				dev_warn(pctldev->dev,
++					 "Invalid drive strength for pin %d\n",
++					 pin);
++				return -EINVAL;
++			}
++
++			param = PM_PINCTRL_CONFIG_DRIVE_STRENGTH;
++			ret = zynqmp_pm_pinctrl_set_config(pin, param, value);
++			break;
++		case PIN_CONFIG_IOSTANDARD:
++			dev_warn(pctldev->dev,
++				 "'io-standard' will be deprecated post 2021.2 release, instead use 'power-source'.\n");
++			param = PM_PINCTRL_CONFIG_VOLTAGE_STATUS;
++			ret = zynqmp_pm_pinctrl_get_config(pin, param, &value);
++			if (arg != value)
++				dev_warn(pctldev->dev,
++					 "Invalid IO Standard requested for pin %d\n",
++					 pin);
++			break;
++		case PIN_CONFIG_POWER_SOURCE:
++			param = PM_PINCTRL_CONFIG_VOLTAGE_STATUS;
++			ret = zynqmp_pm_pinctrl_get_config(pin, param, &value);
++
++			if (arg != value)
++				dev_warn(pctldev->dev,
++					 "Invalid IO Standard requested for pin %d\n",
++					 pin);
++
++			break;
++		case PIN_CONFIG_BIAS_HIGH_IMPEDANCE:
++		case PIN_CONFIG_LOW_POWER_MODE:
++			/*
++			 * This cases are mentioned in dts but configurable
++			 * registers are unknown. So falling through to ignore
++			 * boot time warnings as of now.
++			 */
++			ret = 0;
++			break;
++		default:
++			dev_warn(pctldev->dev,
++				 "unsupported configuration parameter '%u'\n",
++				 param);
++			ret = -ENOTSUPP;
++			break;
++		}
++
++		param = pinconf_to_config_param(configs[i]);
++		arg = pinconf_to_config_argument(configs[i]);
++		if (ret)
++			dev_warn(pctldev->dev,
++				 "failed to set: pin %u param %u value %u\n",
++				 pin, param, arg);
++	}
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinconf_group_set() - Set requested config for the group
++ * @pctldev:		Pincontrol device pointer.
++ * @selector:		Group ID.
++ * @configs:		Configuration to set.
++ * @num_configs:	Number of configurations.
++ *
++ * Call function to set configs for each pin in the group.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinconf_group_set(struct pinctrl_dev *pctldev,
++				    unsigned int selector,
++				    unsigned long *configs,
++				    unsigned int num_configs)
++{
++	int i, ret;
++	struct zynqmp_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
++	const struct zynqmp_pctrl_group *pgrp = &pctrl->groups[selector];
++
++	for (i = 0; i < pgrp->npins; i++) {
++		ret = zynqmp_pinconf_cfg_set(pctldev, pgrp->pins[i], configs,
++					     num_configs);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++static const struct pinconf_ops zynqmp_pinconf_ops = {
++	.is_generic = true,
++	.pin_config_get = zynqmp_pinconf_cfg_get,
++	.pin_config_set = zynqmp_pinconf_cfg_set,
++	.pin_config_group_set = zynqmp_pinconf_group_set,
++};
++
++static struct pinctrl_desc zynqmp_desc = {
++	.name = "zynqmp_pinctrl",
++	.owner = THIS_MODULE,
++	.pctlops = &zynqmp_pctrl_ops,
++	.pmxops = &zynqmp_pinmux_ops,
++	.confops = &zynqmp_pinconf_ops,
++#ifdef CONFIG_DEBUG_FS
++	.custom_conf_items = zynqmp_conf_items,
++#endif
++};
++
++static int zynqmp_pinctrl_get_function_groups(u32 fid, u32 index, u16 *groups)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	qdata.qid = PM_QID_PINCTRL_GET_FUNCTION_GROUPS;
++	qdata.arg1 = fid;
++	qdata.arg2 = index;
++
++	ret = zynqmp_pm_query_data(qdata, payload);
++	if (ret)
++		return ret;
++
++	memcpy(groups, &payload[1], PINCTRL_GET_FUNC_GROUPS_RESP_LEN);
++
++	return 0;
++}
++
++static int zynqmp_pinctrl_get_func_num_groups(u32 fid, unsigned int *ngroups)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	qdata.qid = PM_QID_PINCTRL_GET_NUM_FUNCTION_GROUPS;
++	qdata.arg1 = fid;
++
++	ret = zynqmp_pm_query_data(qdata, payload);
++	if (ret)
++		return ret;
++
++	*ngroups = payload[1];
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinctrl_prepare_func_groups() - prepare function and groups data
++ * @dev:	Device pointer.
++ * @fid:	Function ID.
++ * @func:	Function data.
++ * @groups:	Groups data.
++ *
++ * Query firmware to get group IDs for each function. Firmware returns
++ * group IDs. Based on the group index for the function, group names in
++ * the function are stored. For example, the first group in "eth0" function
++ * is named as "eth0_0" and the second group as "eth0_1" and so on.
++ *
++ * Based on the group ID received from the firmware, function stores name of
++ * the group for that group ID. For example, if "eth0" first group ID
++ * is x, groups[x] name will be stored as "eth0_0".
++ *
++ * Once done for each function, each function would have its group names
++ * and each group would also have their names.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinctrl_prepare_func_groups(struct device *dev, u32 fid,
++					      struct zynqmp_pmux_function *func,
++					      struct zynqmp_pctrl_group *groups)
++{
++	u16 resp[NUM_GROUPS_PER_RESP] = {0};
++	const char **fgroups;
++	int ret, index, i;
++
++	fgroups = devm_kzalloc(dev, sizeof(*fgroups) * func->ngroups, GFP_KERNEL);
++	if (!fgroups)
++		return -ENOMEM;
++
++	for (index = 0; index < func->ngroups; index += NUM_GROUPS_PER_RESP) {
++		ret = zynqmp_pinctrl_get_function_groups(fid, index, resp);
++		if (ret)
++			return ret;
++
++		for (i = 0; i < NUM_GROUPS_PER_RESP; i++) {
++			if (resp[i] == NA_GROUP)
++				goto done;
++
++			if (resp[i] == RESERVED_GROUP)
++				continue;
++
++			fgroups[index + i] = devm_kasprintf(dev, GFP_KERNEL,
++							    "%s_%d_grp",
++							    func->name,
++							    index + i);
++			if (!fgroups[index + i])
++				return -ENOMEM;
++
++			groups[resp[i]].name = devm_kasprintf(dev, GFP_KERNEL,
++							      "%s_%d_grp",
++							      func->name,
++							      index + i);
++			if (!groups[resp[i]].name)
++				return -ENOMEM;
++		}
++	}
++done:
++	func->groups = fgroups;
++
++	return 0;
++}
++
++static void zynqmp_pinctrl_get_function_name(u32 fid, char *name)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++
++	qdata.qid = PM_QID_PINCTRL_GET_FUNCTION_NAME;
++	qdata.arg1 = fid;
++
++	/*
++	 * Name of the function is maximum 16 bytes and cannot
++	 * accommodate the return value in SMC buffers, hence ignoring
++	 * the return value for this specific qid.
++	 */
++	zynqmp_pm_query_data(qdata, payload);
++	memcpy(name, payload, PINCTRL_GET_FUNC_NAME_RESP_LEN);
++}
++
++static int zynqmp_pinctrl_get_num_functions(unsigned int *nfuncs)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	qdata.qid = PM_QID_PINCTRL_GET_NUM_FUNCTIONS;
++
++	ret = zynqmp_pm_query_data(qdata, payload);
++	if (ret)
++		return ret;
++
++	*nfuncs = payload[1];
++
++	return 0;
++}
++
++static int zynqmp_pinctrl_get_pin_groups(u32 pin, u32 index, u16 *groups)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	qdata.qid = PM_QID_PINCTRL_GET_PIN_GROUPS;
++	qdata.arg1 = pin;
++	qdata.arg2 = index;
++
++	ret = zynqmp_pm_query_data(qdata, payload);
++	if (ret)
++		return ret;
++
++	memcpy(groups, &payload[1], PINCTRL_GET_PIN_GROUPS_RESP_LEN);
++
++	return 0;
++}
++
++static void zynqmp_pinctrl_group_add_pin(struct zynqmp_pctrl_group *group,
++					 unsigned int pin)
++{
++	group->pins[group->npins++] = pin;
++}
++
++/**
++ * zynqmp_pinctrl_create_pin_groups() - assign pins to respective groups
++ * @dev:	Device pointer.
++ * @groups:	Groups data.
++ * @pin:	Pin number.
++ *
++ * Query firmware to get groups available for the given pin.
++ * Based on the firmware response(group IDs for the pin), add
++ * pin number to the respective group's pin array.
++ *
++ * Once all pins are queries, each group would have its number
++ * of pins and pin numbers data.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinctrl_create_pin_groups(struct device *dev,
++					    struct zynqmp_pctrl_group *groups,
++					    unsigned int pin)
++{
++	u16 resp[NUM_GROUPS_PER_RESP] = {0};
++	int ret, i, index = 0;
++
++	do {
++		ret = zynqmp_pinctrl_get_pin_groups(pin, index, resp);
++		if (ret)
++			return ret;
++
++		for (i = 0; i < NUM_GROUPS_PER_RESP; i++) {
++			if (resp[i] == NA_GROUP)
++				return ret;
++
++			if (resp[i] == RESERVED_GROUP)
++				continue;
++
++			zynqmp_pinctrl_group_add_pin(&groups[resp[i]], pin);
++		}
++		index += NUM_GROUPS_PER_RESP;
++	} while (index <= MAX_PIN_GROUPS);
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinctrl_prepare_group_pins() - prepare each group's pin data
++ * @dev:	Device pointer.
++ * @groups:	Groups data.
++ * @ngroups:	Number of groups.
++ *
++ * Prepare pin number and number of pins data for each pins.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinctrl_prepare_group_pins(struct device *dev,
++					     struct zynqmp_pctrl_group *groups,
++					     unsigned int ngroups)
++{
++	unsigned int pin;
++	int ret;
++
++	for (pin = 0; pin < zynqmp_desc.npins; pin++) {
++		ret = zynqmp_pinctrl_create_pin_groups(dev, groups, pin);
++		if (ret)
++			return ret;
++	}
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinctrl_prepare_function_info() - prepare function info
++ * @dev:	Device pointer.
++ * @pctrl:	Pin control driver data.
++ *
++ * Query firmware for functions, groups and pin information and
++ * prepare pin control driver data.
++ *
++ * Query number of functions and number of function groups (number
++ * of groups in the given function) to allocate required memory buffers
++ * for functions and groups. Once buffers are allocated to store
++ * functions and groups data, query and store required information
++ * (number of groups and group names for each function, number of
++ * pins and pin numbers for each group).
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinctrl_prepare_function_info(struct device *dev,
++						struct zynqmp_pinctrl *pctrl)
++{
++	struct zynqmp_pmux_function *funcs;
++	struct zynqmp_pctrl_group *groups;
++	int ret, i;
++
++	ret = zynqmp_pinctrl_get_num_functions(&pctrl->nfuncs);
++	if (ret)
++		return ret;
++
++	funcs = devm_kzalloc(dev, sizeof(*funcs) * pctrl->nfuncs, GFP_KERNEL);
++	if (!funcs)
++		return -ENOMEM;
++
++	for (i = 0; i < pctrl->nfuncs; i++) {
++		zynqmp_pinctrl_get_function_name(i, funcs[i].name);
++
++		ret = zynqmp_pinctrl_get_func_num_groups(i, &funcs[i].ngroups);
++		if (ret)
++			return ret;
++
++		pctrl->ngroups += funcs[i].ngroups;
++	}
++
++	groups = devm_kzalloc(dev, sizeof(*groups) * pctrl->ngroups, GFP_KERNEL);
++	if (!groups)
++		return -ENOMEM;
++
++	for (i = 0; i < pctrl->nfuncs; i++) {
++		ret = zynqmp_pinctrl_prepare_func_groups(dev, i, &funcs[i],
++							 groups);
++		if (ret)
++			return ret;
++	}
++
++	ret = zynqmp_pinctrl_prepare_group_pins(dev, groups, pctrl->ngroups);
++	if (ret)
++		return ret;
++
++	pctrl->funcs = funcs;
++	pctrl->groups = groups;
++
++	return 0;
++}
++
++static int zynqmp_pinctrl_get_num_pins(unsigned int *npins)
++{
++	struct zynqmp_pm_query_data qdata = {0};
++	u32 payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	qdata.qid = PM_QID_PINCTRL_GET_NUM_PINS;
++
++	ret = zynqmp_pm_query_data(qdata, payload);
++	if (ret)
++		return ret;
++
++	*npins = payload[1];
++
++	return 0;
++}
++
++/**
++ * zynqmp_pinctrl_prepare_pin_desc() - prepare pin description info
++ * @dev:		Device pointer.
++ * @zynqmp_pins:	Pin information.
++ * @npins:		Number of pins.
++ *
++ * Query number of pins information from firmware and prepare pin
++ * description containing pin number and pin name.
++ *
++ * Return: 0 on success else error code.
++ */
++static int zynqmp_pinctrl_prepare_pin_desc(struct device *dev,
++					   const struct pinctrl_pin_desc
++					   **zynqmp_pins,
++					   unsigned int *npins)
++{
++	struct pinctrl_pin_desc *pins, *pin;
++	int ret;
++	int i;
++
++	ret = zynqmp_pinctrl_get_num_pins(npins);
++	if (ret)
++		return ret;
++
++	pins = devm_kzalloc(dev, sizeof(*pins) * *npins, GFP_KERNEL);
++	if (!pins)
++		return -ENOMEM;
++
++	for (i = 0; i < *npins; i++) {
++		pin = &pins[i];
++		pin->number = i;
++		pin->name = devm_kasprintf(dev, GFP_KERNEL, "%s%d",
++					   ZYNQMP_PIN_PREFIX, i);
++		if (!pin->name)
++			return -ENOMEM;
++	}
++
++	*zynqmp_pins = pins;
++
++	return 0;
++}
++
++static int zynqmp_pinctrl_probe(struct platform_device *pdev)
++{
++	struct zynqmp_pinctrl *pctrl;
++	int ret;
++
++	pctrl = devm_kzalloc(&pdev->dev, sizeof(*pctrl), GFP_KERNEL);
++	if (!pctrl)
++		return -ENOMEM;
++
++	ret = zynqmp_pinctrl_prepare_pin_desc(&pdev->dev,
++					      &zynqmp_desc.pins,
++					      &zynqmp_desc.npins);
++	if (ret) {
++		dev_err(&pdev->dev, "pin desc prepare fail with %d\n", ret);
++		return ret;
++	}
++
++	ret = zynqmp_pinctrl_prepare_function_info(&pdev->dev, pctrl);
++	if (ret) {
++		dev_err(&pdev->dev, "function info prepare fail with %d\n", ret);
++		return ret;
++	}
++
++	pctrl->pctrl = devm_pinctrl_register(&pdev->dev, &zynqmp_desc, pctrl);
++	if (IS_ERR(pctrl->pctrl))
++		return PTR_ERR(pctrl->pctrl);
++
++
++	platform_set_drvdata(pdev, pctrl);
++
++	dev_info(&pdev->dev, "zynqmp pinctrl initialized\n");
++
++	return 0;
++}
++
++static const struct of_device_id zynqmp_pinctrl_of_match[] = {
++	{ .compatible = "xlnx,zynqmp-pinctrl" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, zynqmp_pinctrl_of_match);
++
++static struct platform_driver zynqmp_pinctrl_driver = {
++	.driver = {
++		.name = "zynqmp-pinctrl",
++		.of_match_table = zynqmp_pinctrl_of_match,
++	},
++	.probe = zynqmp_pinctrl_probe,
++};
++module_platform_driver(zynqmp_pinctrl_driver);
++
++MODULE_AUTHOR("Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>");
++MODULE_DESCRIPTION("ZynqMP Pin Controller Driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/include/dt-bindings/pinctrl/pinctrl-zynq.h b/include/dt-bindings/pinctrl/pinctrl-zynq.h
+new file mode 100644
+index 000000000..bbfc345f0
+--- /dev/null
++++ b/include/dt-bindings/pinctrl/pinctrl-zynq.h
+@@ -0,0 +1,17 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * MIO pin configuration defines for Xilinx Zynq
++ *
++ * Copyright (C) 2021 Xilinx, Inc.
++ */
++
++#ifndef _DT_BINDINGS_PINCTRL_ZYNQ_H
++#define _DT_BINDINGS_PINCTRL_ZYNQ_H
++
++/* Configuration options for different power supplies */
++#define IO_STANDARD_LVCMOS18	1
++#define IO_STANDARD_LVCMOS25	2
++#define IO_STANDARD_LVCMOS33	3
++#define IO_STANDARD_HSTL	4
++
++#endif /* _DT_BINDINGS_PINCTRL_ZYNQ_H */
+diff --git a/include/dt-bindings/pinctrl/pinctrl-zynqmp.h b/include/dt-bindings/pinctrl/pinctrl-zynqmp.h
+new file mode 100644
+index 000000000..509190aa4
+--- /dev/null
++++ b/include/dt-bindings/pinctrl/pinctrl-zynqmp.h
+@@ -0,0 +1,29 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * MIO pin configuration defines for Xilinx ZynqMP
++ *
++ * Copyright (C) 2020 Xilinx, Inc.
++ */
++
++#ifndef _DT_BINDINGS_PINCTRL_ZYNQMP_H
++#define _DT_BINDINGS_PINCTRL_ZYNQMP_H
++
++/* Bit value for IO standards */
++#define IO_STANDARD_LVCMOS33	0
++#define IO_STANDARD_LVCMOS18	1
++
++/* Bit values for Slew Rates */
++#define SLEW_RATE_FAST		0
++#define SLEW_RATE_SLOW		1
++
++/* Bit values for Pin inputs */
++#define PIN_INPUT_TYPE_CMOS	0
++#define PIN_INPUT_TYPE_SCHMITT	1
++
++/* Bit values for drive control*/
++#define DRIVE_STRENGTH_2MA	2
++#define DRIVE_STRENGTH_4MA	4
++#define DRIVE_STRENGTH_8MA	8
++#define DRIVE_STRENGTH_12MA	12
++
++#endif /* _DT_BINDINGS_PINCTRL_ZYNQMP_H */

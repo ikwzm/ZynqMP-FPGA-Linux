@@ -1,0 +1,1752 @@
+diff --git a/Documentation/ABI/testing/sysfs-class-fpga-bridge b/Documentation/ABI/testing/sysfs-class-fpga-bridge
+index 312ae2c57..676700d7a 100644
+--- a/Documentation/ABI/testing/sysfs-class-fpga-bridge
++++ b/Documentation/ABI/testing/sysfs-class-fpga-bridge
+@@ -9,3 +9,12 @@ Date:		January 2016
+ KernelVersion:	4.5
+ Contact:	Alan Tull <atull@opensource.altera.com>
+ Description:	Show bridge state as "enabled" or "disabled"
++
++What:		/sys/class/fpga_bridge/<bridge>/set
++Date:		January 2017
++KernelVersion:	4.9
++Contact:	Michal Simek <michal.simek@xilinx.com>
++Description:	Manual set bridge state (0-disable, !0 enable).
++		Enabling this option requires that the module is
++		compiled with #define DEBUG which is enabled by default
++		when CONFIG_DEBUG_KERNEL is setup.
+diff --git a/Documentation/devicetree/bindings/fpga/fpga-region.txt b/Documentation/devicetree/bindings/fpga/fpga-region.txt
+index e811cf825..d714eadcf 100644
+--- a/Documentation/devicetree/bindings/fpga/fpga-region.txt
++++ b/Documentation/devicetree/bindings/fpga/fpga-region.txt
+@@ -187,6 +187,12 @@ Optional properties:
+ - external-fpga-config : boolean, set if the FPGA has already been configured
+ 	prior to OS boot up.
+ - encrypted-fpga-config : boolean, set if the bitstream is encrypted
++- userkey-encrypted-fpga-config: boolean, set if the bitstream is encrypted with
++	user key.
++- ddrmem-authenticated-fpga-config: boolean, if set do bitstream authentication
++	using DDR memory.
++- securemem-authenticated-fpga-config: boolean, if set do bitstream
++	authenticated using secure memory.
+ - region-unfreeze-timeout-us : The maximum time in microseconds to wait for
+ 	bridges to successfully become enabled after the region has been
+ 	programmed.
+@@ -196,6 +202,20 @@ Optional properties:
+ - config-complete-timeout-us : The maximum time in microseconds time for the
+ 	FPGA to go to operating mode after the region has been programmed.
+ - child nodes : devices in the FPGA after programming.
++- power-domains : A phandle and PM domain specifier as defined by bindings of
++	the power controller specified by phandle.
++Example:
++	fpga_full: fpga-full {
++                compatible = "fpga-region";
++                fpga-mgr = <&zynqmp_pcap>;
++                #address-cells = <2>;
++                #size-cells = <2>;
++                ranges;
++                power-domains = <&zynqmp_firmware PL_PD>;
++        };
++
++	The PL_PD power domain will be turned on before loading the bitstream
++and turned off while removing/unloading the bitstream using overlays.
+ 
+ In the example below, when an overlay is applied targeting fpga-region0,
+ fpga_mgr is used to program the FPGA.  Two bridges are controlled during
+diff --git a/Documentation/devicetree/bindings/fpga/xilinx-pr-decoupler.txt b/Documentation/devicetree/bindings/fpga/xilinx-pr-decoupler.txt
+index 4284d293f..42fca058a 100644
+--- a/Documentation/devicetree/bindings/fpga/xilinx-pr-decoupler.txt
++++ b/Documentation/devicetree/bindings/fpga/xilinx-pr-decoupler.txt
+@@ -7,13 +7,26 @@ changes from passing through the bridge.  The controller can also
+ couple / enable the bridges which allows traffic to pass through the
+ bridge normally.
+ 
++Xilinx LogiCORE Dynamic Function eXchange(DFX) AXI shutdown manager
++Softcore
++
++The Xilinx LogiCORE Dynamic Function eXchange(DFX) AXI shutdown manager
++manages one or more shutdown managers / fpga bridges.
++The controller can shutdown/passthrough the bridges which prevents
++AXI traffic from passing through the bridge. The controller safely
++handles AXI4MM and AXI4-Lite interfaces on a Reconfigurable Partition
++when it is undergoing dynamic reconfiguration (DFX), preventing system
++deadlock that can occur if AXI transactions are interrupted by DFX
++
+ The Driver supports only MMIO handling. A PR region can have multiple
+-PR Decouplers which can be handled independently or chained via decouple/
+-decouple_status signals.
++PR Decouplers/AXI shutdown manager which can be handled independently
++or chained via decouple/ decouple_status signals.
+ 
+ Required properties:
+ - compatible		: Should contain "xlnx,pr-decoupler-1.00" followed by
+-                          "xlnx,pr-decoupler"
++                          "xlnx,pr-decoupler" or
++			  "xlnx,dfx-axi-shutdown-manager-1.00" followed by
++			  "xlnx,dfx-axi-shutdown-manager"
+ - regs			: base address and size for decoupler module
+ - clocks		: input clock to IP
+ - clock-names		: should contain "aclk"
+diff --git a/Documentation/devicetree/bindings/fpga/xilinx-zynq-fpga-mgr.yaml b/Documentation/devicetree/bindings/fpga/xilinx-zynq-fpga-mgr.yaml
+new file mode 100644
+index 000000000..29daca4be
+--- /dev/null
++++ b/Documentation/devicetree/bindings/fpga/xilinx-zynq-fpga-mgr.yaml
+@@ -0,0 +1,52 @@
++# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/fpga/xilinx-zynq-fpga-mgr.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Zynq FPGA Manager Device Tree Bindings
++
++maintainers:
++  - Michal Simek <michal.simek@xilinx.com>
++
++properties:
++  compatible:
++    const: xlnx,zynq-devcfg-1.0
++
++  reg:
++    maxItems: 1
++
++  interrupts:
++    maxItems: 1
++
++  clocks:
++    maxItems: 1
++
++  clock-names:
++    items:
++      - const: ref_clk
++
++  syscon:
++    $ref: /schemas/types.yaml#/definitions/phandle
++    description:
++      Phandle to syscon block which provide access to SLCR registers
++
++required:
++  - compatible
++  - reg
++  - clocks
++  - clock-names
++  - syscon
++
++additionalProperties: false
++
++examples:
++  - |
++    devcfg: devcfg@f8007000 {
++      compatible = "xlnx,zynq-devcfg-1.0";
++      reg = <0xf8007000 0x100>;
++      interrupts = <0 8 4>;
++      clocks = <&clkc 12>;
++      clock-names = "ref_clk";
++      syscon = <&slcr>;
++    };
+diff --git a/Documentation/devicetree/bindings/fpga/xlnx,afi-fpga.txt b/Documentation/devicetree/bindings/fpga/xlnx,afi-fpga.txt
+new file mode 100644
+index 000000000..85f897001
+--- /dev/null
++++ b/Documentation/devicetree/bindings/fpga/xlnx,afi-fpga.txt
+@@ -0,0 +1,61 @@
++Xilinx ZynqMp AFI interface Manager
++
++The Zynq UltraScale+ MPSoC Processing System core provides access from PL
++masters to PS internal peripherals, and memory through AXI FIFO interface
++(AFI) interfaces.
++
++Required properties:
++-compatible:		Should contain "xlnx,afi-fpga"
++-config-afi:		Pairs of  <regid value >
++
++The possible values of regid and values are
++ regid:		Regids of the register to be written possible values
++		0- AFIFM0_RDCTRL
++		1- AFIFM0_WRCTRL
++		2- AFIFM1_RDCTRL
++		3- AFIFM1_WRCTRL
++		4- AFIFM2_RDCTRL
++		5- AFIFM2_WRCTRL
++		6- AFIFM3_RDCTRL
++		7- AFIFM3_WRCTRL
++		8- AFIFM4_RDCTRL
++		9- AFIFM4_WRCTRL
++		10- AFIFM5_RDCTRL
++		11- AFIFM5_WRCTRL
++		12- AFIFM6_RDCTRL
++		13- AFIFM6_WRCTRL
++		14- AFIFS
++		15- AFIFS_SS2
++- value:	Array of values to be written.
++		for FM0_RDCTRL(0) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM0_WRCTRL(1) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM1_RDCTRL(2) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM1_WRCTRL(3) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM2_RDCTRL(4) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM2_WRCTRL(5) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM3_RDCTRL(6) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM3_WRCTRL(7) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM4_RDCTRL(8) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM4_WRCTRL(9) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM5_RDCTRL(10) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM5_WRCTRL(11) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM6_RDCTRL(12) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for FM6_WRCTRL(13) the valid values-fabric width   2: 32-bit,1 : 64-bit ,0: 128-bit enabled
++		for AFI_FA(14)
++			dw_ss1_sel	bits (11:10)
++			dw_ss0_sel	bits (9:8)
++				0x0: 32-bit AXI data width),
++				0x1: 64-bit AXI data width,
++				0x2: 128-bit AXI data
++		All other bits are 0 write ignored.
++
++		for AFI_FA(15)  selects for ss2AXI data width valid values
++					0x000: 32-bit AXI data width),
++					0x100: 64-bit AXI data width,
++					0x200: 128-bit AXI data
++
++Example:
++afi0: afi0 {
++	compatible = "xlnx,afi-fpga";
++	config-afi = <0 2>, <1 1>, <2 1>;
++};
+diff --git a/Documentation/devicetree/bindings/fpga/xlnx,versal-fpga.txt b/Documentation/devicetree/bindings/fpga/xlnx,versal-fpga.txt
+new file mode 100644
+index 000000000..acca970cd
+--- /dev/null
++++ b/Documentation/devicetree/bindings/fpga/xlnx,versal-fpga.txt
+@@ -0,0 +1,10 @@
++Device Tree versal-fpga bindings for the Versal SOC, Controlled
++using Versal SoC firmware interface.
++
++Required properties:
++- compatible: should contain "xlnx,versal-fpga"
++
++Example:
++	versal_fpga: fpga {
++		compatible = "xlnx,versal-fpga";
++	};
+diff --git a/Documentation/devicetree/bindings/fpga/xlnx,zynq-afi-fpga.txt b/Documentation/devicetree/bindings/fpga/xlnx,zynq-afi-fpga.txt
+new file mode 100644
+index 000000000..e00942cf3
+--- /dev/null
++++ b/Documentation/devicetree/bindings/fpga/xlnx,zynq-afi-fpga.txt
+@@ -0,0 +1,19 @@
++Xilinx Zynq AFI interface Manager
++
++The Zynq Processing System core provides access from PL masters to PS
++internal peripherals, and memory through AXI FIFO interface
++(AFI) interfaces.
++
++Required properties:
++-compatible:	Should contain "xlnx,zynq-afi-fpga"
++-reg:	Physical base address and size of the controller's register area.
++-xlnx,afi-buswidth :	Size of the afi bus width.
++			0: 64-bit AXI data width,
++			1: 32-bit AXI data width,
++
++Example:
++afi0: afi0 {
++	compatible = "xlnx,zynq-afi-fpga";
++	reg = <0xf8008000 0x1000>;
++	xlnx,afi-buswidth = <1>;
++};
+diff --git a/drivers/fpga/Kconfig b/drivers/fpga/Kconfig
+index 5645226ca..061ca24d1 100644
+--- a/drivers/fpga/Kconfig
++++ b/drivers/fpga/Kconfig
+@@ -12,6 +12,16 @@ menuconfig FPGA
+ 
+ if FPGA
+ 
++config FPGA_MGR_DEBUG_FS
++	tristate "FPGA debug fs"
++	select DEBUG_FS
++	help
++	  Say Y here if you want to expose a DebugFS interface for the
++	  FPGA Manager Framework. FPGA manager DebugFS provides a user
++	  interface to read the fpga specific configuration information.
++
++	  If unsure, say N.
++
+ config FPGA_MGR_SOCFPGA
+ 	tristate "Altera SOCFPGA FPGA Manager"
+ 	depends on ARCH_SOCFPGA || COMPILE_TEST
+@@ -91,6 +101,24 @@ config FPGA_MGR_TS73XX
+ 	  FPGA manager driver support for the Altera Cyclone II FPGA
+ 	  present on the TS-73xx SBC boards.
+ 
++config FPGA_MGR_ZYNQ_AFI_FPGA
++	bool "Xilinx AFI FPGA"
++	depends on FPGA_MGR_ZYNQ_FPGA
++	help
++	  Zynq AFI driver support for writing to the AFI registers
++	  for configuring the PS_PL interface. For some of the bitstream
++	  or designs to work the PS to PL interfaces need to be configured
++	  like the data bus-width etc.
++
++config XILINX_AFI_FPGA
++	bool "Xilinx AFI FPGA"
++	depends on FPGA_MGR_ZYNQMP_FPGA || COMPILE_TEST
++	help
++	  FPGA manager driver support for writing to the AFI registers
++	  for configuring the PS_PL interface. For some of the bitstream
++	  or designs to work the PS to PL interfaces need to be configured
++	  like the datawidth etc.
++
+ config FPGA_BRIDGE
+ 	tristate "FPGA Bridge Framework"
+ 	help
+@@ -216,4 +244,13 @@ config FPGA_MGR_ZYNQMP_FPGA
+ 	  to configure the programmable logic(PL) through PS
+ 	  on ZynqMP SoC.
+ 
++config FPGA_MGR_VERSAL_FPGA
++	tristate "Xilinx Versal FPGA"
++	depends on ARCH_ZYNQMP || COMPILE_TEST
++	help
++	  Select this option to enable FPGA manager driver support for
++	  Xilinx Versal SOC. This driver uses the versal soc firmware
++	  interface to load programmable logic(PL) images
++	  on versal soc.
++
+ endif # FPGA
+diff --git a/drivers/fpga/Makefile b/drivers/fpga/Makefile
+index d8e21dfc6..b8bec247a 100644
+--- a/drivers/fpga/Makefile
++++ b/drivers/fpga/Makefile
+@@ -17,7 +17,10 @@ obj-$(CONFIG_FPGA_MGR_STRATIX10_SOC)	+= stratix10-soc.o
+ obj-$(CONFIG_FPGA_MGR_TS73XX)		+= ts73xx-fpga.o
+ obj-$(CONFIG_FPGA_MGR_XILINX_SPI)	+= xilinx-spi.o
+ obj-$(CONFIG_FPGA_MGR_ZYNQ_FPGA)	+= zynq-fpga.o
++obj-$(CONFIG_FPGA_MGR_ZYNQ_AFI_FPGA)	+= zynq-afi.o
+ obj-$(CONFIG_FPGA_MGR_ZYNQMP_FPGA)	+= zynqmp-fpga.o
++obj-$(CONFIG_FPGA_MGR_VERSAL_FPGA)	+= versal-fpga.o
++obj-$(CONFIG_XILINX_AFI_FPGA)		+= xilinx-afi.o
+ obj-$(CONFIG_ALTERA_PR_IP_CORE)         += altera-pr-ip-core.o
+ obj-$(CONFIG_ALTERA_PR_IP_CORE_PLAT)    += altera-pr-ip-core-plat.o
+ 
+diff --git a/drivers/fpga/fpga-bridge.c b/drivers/fpga/fpga-bridge.c
+index 2deccacc3..5f1219bb1 100644
+--- a/drivers/fpga/fpga-bridge.c
++++ b/drivers/fpga/fpga-bridge.c
+@@ -13,6 +13,12 @@
+ #include <linux/slab.h>
+ #include <linux/spinlock.h>
+ 
++/* For enabling manual bridge set(enable/disable) function */
++#ifdef CONFIG_DEBUG_KERNEL
++#undef DEBUG
++#define DEBUG
++#endif
++
+ static DEFINE_IDA(fpga_bridge_ida);
+ static struct class *fpga_bridge_class;
+ 
+@@ -304,9 +310,33 @@ static ssize_t state_show(struct device *dev,
+ static DEVICE_ATTR_RO(name);
+ static DEVICE_ATTR_RO(state);
+ 
++#ifdef DEBUG
++static ssize_t set_store(struct device *dev,
++			 struct device_attribute *attr,
++			 const char *buf, size_t count)
++{
++	struct fpga_bridge *bridge = to_fpga_bridge(dev);
++	long enable;
++	int ret;
++
++	ret = kstrtol(buf, 16, &enable);
++	if (ret)
++		return ret;
++
++	if (bridge->br_ops && bridge->br_ops->enable_set)
++		enable = bridge->br_ops->enable_set(bridge, !!enable);
++
++	return count;
++}
++static DEVICE_ATTR_WO(set);
++#endif
++
+ static struct attribute *fpga_bridge_attrs[] = {
+ 	&dev_attr_name.attr,
+ 	&dev_attr_state.attr,
++#ifdef DEBUG
++	&dev_attr_set.attr,
++#endif
+ 	NULL,
+ };
+ ATTRIBUTE_GROUPS(fpga_bridge);
+diff --git a/drivers/fpga/fpga-mgr.c b/drivers/fpga/fpga-mgr.c
+index f38bab014..d2fe4700d 100644
+--- a/drivers/fpga/fpga-mgr.c
++++ b/drivers/fpga/fpga-mgr.c
+@@ -8,6 +8,9 @@
+  * With code from the mailing list:
+  * Copyright (C) 2013 Xilinx, Inc.
+  */
++#include <linux/dma-buf.h>
++#include <linux/dma-map-ops.h>
++#include <linux/kernel.h>
+ #include <linux/firmware.h>
+ #include <linux/fpga/fpga-mgr.h>
+ #include <linux/idr.h>
+@@ -177,6 +180,9 @@ static int fpga_mgr_buf_load_sg(struct fpga_manager *mgr,
+ {
+ 	int ret;
+ 
++	if (info->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM)
++		memcpy(info->key, mgr->key, ENCRYPTED_KEY_LEN);
++
+ 	ret = fpga_mgr_write_init_sg(mgr, info, sgt);
+ 	if (ret)
+ 		return ret;
+@@ -302,6 +308,39 @@ static int fpga_mgr_buf_load(struct fpga_manager *mgr,
+ 	return rc;
+ }
+ 
++static int fpga_dmabuf_load(struct fpga_manager *mgr,
++			    struct fpga_image_info *info)
++{
++	struct dma_buf_attachment *attach;
++	struct sg_table *sgt;
++	int ret;
++
++	/* create attachment for dmabuf with the user device */
++	attach = dma_buf_attach(mgr->dmabuf, &mgr->dev);
++	if (IS_ERR(attach)) {
++		pr_err("failed to attach dmabuf\n");
++		ret = PTR_ERR(attach);
++		goto fail_put;
++	}
++
++	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
++	if (IS_ERR(sgt)) {
++		ret = PTR_ERR(sgt);
++		goto fail_detach;
++	}
++
++	info->sgt = sgt;
++	ret = fpga_mgr_buf_load_sg(mgr, info, info->sgt);
++	dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
++
++fail_detach:
++	dma_buf_detach(mgr->dmabuf, attach);
++fail_put:
++	dma_buf_put(mgr->dmabuf);
++
++	return ret;
++}
++
+ /**
+  * fpga_mgr_firmware_load - request firmware and load to fpga
+  * @mgr:	fpga manager
+@@ -328,6 +367,10 @@ static int fpga_mgr_firmware_load(struct fpga_manager *mgr,
+ 
+ 	mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ;
+ 
++	/* flags indicates whether to do full or partial reconfiguration */
++	info->flags = mgr->flags;
++	memcpy(info->key, mgr->key, ENCRYPTED_KEY_LEN);
++
+ 	ret = request_firmware(&fw, image_name, dev);
+ 	if (ret) {
+ 		mgr->state = FPGA_MGR_STATE_FIRMWARE_REQ_ERR;
+@@ -354,6 +397,8 @@ static int fpga_mgr_firmware_load(struct fpga_manager *mgr,
+  */
+ int fpga_mgr_load(struct fpga_manager *mgr, struct fpga_image_info *info)
+ {
++	if (mgr->flags & FPGA_MGR_CONFIG_DMA_BUF)
++		return fpga_dmabuf_load(mgr, info);
+ 	if (info->sgt)
+ 		return fpga_mgr_buf_load_sg(mgr, info, info->sgt);
+ 	if (info->buf && info->count)
+@@ -428,18 +473,105 @@ static ssize_t status_show(struct device *dev,
+ 		len += sprintf(buf + len, "reconfig IP protocol error\n");
+ 	if (status & FPGA_MGR_STATUS_FIFO_OVERFLOW_ERR)
+ 		len += sprintf(buf + len, "reconfig fifo overflow error\n");
++	if (status & FPGA_MGR_STATUS_SECURITY_ERR)
++		len += sprintf(buf + len, "reconfig security error\n");
++	if (status & FPGA_MGR_STATUS_DEVICE_INIT_ERR)
++		len += sprintf(buf + len,
++			       "initialization has not finished\n");
++	if (status & FPGA_MGR_STATUS_SIGNAL_ERR)
++		len += sprintf(buf + len, "device internal signal error\n");
++	if (status & FPGA_MGR_STATUS_HIGH_Z_STATE_ERR)
++		len += sprintf(buf + len,
++			       "all I/Os are placed in High-Z state\n");
++	if (status & FPGA_MGR_STATUS_EOS_ERR)
++		len += sprintf(buf + len,
++			       "start-up sequence has not finished\n");
++	if (status & FPGA_MGR_STATUS_FIRMWARE_REQ_ERR)
++		len += sprintf(buf + len, "firmware request error\n");
+ 
+ 	return len;
+ }
+ 
++static ssize_t firmware_store(struct device *dev,
++			      struct device_attribute *attr,
++			      const char *buf, size_t count)
++{
++	struct fpga_manager *mgr = to_fpga_manager(dev);
++	unsigned int len;
++	char image_name[NAME_MAX];
++	int ret;
++
++	/* struct with information about the FPGA image to program. */
++	struct fpga_image_info info = {0};
++
++	/* lose terminating \n */
++	strcpy(image_name, buf);
++	len = strlen(image_name);
++	if (image_name[len - 1] == '\n')
++		image_name[len - 1] = 0;
++
++	ret = fpga_mgr_firmware_load(mgr, &info, image_name);
++	if (ret)
++		return ret;
++
++	return count;
++}
++
++static ssize_t key_show(struct device *dev,
++			struct device_attribute *attr, char *buf)
++{
++	struct fpga_manager *mgr = to_fpga_manager(dev);
++
++	return snprintf(buf, ENCRYPTED_KEY_LEN + 1, "%s\n", mgr->key);
++}
++
++static ssize_t key_store(struct device *dev,
++			 struct device_attribute *attr,
++			 const char *buf, size_t count)
++{
++	struct fpga_manager *mgr = to_fpga_manager(dev);
++
++	memcpy(mgr->key, buf, count);
++
++	return count;
++}
++
++static ssize_t flags_show(struct device *dev,
++			  struct device_attribute *attr, char *buf)
++{
++	struct fpga_manager *mgr = to_fpga_manager(dev);
++
++	return sprintf(buf, "%lx\n", mgr->flags);
++}
++
++static ssize_t flags_store(struct device *dev,
++			   struct device_attribute *attr,
++			   const char *buf, size_t count)
++{
++	struct fpga_manager *mgr = to_fpga_manager(dev);
++	int ret;
++
++	ret = kstrtol(buf, 16, &mgr->flags);
++	if (ret)
++		return ret;
++
++	return count;
++}
++
+ static DEVICE_ATTR_RO(name);
+ static DEVICE_ATTR_RO(state);
+ static DEVICE_ATTR_RO(status);
++static DEVICE_ATTR_WO(firmware);
++static DEVICE_ATTR_RW(flags);
++static DEVICE_ATTR_RW(key);
+ 
+ static struct attribute *fpga_mgr_attrs[] = {
+ 	&dev_attr_name.attr,
+ 	&dev_attr_state.attr,
+ 	&dev_attr_status.attr,
++	&dev_attr_firmware.attr,
++	&dev_attr_flags.attr,
++	&dev_attr_key.attr,
+ 	NULL,
+ };
+ ATTRIBUTE_GROUPS(fpga_mgr);
+@@ -512,6 +644,106 @@ void fpga_mgr_put(struct fpga_manager *mgr)
+ }
+ EXPORT_SYMBOL_GPL(fpga_mgr_put);
+ 
++#ifdef CONFIG_FPGA_MGR_DEBUG_FS
++#include <linux/debugfs.h>
++
++static int fpga_mgr_read(struct seq_file *s, void *data)
++{
++	struct fpga_manager *mgr = (struct fpga_manager *)s->private;
++	int ret = 0;
++
++	if (!mgr->mops->read)
++		return -ENOENT;
++
++	if (!mutex_trylock(&mgr->ref_mutex))
++		return -EBUSY;
++
++	if (mgr->state != FPGA_MGR_STATE_OPERATING) {
++		ret = -EPERM;
++		goto err_unlock;
++	}
++
++	/* Read the FPGA configuration data from the fabric */
++	ret = mgr->mops->read(mgr, s);
++	if (ret)
++		dev_err(&mgr->dev, "Error while reading configuration data from FPGA\n");
++
++err_unlock:
++	mutex_unlock(&mgr->ref_mutex);
++
++	return ret;
++}
++
++static int fpga_mgr_read_open(struct inode *inode, struct file *file)
++{
++	return single_open(file, fpga_mgr_read, inode->i_private);
++}
++
++static const struct file_operations fpga_mgr_ops_image = {
++	.owner = THIS_MODULE,
++	.open = fpga_mgr_read_open,
++	.read = seq_read,
++};
++#endif
++
++static int fpga_dmabuf_fd_get(struct file *file, char __user *argp)
++{
++	struct fpga_manager *mgr =  (struct fpga_manager *)(file->private_data);
++	int buffd;
++
++	if (copy_from_user(&buffd, argp, sizeof(buffd)))
++		return -EFAULT;
++
++	mgr->dmabuf = dma_buf_get(buffd);
++	if (IS_ERR_OR_NULL(mgr->dmabuf))
++		return -EINVAL;
++
++	mgr->flags = FPGA_MGR_CONFIG_DMA_BUF;
++
++	return 0;
++}
++
++static int fpga_device_open(struct inode *inode, struct file *file)
++{
++	struct miscdevice *miscdev = file->private_data;
++	struct fpga_manager *mgr = container_of(miscdev,
++						struct fpga_manager, miscdev);
++
++	file->private_data = mgr;
++
++	return 0;
++}
++
++static int fpga_device_release(struct inode *inode, struct file *file)
++{
++	return 0;
++}
++
++static long fpga_device_ioctl(struct file *file, unsigned int cmd,
++			      unsigned long arg)
++{
++	char __user *argp = (char __user *)arg;
++	int err;
++
++	switch (cmd) {
++	case FPGA_IOCTL_LOAD_DMA_BUFF:
++		err = fpga_dmabuf_fd_get(file, argp);
++		break;
++	default:
++		err = -ENOTTY;
++	}
++
++	return err;
++}
++
++static const struct file_operations fpga_fops = {
++	.owner		= THIS_MODULE,
++	.open		= fpga_device_open,
++	.release	= fpga_device_release,
++	.unlocked_ioctl	= fpga_device_ioctl,
++	.compat_ioctl	= fpga_device_ioctl,
++};
++
+ /**
+  * fpga_mgr_lock - Lock FPGA manager for exclusive use
+  * @mgr:	fpga manager
+@@ -565,8 +797,7 @@ struct fpga_manager *fpga_mgr_create(struct device *dev, const char *name,
+ 	int id, ret;
+ 
+ 	if (!mops || !mops->write_complete || !mops->state ||
+-	    !mops->write_init || (!mops->write && !mops->write_sg) ||
+-	    (mops->write && mops->write_sg)) {
++	    !mops->write_init || (!mops->write && !mops->write_sg)) {
+ 		dev_err(dev, "Attempt to register without fpga_manager_ops\n");
+ 		return NULL;
+ 	}
+@@ -597,10 +828,28 @@ struct fpga_manager *fpga_mgr_create(struct device *dev, const char *name,
+ 	mgr->dev.of_node = dev->of_node;
+ 	mgr->dev.id = id;
+ 
++	/* Make device dma capable by inheriting from parent's */
++	set_dma_ops(&mgr->dev, get_dma_ops(dev));
++	ret = dma_coerce_mask_and_coherent(&mgr->dev, dma_get_mask(dev));
++	if (ret) {
++		dev_warn(dev,
++		"Failed to set DMA mask %llx. Trying to continue... %x\n",
++		dma_get_mask(dev), ret);
++	}
++
+ 	ret = dev_set_name(&mgr->dev, "fpga%d", id);
+ 	if (ret)
+ 		goto error_device;
+ 
++	mgr->miscdev.minor = MISC_DYNAMIC_MINOR;
++	mgr->miscdev.name = kobject_name(&mgr->dev.kobj);
++	mgr->miscdev.fops = &fpga_fops;
++	ret = misc_register(&mgr->miscdev);
++	if (ret) {
++		pr_err("fpga: failed to register misc device.\n");
++		goto error_device;
++	}
++
+ 	return mgr;
+ 
+ error_device:
+@@ -678,6 +927,9 @@ EXPORT_SYMBOL_GPL(devm_fpga_mgr_create);
+ int fpga_mgr_register(struct fpga_manager *mgr)
+ {
+ 	int ret;
++#ifdef CONFIG_FPGA_MGR_DEBUG_FS
++	struct dentry *d, *parent;
++#endif
+ 
+ 	/*
+ 	 * Initialize framework state by requesting low level driver read state
+@@ -690,6 +942,26 @@ int fpga_mgr_register(struct fpga_manager *mgr)
+ 	if (ret)
+ 		goto error_device;
+ 
++#ifdef CONFIG_FPGA_MGR_DEBUG_FS
++	mgr->dir = debugfs_create_dir("fpga", NULL);
++	if (!mgr->dir)
++		goto error_device;
++
++	parent = mgr->dir;
++	d = debugfs_create_dir(mgr->dev.kobj.name, parent);
++	if (!d) {
++		debugfs_remove_recursive(parent);
++		goto error_device;
++	}
++
++	parent = d;
++	d = debugfs_create_file("image", 0644, parent, mgr,
++				&fpga_mgr_ops_image);
++	if (!d) {
++		debugfs_remove_recursive(mgr->dir);
++		goto error_device;
++	}
++#endif
+ 	dev_info(&mgr->dev, "%s registered\n", mgr->name);
+ 
+ 	return 0;
+@@ -711,6 +983,10 @@ void fpga_mgr_unregister(struct fpga_manager *mgr)
+ {
+ 	dev_info(&mgr->dev, "%s %s\n", __func__, mgr->name);
+ 
++#ifdef CONFIG_FPGA_MGR_DEBUG_FS
++	debugfs_remove_recursive(mgr->dir);
++#endif
++
+ 	/*
+ 	 * If the low level driver provides a method for putting fpga into
+ 	 * a desired state upon unregister, do it.
+diff --git a/drivers/fpga/of-fpga-region.c b/drivers/fpga/of-fpga-region.c
+index e405309ba..38b52382b 100644
+--- a/drivers/fpga/of-fpga-region.c
++++ b/drivers/fpga/of-fpga-region.c
+@@ -15,6 +15,7 @@
+ #include <linux/of_platform.h>
+ #include <linux/slab.h>
+ #include <linux/spinlock.h>
++#include <linux/pm_runtime.h>
+ 
+ static const struct of_device_id fpga_region_of_match[] = {
+ 	{ .compatible = "fpga-region", },
+@@ -228,6 +229,16 @@ static struct fpga_image_info *of_fpga_region_parse_ov(
+ 	if (of_property_read_bool(overlay, "encrypted-fpga-config"))
+ 		info->flags |= FPGA_MGR_ENCRYPTED_BITSTREAM;
+ 
++	if (of_property_read_bool(overlay, "userkey-encrypted-fpga-config"))
++		info->flags |= FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM;
++
++	if (of_property_read_bool(overlay, "ddrmem-authenticated-fpga-config"))
++		info->flags |= FPGA_MGR_DDR_MEM_AUTH_BITSTREAM;
++
++	if (of_property_read_bool(overlay,
++				  "securemem-authenticated-fpga-config"))
++		info->flags |= FPGA_MGR_SECURE_MEM_AUTH_BITSTREAM;
++
+ 	if (!of_property_read_string(overlay, "firmware-name",
+ 				     &firmware_name)) {
+ 		info->firmware_name = devm_kstrdup(dev, firmware_name,
+@@ -302,6 +313,7 @@ static int of_fpga_region_notify_pre_apply(struct fpga_region *region,
+ 	}
+ 
+ 	region->info = info;
++	pm_runtime_get_sync(dev->parent);
+ 	ret = fpga_region_program_fpga(region);
+ 	if (ret) {
+ 		/* error; reject overlay */
+@@ -324,10 +336,13 @@ static int of_fpga_region_notify_pre_apply(struct fpga_region *region,
+ static void of_fpga_region_notify_post_remove(struct fpga_region *region,
+ 					      struct of_overlay_notify_data *nd)
+ {
++	struct device *dev = &region->dev;
++
+ 	fpga_bridges_disable(&region->bridge_list);
+ 	fpga_bridges_put(&region->bridge_list);
+ 	fpga_image_info_free(region->info);
+ 	region->info = NULL;
++	pm_runtime_put(dev->parent);
+ }
+ 
+ /**
+@@ -411,9 +426,16 @@ static int of_fpga_region_probe(struct platform_device *pdev)
+ 		goto eprobe_mgr_put;
+ 	}
+ 
++	pm_runtime_enable(&pdev->dev);
++	ret = pm_runtime_get_sync(&pdev->dev);
++	if (ret < 0)
++		goto err_pm;
++
++	pm_runtime_put(&pdev->dev);
++
+ 	ret = fpga_region_register(region);
+ 	if (ret)
+-		goto eprobe_mgr_put;
++		goto err_pm;
+ 
+ 	of_platform_populate(np, fpga_region_of_match, NULL, &region->dev);
+ 	platform_set_drvdata(pdev, region);
+@@ -422,6 +444,9 @@ static int of_fpga_region_probe(struct platform_device *pdev)
+ 
+ 	return 0;
+ 
++err_pm:
++	pm_runtime_put(&pdev->dev);
++	pm_runtime_disable(&pdev->dev);
+ eprobe_mgr_put:
+ 	fpga_mgr_put(mgr);
+ 	return ret;
+@@ -434,6 +459,7 @@ static int of_fpga_region_remove(struct platform_device *pdev)
+ 
+ 	fpga_region_unregister(region);
+ 	fpga_mgr_put(mgr);
++	pm_runtime_disable(region->dev.parent);
+ 
+ 	return 0;
+ }
+diff --git a/drivers/fpga/versal-fpga.c b/drivers/fpga/versal-fpga.c
+new file mode 100644
+index 000000000..fd63d9f1d
+--- /dev/null
++++ b/drivers/fpga/versal-fpga.c
+@@ -0,0 +1,162 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright (C) 2019 Xilinx, Inc.
++ */
++
++#include <linux/dma-mapping.h>
++#include <linux/fpga/fpga-mgr.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of_address.h>
++#include <linux/string.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++
++/* Constant Definitions */
++#define PDI_SOURCE_TYPE	0xF
++
++/**
++ * struct versal_fpga_priv - Private data structure
++ * @dev:	Device data structure
++ * @flags:	flags which is used to identify the PL Image type
++ */
++struct versal_fpga_priv {
++	struct device *dev;
++	u32 flags;
++};
++
++static int versal_fpga_ops_write_init(struct fpga_manager *mgr,
++				      struct fpga_image_info *info,
++				      const char *buf, size_t size)
++{
++	struct versal_fpga_priv *priv;
++
++	priv = mgr->priv;
++	priv->flags = info->flags;
++
++	return 0;
++}
++
++static int versal_fpga_ops_write_sg(struct fpga_manager *mgr,
++				    struct sg_table *sgt)
++{
++	dma_addr_t dma_addr;
++	int ret;
++
++	dma_addr = sg_dma_address(sgt->sgl);
++	ret = zynqmp_pm_load_pdi(PDI_SOURCE_TYPE, dma_addr);
++
++	return ret;
++}
++
++static int versal_fpga_ops_write(struct fpga_manager *mgr,
++				 const char *buf, size_t size)
++{
++	struct versal_fpga_priv *priv;
++	dma_addr_t dma_addr = 0;
++	char *kbuf;
++	int ret;
++
++	priv = mgr->priv;
++
++	kbuf = dma_alloc_coherent(priv->dev, size, &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	memcpy(kbuf, buf, size);
++
++	wmb(); /* ensure all writes are done before initiate FW call */
++
++	ret = zynqmp_pm_load_pdi(PDI_SOURCE_TYPE, dma_addr);
++
++	dma_free_coherent(priv->dev, size, kbuf, dma_addr);
++
++	return ret;
++}
++
++static int versal_fpga_ops_write_complete(struct fpga_manager *mgr,
++					  struct fpga_image_info *info)
++{
++	return 0;
++}
++
++static enum fpga_mgr_states versal_fpga_ops_state(struct fpga_manager *mgr)
++{
++	return FPGA_MGR_STATE_OPERATING;
++}
++
++static const struct fpga_manager_ops versal_fpga_ops = {
++	.state = versal_fpga_ops_state,
++	.write_init = versal_fpga_ops_write_init,
++	.write = versal_fpga_ops_write,
++	.write_sg = versal_fpga_ops_write_sg,
++	.write_complete = versal_fpga_ops_write_complete,
++};
++
++static int versal_fpga_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct versal_fpga_priv *priv;
++	struct fpga_manager *mgr;
++	int err, ret;
++
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	priv->dev = dev;
++	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
++	if (ret < 0) {
++		dev_err(dev, "no usable DMA configuration");
++		return ret;
++	}
++
++	mgr = devm_fpga_mgr_create(dev, "Xilinx Versal FPGA Manager",
++				   &versal_fpga_ops, priv);
++	if (!mgr)
++		return -ENOMEM;
++
++	platform_set_drvdata(pdev, mgr);
++
++	err = fpga_mgr_register(mgr);
++	if (err) {
++		dev_err(dev, "unable to register FPGA manager");
++		fpga_mgr_free(mgr);
++		return err;
++	}
++
++	return 0;
++}
++
++static int versal_fpga_remove(struct platform_device *pdev)
++{
++	struct fpga_manager *mgr = platform_get_drvdata(pdev);
++
++	fpga_mgr_unregister(mgr);
++	fpga_mgr_free(mgr);
++
++	return 0;
++}
++
++static const struct of_device_id versal_fpga_of_match[] = {
++	{ .compatible = "xlnx,versal-fpga", },
++	{},
++};
++
++MODULE_DEVICE_TABLE(of, versal_fpga_of_match);
++
++static struct platform_driver versal_fpga_driver = {
++	.probe = versal_fpga_probe,
++	.remove = versal_fpga_remove,
++	.driver = {
++		.name = "versal_fpga_manager",
++		.of_match_table = of_match_ptr(versal_fpga_of_match),
++	},
++};
++
++module_platform_driver(versal_fpga_driver);
++
++MODULE_AUTHOR("Nava kishore Manne <nava.manne@xilinx.com>");
++MODULE_AUTHOR("Appana Durga Kedareswara rao <appanad.durga.rao@xilinx.com>");
++MODULE_DESCRIPTION("Xilinx Versal FPGA Manager");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/fpga/xilinx-afi.c b/drivers/fpga/xilinx-afi.c
+new file mode 100644
+index 000000000..d6676a874
+--- /dev/null
++++ b/drivers/fpga/xilinx-afi.c
+@@ -0,0 +1,85 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx FPGA AFI bridge.
++ * Copyright (c) 2018 Xilinx Inc.
++ */
++
++#include <linux/err.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++
++/**
++ * struct afi_fpga - AFI register description
++ * @value: value to be written to the register
++ * @regid: Register id for the register to be written
++ */
++struct afi_fpga {
++	u32 value;
++	u32 regid;
++};
++
++static int afi_fpga_probe(struct platform_device *pdev)
++{
++	struct afi_fpga *afi_fpga;
++	struct device_node *np = pdev->dev.of_node;
++	int ret;
++	int i, entries, pairs;
++	u32 reg, val;
++
++	afi_fpga = devm_kzalloc(&pdev->dev, sizeof(*afi_fpga), GFP_KERNEL);
++	if (!afi_fpga)
++		return -ENOMEM;
++	platform_set_drvdata(pdev, afi_fpga);
++
++	entries = of_property_count_u32_elems(np, "config-afi");
++	if (!entries || (entries % 2)) {
++		dev_err(&pdev->dev, "Invalid number of registers\n");
++		return -EINVAL;
++	}
++	pairs = entries / 2;
++
++	for (i = 0; i < pairs; i++) {
++		ret = of_property_read_u32_index(np, "config-afi", i * 2,
++						 &reg);
++		if (ret) {
++			dev_err(&pdev->dev, "failed to read register\n");
++			return -EINVAL;
++		}
++		ret = of_property_read_u32_index(np, "config-afi", i * 2 + 1,
++						 &val);
++		if (ret) {
++			dev_err(&pdev->dev, "failed to read value\n");
++			return -EINVAL;
++		}
++		ret = zynqmp_pm_afi(reg, val);
++		if (ret < 0) {
++			dev_err(&pdev->dev, "AFI register write error %d\n",
++				ret);
++			return ret;
++		}
++	}
++	return 0;
++}
++
++static const struct of_device_id afi_fpga_ids[] = {
++	{ .compatible = "xlnx,afi-fpga" },
++	{ },
++};
++MODULE_DEVICE_TABLE(of, afi_fpga_ids);
++
++static struct platform_driver afi_fpga_driver = {
++	.driver = {
++		.name = "afi-fpga",
++		.of_match_table = afi_fpga_ids,
++	},
++	.probe = afi_fpga_probe,
++};
++module_platform_driver(afi_fpga_driver);
++
++MODULE_DESCRIPTION("FPGA afi module");
++MODULE_AUTHOR("Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/fpga/xilinx-pr-decoupler.c b/drivers/fpga/xilinx-pr-decoupler.c
+index 7d69af230..c95f3d065 100644
+--- a/drivers/fpga/xilinx-pr-decoupler.c
++++ b/drivers/fpga/xilinx-pr-decoupler.c
+@@ -19,10 +19,15 @@
+ #define CTRL_OFFSET		0
+ 
+ struct xlnx_pr_decoupler_data {
++	const struct xlnx_config_data *ipconfig;
+ 	void __iomem *io_base;
+ 	struct clk *clk;
+ };
+ 
++struct xlnx_config_data {
++	char *name;
++};
++
+ static inline void xlnx_pr_decoupler_write(struct xlnx_pr_decoupler_data *d,
+ 					   u32 offset, u32 val)
+ {
+@@ -76,15 +81,28 @@ static const struct fpga_bridge_ops xlnx_pr_decoupler_br_ops = {
+ 	.enable_show = xlnx_pr_decoupler_enable_show,
+ };
+ 
++static const struct xlnx_config_data decoupler_config = {
++	.name = "Xilinx PR Decoupler",
++};
++
++static const struct xlnx_config_data shutdown_config = {
++	.name = "Xilinx DFX AXI shutdown mgr",
++};
++
+ static const struct of_device_id xlnx_pr_decoupler_of_match[] = {
+-	{ .compatible = "xlnx,pr-decoupler-1.00", },
+-	{ .compatible = "xlnx,pr-decoupler", },
++	{ .compatible = "xlnx,pr-decoupler-1.00", .data = &decoupler_config },
++	{ .compatible = "xlnx,pr-decoupler", .data = &decoupler_config },
++	{ .compatible = "xlnx,dfx-axi-shutdown-manager-1.00",
++					.data = &shutdown_config },
++	{ .compatible = "xlnx,dfx-axi-shutdown-manager",
++					.data = &shutdown_config },
+ 	{},
+ };
+ MODULE_DEVICE_TABLE(of, xlnx_pr_decoupler_of_match);
+ 
+ static int xlnx_pr_decoupler_probe(struct platform_device *pdev)
+ {
++	struct device_node *np = pdev->dev.of_node;
+ 	struct xlnx_pr_decoupler_data *priv;
+ 	struct fpga_bridge *br;
+ 	int err;
+@@ -94,6 +112,14 @@ static int xlnx_pr_decoupler_probe(struct platform_device *pdev)
+ 	if (!priv)
+ 		return -ENOMEM;
+ 
++	if (np) {
++		const struct of_device_id *match;
++
++		match = of_match_node(xlnx_pr_decoupler_of_match, np);
++		if (match && match->data)
++			priv->ipconfig = match->data;
++	}
++
+ 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+ 	priv->io_base = devm_ioremap_resource(&pdev->dev, res);
+ 	if (IS_ERR(priv->io_base))
+@@ -114,7 +140,7 @@ static int xlnx_pr_decoupler_probe(struct platform_device *pdev)
+ 
+ 	clk_disable(priv->clk);
+ 
+-	br = devm_fpga_bridge_create(&pdev->dev, "Xilinx PR Decoupler",
++	br = devm_fpga_bridge_create(&pdev->dev, priv->ipconfig->name,
+ 				     &xlnx_pr_decoupler_br_ops, priv);
+ 	if (!br) {
+ 		err = -ENOMEM;
+@@ -125,7 +151,8 @@ static int xlnx_pr_decoupler_probe(struct platform_device *pdev)
+ 
+ 	err = fpga_bridge_register(br);
+ 	if (err) {
+-		dev_err(&pdev->dev, "unable to register Xilinx PR Decoupler");
++		dev_err(&pdev->dev, "unable to register %s",
++			priv->ipconfig->name);
+ 		goto err_clk;
+ 	}
+ 
+diff --git a/drivers/fpga/zynq-afi.c b/drivers/fpga/zynq-afi.c
+new file mode 100644
+index 000000000..7ce0d089e
+--- /dev/null
++++ b/drivers/fpga/zynq-afi.c
+@@ -0,0 +1,81 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx FPGA AFI driver.
++ * Copyright (c) 2018 Xilinx Inc.
++ */
++
++#include <linux/err.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++
++/* Registers and special values for doing register-based operations */
++#define AFI_RDCHAN_CTRL_OFFSET	0x00
++#define AFI_WRCHAN_CTRL_OFFSET	0x14
++
++#define AFI_BUSWIDTH_MASK	0x01
++
++/**
++ * struct afi_fpga - AFI register description
++ * @membase:	pointer to register struct
++ * @afi_width:	AFI bus width to be written
++ */
++struct zynq_afi_fpga {
++	void __iomem	*membase;
++	u32		afi_width;
++};
++
++static int zynq_afi_fpga_probe(struct platform_device *pdev)
++{
++	struct zynq_afi_fpga *afi_fpga;
++	struct resource *res;
++	u32 reg_val;
++	u32 val;
++
++	afi_fpga = devm_kzalloc(&pdev->dev, sizeof(*afi_fpga), GFP_KERNEL);
++	if (!afi_fpga)
++		return -ENOMEM;
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	afi_fpga->membase = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(afi_fpga->membase))
++		return PTR_ERR(afi_fpga->membase);
++
++	val = device_property_read_u32(&pdev->dev, "xlnx,afi-width",
++				       &afi_fpga->afi_width);
++	if (val) {
++		dev_err(&pdev->dev, "Fail to get the afi bus width\n");
++		return -EINVAL;
++	}
++
++	reg_val = readl(afi_fpga->membase + AFI_RDCHAN_CTRL_OFFSET);
++	reg_val &= ~AFI_BUSWIDTH_MASK;
++	writel(reg_val | afi_fpga->afi_width,
++	       afi_fpga->membase + AFI_RDCHAN_CTRL_OFFSET);
++	reg_val = readl(afi_fpga->membase + AFI_WRCHAN_CTRL_OFFSET);
++	reg_val &= ~AFI_BUSWIDTH_MASK;
++	writel(reg_val | afi_fpga->afi_width,
++	       afi_fpga->membase + AFI_WRCHAN_CTRL_OFFSET);
++
++	return 0;
++}
++
++static const struct of_device_id zynq_afi_fpga_ids[] = {
++	{ .compatible = "xlnx,zynq-afi-fpga" },
++	{ },
++};
++MODULE_DEVICE_TABLE(of, zynq_afi_fpga_ids);
++
++static struct platform_driver zynq_afi_fpga_driver = {
++	.driver = {
++		.name = "zynq-afi-fpga",
++		.of_match_table = zynq_afi_fpga_ids,
++	},
++	.probe = zynq_afi_fpga_probe,
++};
++module_platform_driver(zynq_afi_fpga_driver);
++
++MODULE_DESCRIPTION("ZYNQ FPGA AFI module");
++MODULE_AUTHOR("Nava kishore Manne <nava.manne@xilinx.com>");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/fpga/zynq-fpga.c b/drivers/fpga/zynq-fpga.c
+index 07fa8d9ec..39fcae10c 100644
+--- a/drivers/fpga/zynq-fpga.c
++++ b/drivers/fpga/zynq-fpga.c
+@@ -275,7 +275,7 @@ static int zynq_fpga_ops_write_init(struct fpga_manager *mgr,
+ 
+ 	/* don't globally reset PL if we're doing partial reconfig */
+ 	if (!(info->flags & FPGA_MGR_PARTIAL_RECONFIG)) {
+-		if (!zynq_fpga_has_sync(buf, count)) {
++		if (!zynq_fpga_has_sync((u8 *)buf, count)) {
+ 			dev_err(&mgr->dev,
+ 				"Invalid bitstream, could not find a sync word. Bitstream must be a byte swapped .bin file\n");
+ 			err = -EINVAL;
+diff --git a/drivers/fpga/zynqmp-fpga.c b/drivers/fpga/zynqmp-fpga.c
+index 4a1139e05..737f22a36 100644
+--- a/drivers/fpga/zynqmp-fpga.c
++++ b/drivers/fpga/zynqmp-fpga.c
+@@ -9,20 +9,78 @@
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/of_address.h>
++#include <linux/seq_file.h>
+ #include <linux/string.h>
+ #include <linux/firmware/xlnx-zynqmp.h>
+ 
+ /* Constant Definitions */
+ #define IXR_FPGA_DONE_MASK	BIT(3)
+ 
++#define READ_DMA_SIZE		0x200
++#define DUMMY_FRAMES_SIZE	0x64
++
++/* Error Register */
++#define IXR_FPGA_ERR_CRC_ERR		BIT(0)
++#define IXR_FPGA_ERR_SECURITY_ERR	BIT(16)
++
++/* Signal Status Register */
++#define IXR_FPGA_END_OF_STARTUP		BIT(4)
++#define IXR_FPGA_GST_CFG_B		BIT(5)
++#define IXR_FPGA_INIT_B_INTERNAL	BIT(11)
++#define IXR_FPGA_DONE_INTERNAL_SIGNAL	BIT(13)
++
++#define IXR_FPGA_CONFIG_STAT_OFFSET	7U
++#define IXR_FPGA_READ_CONFIG_TYPE	0U
++
++static bool readback_type;
++module_param(readback_type, bool, 0644);
++MODULE_PARM_DESC(readback_type,
++		 "readback_type 0-configuration register read "
++		 "1- configuration data read (default: 0)");
++
++/**
++ * struct zynqmp_configreg - Configuration register offsets
++ * @reg:	Name of the configuration register.
++ * @offset:	Register offset.
++ */
++struct zynqmp_configreg {
++	char *reg;
++	u32 offset;
++};
++
++static struct zynqmp_configreg cfgreg[] = {
++	{.reg = "CRC",		.offset = 0},
++	{.reg = "FAR",		.offset = 1},
++	{.reg = "FDRI",		.offset = 2},
++	{.reg = "FDRO",		.offset = 3},
++	{.reg = "CMD",		.offset = 4},
++	{.reg = "CTRL0",	.offset = 5},
++	{.reg = "MASK",		.offset = 6},
++	{.reg = "STAT",		.offset = 7},
++	{.reg = "LOUT",		.offset = 8},
++	{.reg = "COR0",		.offset = 9},
++	{.reg = "MFWR",		.offset = 10},
++	{.reg = "CBC",		.offset = 11},
++	{.reg = "IDCODE",	.offset = 12},
++	{.reg = "AXSS",		.offset = 13},
++	{.reg = "COR1",		.offset = 14},
++	{.reg = "WBSTR",	.offset = 16},
++	{.reg = "TIMER",	.offset = 17},
++	{.reg = "BOOTSTS",	.offset = 22},
++	{.reg = "CTRL1",	.offset = 24},
++	{}
++};
++
+ /**
+  * struct zynqmp_fpga_priv - Private data structure
+  * @dev:	Device data structure
+  * @flags:	flags which is used to identify the bitfile type
++ * @size:	Size of the Bit-stream used for readback
+  */
+ struct zynqmp_fpga_priv {
+ 	struct device *dev;
+ 	u32 flags;
++	u32 size;
+ };
+ 
+ static int zynqmp_fpga_ops_write_init(struct fpga_manager *mgr,
+@@ -41,27 +99,108 @@ static int zynqmp_fpga_ops_write(struct fpga_manager *mgr,
+ 				 const char *buf, size_t size)
+ {
+ 	struct zynqmp_fpga_priv *priv;
+-	dma_addr_t dma_addr;
++	dma_addr_t dma_addr = 0;
+ 	u32 eemi_flags = 0;
++	size_t dma_size;
+ 	char *kbuf;
+ 	int ret;
+ 
+ 	priv = mgr->priv;
++	priv->size = size;
++
++	if (priv->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM)
++		dma_size = size + ENCRYPTED_KEY_LEN;
++	else
++		dma_size = size;
+ 
+-	kbuf = dma_alloc_coherent(priv->dev, size, &dma_addr, GFP_KERNEL);
++	kbuf = dma_alloc_coherent(priv->dev, dma_size, &dma_addr, GFP_KERNEL);
+ 	if (!kbuf)
+ 		return -ENOMEM;
+ 
+ 	memcpy(kbuf, buf, size);
+ 
++	if (priv->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM) {
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_USERKEY;
++		memcpy(kbuf + size, mgr->key, ENCRYPTED_KEY_LEN);
++	} else if (priv->flags & FPGA_MGR_ENCRYPTED_BITSTREAM) {
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_DEVKEY;
++	}
++
+ 	wmb(); /* ensure all writes are done before initiate FW call */
+ 
++	if (priv->flags & FPGA_MGR_DDR_MEM_AUTH_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_DDR;
++	else if (priv->flags & FPGA_MGR_SECURE_MEM_AUTH_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_OCM;
++
+ 	if (priv->flags & FPGA_MGR_PARTIAL_RECONFIG)
+ 		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_PARTIAL;
+ 
+-	ret = zynqmp_pm_fpga_load(dma_addr, size, eemi_flags);
++	if (priv->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM)
++		ret = zynqmp_pm_fpga_load(dma_addr, dma_addr + size,
++					  eemi_flags);
++	else
++		ret = zynqmp_pm_fpga_load(dma_addr, size, eemi_flags);
++
++	dma_free_coherent(priv->dev, dma_size, kbuf, dma_addr);
++
++	return ret;
++}
++
++static unsigned long zynqmp_fpga_get_contiguous_size(struct sg_table *sgt)
++{
++	dma_addr_t expected = sg_dma_address(sgt->sgl);
++	unsigned long size = 0;
++	struct scatterlist *s;
++	unsigned int i;
++
++	for_each_sg(sgt->sgl, s, sgt->nents, i) {
++		if (sg_dma_address(s) != expected)
++			break;
++		expected = sg_dma_address(s) + sg_dma_len(s);
++		size += sg_dma_len(s);
++	}
++
++	return size;
++}
+ 
+-	dma_free_coherent(priv->dev, size, kbuf, dma_addr);
++static int zynqmp_fpga_ops_write_sg(struct fpga_manager *mgr,
++				    struct sg_table *sgt)
++{
++	dma_addr_t dma_addr, key_addr = 0;
++	struct zynqmp_fpga_priv *priv;
++	unsigned long contig_size;
++	u32 eemi_flags = 0;
++	char *kbuf;
++	int ret;
++
++	priv = mgr->priv;
++
++	dma_addr = sg_dma_address(sgt->sgl);
++	contig_size = zynqmp_fpga_get_contiguous_size(sgt);
++
++	if (priv->flags & FPGA_MGR_PARTIAL_RECONFIG)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_PARTIAL;
++	if (priv->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_USERKEY;
++	else if (priv->flags & FPGA_MGR_ENCRYPTED_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_DEVKEY;
++	if (priv->flags & FPGA_MGR_DDR_MEM_AUTH_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_DDR;
++	else if (priv->flags & FPGA_MGR_SECURE_MEM_AUTH_BITSTREAM)
++		eemi_flags |= XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_OCM;
++
++	if (priv->flags & FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM) {
++		kbuf = dma_alloc_coherent(priv->dev, ENCRYPTED_KEY_LEN,
++					  &key_addr, GFP_KERNEL);
++		if (!kbuf)
++			return -ENOMEM;
++		memcpy(kbuf, mgr->key, ENCRYPTED_KEY_LEN);
++		ret = zynqmp_pm_fpga_load(dma_addr, key_addr, eemi_flags);
++		dma_free_coherent(priv->dev, ENCRYPTED_KEY_LEN, kbuf, key_addr);
++	} else {
++		ret = zynqmp_pm_fpga_load(dma_addr, contig_size, eemi_flags);
++	}
+ 
+ 	return ret;
+ }
+@@ -83,11 +222,128 @@ static enum fpga_mgr_states zynqmp_fpga_ops_state(struct fpga_manager *mgr)
+ 	return FPGA_MGR_STATE_UNKNOWN;
+ }
+ 
++static u64 zynqmp_fpga_ops_status(struct fpga_manager *mgr)
++{
++	unsigned int *buf, reg_val;
++	dma_addr_t dma_addr = 0;
++	u64 status = 0;
++	int ret;
++
++	buf = dma_alloc_coherent(mgr->dev.parent, READ_DMA_SIZE,
++				 &dma_addr, GFP_KERNEL);
++	if (!buf)
++		return FPGA_MGR_STATUS_FIRMWARE_REQ_ERR;
++
++	ret = zynqmp_pm_fpga_read(IXR_FPGA_CONFIG_STAT_OFFSET, dma_addr,
++				  IXR_FPGA_READ_CONFIG_TYPE, &reg_val);
++	if (ret) {
++		status = FPGA_MGR_STATUS_FIRMWARE_REQ_ERR;
++		goto free_dmabuf;
++	}
++
++	if (reg_val & IXR_FPGA_ERR_CRC_ERR)
++		status |= FPGA_MGR_STATUS_CRC_ERR;
++	if (reg_val & IXR_FPGA_ERR_SECURITY_ERR)
++		status |= FPGA_MGR_STATUS_SECURITY_ERR;
++	if (!(reg_val & IXR_FPGA_INIT_B_INTERNAL))
++		status |= FPGA_MGR_STATUS_DEVICE_INIT_ERR;
++	if (!(reg_val & IXR_FPGA_DONE_INTERNAL_SIGNAL))
++		status |= FPGA_MGR_STATUS_SIGNAL_ERR;
++	if (!(reg_val & IXR_FPGA_GST_CFG_B))
++		status |= FPGA_MGR_STATUS_HIGH_Z_STATE_ERR;
++	if (!(reg_val & IXR_FPGA_END_OF_STARTUP))
++		status |= FPGA_MGR_STATUS_EOS_ERR;
++
++free_dmabuf:
++	dma_free_coherent(mgr->dev.parent, READ_DMA_SIZE, buf, dma_addr);
++
++	return status;
++}
++
++static int zynqmp_fpga_read_cfgreg(struct fpga_manager *mgr,
++				   struct seq_file *s)
++{
++	int ret = 0;
++	u32 val;
++	unsigned int *buf;
++	dma_addr_t dma_addr = 0;
++	struct zynqmp_configreg *p = cfgreg;
++
++	buf = dma_alloc_coherent(mgr->dev.parent, READ_DMA_SIZE,
++				 &dma_addr, GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	seq_puts(s, "zynqMP FPGA Configuration register contents are\n");
++
++	while (p->reg) {
++		ret = zynqmp_pm_fpga_read(p->offset, dma_addr, readback_type,
++					  &val);
++		if (ret)
++			goto free_dmabuf;
++		seq_printf(s, "%s --> \t %x \t\r\n", p->reg, val);
++		p++;
++	}
++
++free_dmabuf:
++	dma_free_coherent(mgr->dev.parent, READ_DMA_SIZE, buf,
++			  dma_addr);
++
++	return ret;
++}
++
++static int zynqmp_fpga_read_cfgdata(struct fpga_manager *mgr,
++				    struct seq_file *s)
++{
++	struct zynqmp_fpga_priv *priv;
++	int ret;
++	u32 data_offset;
++	unsigned int *buf;
++	dma_addr_t dma_addr = 0;
++	size_t size;
++
++	priv = mgr->priv;
++	size = priv->size + READ_DMA_SIZE + DUMMY_FRAMES_SIZE;
++
++	buf = dma_alloc_coherent(mgr->dev.parent, size, &dma_addr,
++				 GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	seq_puts(s, "zynqMP FPGA Configuration data contents are\n");
++	ret = zynqmp_pm_fpga_read((priv->size + DUMMY_FRAMES_SIZE) / 4,
++				  dma_addr, readback_type, &data_offset);
++	if (ret)
++		goto free_dmabuf;
++
++	seq_write(s, &buf[data_offset], priv->size);
++
++free_dmabuf:
++	dma_free_coherent(mgr->dev.parent, size, buf, dma_addr);
++
++	return ret;
++}
++
++static int zynqmp_fpga_ops_read(struct fpga_manager *mgr, struct seq_file *s)
++{
++	int ret;
++
++	if (readback_type)
++		ret = zynqmp_fpga_read_cfgdata(mgr, s);
++	else
++		ret = zynqmp_fpga_read_cfgreg(mgr, s);
++
++	return ret;
++}
++
+ static const struct fpga_manager_ops zynqmp_fpga_ops = {
+ 	.state = zynqmp_fpga_ops_state,
++	.status = zynqmp_fpga_ops_status,
+ 	.write_init = zynqmp_fpga_ops_write_init,
+ 	.write = zynqmp_fpga_ops_write,
++	.write_sg = zynqmp_fpga_ops_write_sg,
+ 	.write_complete = zynqmp_fpga_ops_write_complete,
++	.read = zynqmp_fpga_ops_read,
+ };
+ 
+ static int zynqmp_fpga_probe(struct platform_device *pdev)
+diff --git a/include/linux/fpga/fpga-mgr.h b/include/linux/fpga/fpga-mgr.h
+index e8ca62b2c..bd67af3b5 100644
+--- a/include/linux/fpga/fpga-mgr.h
++++ b/include/linux/fpga/fpga-mgr.h
+@@ -9,8 +9,11 @@
+ #define _LINUX_FPGA_MGR_H
+ 
+ #include <linux/mutex.h>
++#include <linux/miscdevice.h>
+ #include <linux/platform_device.h>
+ 
++#define ENCRYPTED_KEY_LEN	64 /* Bytes */
++
+ struct fpga_manager;
+ struct sg_table;
+ 
+@@ -62,17 +65,29 @@ enum fpga_mgr_states {
+  *
+  * %FPGA_MGR_EXTERNAL_CONFIG: FPGA has been configured prior to Linux booting
+  *
+- * %FPGA_MGR_ENCRYPTED_BITSTREAM: indicates bitstream is encrypted
++ * %FPGA_MGR_ENCRYPTED_BITSTREAM: indicates bitstream is encrypted with
++ *				  device key
+  *
+  * %FPGA_MGR_BITSTREAM_LSB_FIRST: SPI bitstream bit order is LSB first
+  *
+  * %FPGA_MGR_COMPRESSED_BITSTREAM: FPGA bitstream is compressed
++ *
++ * %FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM: indicates bitstream is encrypted with
++ *					  user key
++ * %FPGA_MGR_DDR_MEM_AUTH_BITSTREAM: do bitstream authentication using DDR
++ *				     memory if supported
++ * %FPGA_MGR_SECURE_MEM_AUTH_BITSTREAM: do bitstream authentication using secure
++ *					memory if supported
+  */
+ #define FPGA_MGR_PARTIAL_RECONFIG	BIT(0)
+ #define FPGA_MGR_EXTERNAL_CONFIG	BIT(1)
+ #define FPGA_MGR_ENCRYPTED_BITSTREAM	BIT(2)
+ #define FPGA_MGR_BITSTREAM_LSB_FIRST	BIT(3)
+ #define FPGA_MGR_COMPRESSED_BITSTREAM	BIT(4)
++#define FPGA_MGR_USERKEY_ENCRYPTED_BITSTREAM	BIT(5)
++#define FPGA_MGR_DDR_MEM_AUTH_BITSTREAM		BIT(6)
++#define FPGA_MGR_SECURE_MEM_AUTH_BITSTREAM	BIT(7)
++#define FPGA_MGR_CONFIG_DMA_BUF			BIT(8)
+ 
+ /**
+  * struct fpga_image_info - information specific to a FPGA image
+@@ -82,6 +97,7 @@ enum fpga_mgr_states {
+  * @config_complete_timeout_us: maximum time for FPGA to switch to operating
+  *	   status in the write_complete op.
+  * @firmware_name: name of FPGA image firmware file
++ * @key: key value useful for Encrypted Bitstream loading to read the userkey
+  * @sgt: scatter/gather table containing FPGA image
+  * @buf: contiguous buffer containing FPGA image
+  * @count: size of buf
+@@ -95,6 +111,7 @@ struct fpga_image_info {
+ 	u32 disable_timeout_us;
+ 	u32 config_complete_timeout_us;
+ 	char *firmware_name;
++	char key[ENCRYPTED_KEY_LEN];
+ 	struct sg_table *sgt;
+ 	const char *buf;
+ 	size_t count;
+@@ -114,6 +131,7 @@ struct fpga_image_info {
+  * @write: write count bytes of configuration data to the FPGA
+  * @write_sg: write the scatter list of configuration data to the FPGA
+  * @write_complete: set FPGA to operating state after writing is done
++ * @read: optional: read FPGA configuration information
+  * @fpga_remove: optional: Set FPGA into a specific state during driver remove
+  * @groups: optional attribute groups.
+  *
+@@ -132,6 +150,7 @@ struct fpga_manager_ops {
+ 	int (*write_sg)(struct fpga_manager *mgr, struct sg_table *sgt);
+ 	int (*write_complete)(struct fpga_manager *mgr,
+ 			      struct fpga_image_info *info);
++	int (*read)(struct fpga_manager *mgr, struct seq_file *s);
+ 	void (*fpga_remove)(struct fpga_manager *mgr);
+ 	const struct attribute_group **groups;
+ };
+@@ -142,6 +161,12 @@ struct fpga_manager_ops {
+ #define FPGA_MGR_STATUS_INCOMPATIBLE_IMAGE_ERR	BIT(2)
+ #define FPGA_MGR_STATUS_IP_PROTOCOL_ERR		BIT(3)
+ #define FPGA_MGR_STATUS_FIFO_OVERFLOW_ERR	BIT(4)
++#define FPGA_MGR_STATUS_SECURITY_ERR		BIT(5)
++#define FPGA_MGR_STATUS_DEVICE_INIT_ERR		BIT(6)
++#define FPGA_MGR_STATUS_SIGNAL_ERR		BIT(7)
++#define FPGA_MGR_STATUS_HIGH_Z_STATE_ERR	BIT(8)
++#define FPGA_MGR_STATUS_EOS_ERR			BIT(9)
++#define FPGA_MGR_STATUS_FIRMWARE_REQ_ERR	BIT(10)
+ 
+ /**
+  * struct fpga_compat_id - id for compatibility check
+@@ -157,21 +182,31 @@ struct fpga_compat_id {
+ /**
+  * struct fpga_manager - fpga manager structure
+  * @name: name of low level fpga manager
++ * @flags: flags determines the type of Bitstream
++ * @key: key value useful for Encrypted Bitstream loading to read the userkey
+  * @dev: fpga manager device
+  * @ref_mutex: only allows one reference to fpga manager
+  * @state: state of fpga manager
+  * @compat_id: FPGA manager id for compatibility check.
+  * @mops: pointer to struct of fpga manager ops
+  * @priv: low level driver private date
++ * @dir: debugfs image directory
+  */
+ struct fpga_manager {
+ 	const char *name;
++	unsigned long flags;
++	char key[ENCRYPTED_KEY_LEN + 1];
+ 	struct device dev;
++	struct miscdevice miscdev;
++	struct dma_buf *dmabuf;
+ 	struct mutex ref_mutex;
+ 	enum fpga_mgr_states state;
+ 	struct fpga_compat_id *compat_id;
+ 	const struct fpga_manager_ops *mops;
+ 	void *priv;
++#ifdef CONFIG_FPGA_MGR_DEBUG_FS
++	struct dentry *dir;
++#endif
+ };
+ 
+ #define to_fpga_manager(d) container_of(d, struct fpga_manager, dev)
+@@ -202,4 +237,6 @@ struct fpga_manager *devm_fpga_mgr_create(struct device *dev, const char *name,
+ 					  const struct fpga_manager_ops *mops,
+ 					  void *priv);
+ 
++#define FPGA_IOCTL_LOAD_DMA_BUFF	_IOWR('R', 1, __u32)
++
+ #endif /*_LINUX_FPGA_MGR_H */

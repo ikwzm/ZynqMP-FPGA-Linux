@@ -1,0 +1,4998 @@
+diff --git a/Documentation/devicetree/bindings/mtd/arasan_nand.txt b/Documentation/devicetree/bindings/mtd/arasan_nand.txt
+new file mode 100644
+index 000000000..546ed98d9
+--- /dev/null
++++ b/Documentation/devicetree/bindings/mtd/arasan_nand.txt
+@@ -0,0 +1,33 @@
++Arasan NAND Flash Controller with ONFI 3.1 support
++
++Required properties:
++- compatible:		Should be "xlnx,zynqmp-nand", "arasan,nfc-v3p10"
++- reg:			Memory map for module access
++- interrupt-parent:	Interrupt controller the interrupt is routed through
++- interrupts:		Should contain the interrupt for the device
++- clock-name:		List of input clocks - "sys", "flash"
++			(See clock bindings for details)
++- clocks:		Clock phandles (see clock bindings for details)
++
++Required properties for child node:
++- nand-ecc-mode: see nand.txt
++
++For NAND partition information please refer the below file
++Documentation/devicetree/bindings/mtd/partition.txt
++
++Example:
++	nfc: nand@ff100000 {
++		compatible = "xlnx,zynqmp-nand", "arasan,nfc-v3p10"
++		reg = <0x0 0xff100000 0x1000>;
++		clock-name = "sys", "flash"
++		clocks = <&misc_clk &misc_clk>;
++		interrupt-parent = <&gic>;
++		interrupts = <0 14 4>;
++		#address-cells = <1>;
++		#size-cells = <0>
++
++		nand@0 {
++			reg = <0>
++			nand-ecc-mode = "hw";
++		};
++	};
+diff --git a/Documentation/devicetree/bindings/mtd/cadence-quadspi.txt b/Documentation/devicetree/bindings/mtd/cadence-quadspi.txt
+index 945be7d5b..4709bb57a 100644
+--- a/Documentation/devicetree/bindings/mtd/cadence-quadspi.txt
++++ b/Documentation/devicetree/bindings/mtd/cadence-quadspi.txt
+@@ -5,6 +5,7 @@ Required properties:
+ 	Generic default - "cdns,qspi-nor".
+ 	For TI 66AK2G SoC - "ti,k2g-qspi", "cdns,qspi-nor".
+ 	For TI AM654 SoC  - "ti,am654-ospi", "cdns,qspi-nor".
++	For xilinx versal - "xlnx,versal-ospi-1.0".
+ - reg : Contains two entries, each of which is a tuple consisting of a
+ 	physical address and length. The first entry is the address and
+ 	length of the controller register set. The second entry is the
+@@ -14,6 +15,7 @@ Required properties:
+ - cdns,fifo-depth : Size of the data FIFO in words.
+ - cdns,fifo-width : Bus width of the data FIFO in bytes.
+ - cdns,trigger-address : 32-bit indirect AHB trigger address.
++- reset-gpios : GPIO to be used to reset the OSPI flash device.
+ 
+ Optional properties:
+ - cdns,is-decoded-cs : Flag to indicate whether decoder is used or not.
+diff --git a/Documentation/devicetree/bindings/mtd/jedec,spi-nor.txt b/Documentation/devicetree/bindings/mtd/jedec,spi-nor.txt
+index f03be904d..51125e31e 100644
+--- a/Documentation/devicetree/bindings/mtd/jedec,spi-nor.txt
++++ b/Documentation/devicetree/bindings/mtd/jedec,spi-nor.txt
+@@ -78,6 +78,14 @@ Optional properties:
+ 		   cannot reboot properly if the flash is left in the "wrong"
+ 		   state. This boolean flag can be used on such systems, to
+ 		   denote the absence of a reliable reset mechanism.
++ - multi-die 	:  Some flash devices have multiple dies in it. Read operation
++		   in these devices is bounded by its die segment. In a
++		   continuous read, across multiple dies, when the last byte of
++		   the selected die segment is read, the next byte read is the
++		   first byte of the same die segment. So to handle this issue,
++		   split a read transaction, that spans across multiple banks,
++		   into one read per bank.This boolean flag can be used for such
++		   flash devices, to denote the presence of multiple dies.
+ 
+ Example:
+ 
+diff --git a/drivers/mtd/chips/cfi_probe.c b/drivers/mtd/chips/cfi_probe.c
+index cf4269564..26c847080 100644
+--- a/drivers/mtd/chips/cfi_probe.c
++++ b/drivers/mtd/chips/cfi_probe.c
+@@ -198,6 +198,9 @@ static int __xipram cfi_chip_setup(struct map_info *map,
+ 	__u32 base = 0;
+ 	int num_erase_regions = cfi_read_query(map, base + (0x10 + 28)*ofs_factor);
+ 	int i;
++	int extendedId1 = 0;
++	int extendedId2 = 0;
++	int extendedId3 = 0;
+ 	int addr_unlock1 = 0x555, addr_unlock2 = 0x2AA;
+ 
+ 	xip_enable(base, map, cfi);
+@@ -222,6 +225,38 @@ static int __xipram cfi_chip_setup(struct map_info *map,
+ 	for (i=0; i<(sizeof(struct cfi_ident) + num_erase_regions * 4); i++)
+ 		((unsigned char *)cfi->cfiq)[i] = cfi_read_query(map,base + (0x10 + i)*ofs_factor);
+ 
++	/* Note we put the device back into Read Mode BEFORE going into Auto
++	 * Select Mode, as some devices support nesting of modes, others
++	 * don't. This way should always work.
++	 * On cmdset 0001 the writes of 0xaa and 0x55 are not needed, and
++	 * so should be treated as nops or illegal (and so put the device
++	 * back into Read Mode, which is a nop in this case).
++	 */
++	cfi_send_gen_cmd(0xf0,     0, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0xaa, 0x555, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0x55, 0x2aa, base, map, cfi, cfi->device_type, NULL);
++	cfi_send_gen_cmd(0x90, 0x555, base, map, cfi, cfi->device_type, NULL);
++	cfi->mfr = cfi_read_query16(map, base);
++	cfi->id = cfi_read_query16(map, base + ofs_factor);
++
++	/* Get device ID cycle 1,2,3 for Numonyx/ST devices */
++	if ((cfi->mfr == CFI_MFR_INTEL || cfi->mfr == CFI_MFR_ST)
++		&& ((cfi->id & 0xff) == 0x7e)
++		&& (le16_to_cpu(cfi->cfiq->P_ID) == 0x0002)) {
++		extendedId1 = cfi_read_query16(map, base + 0x1 * ofs_factor);
++		extendedId2 = cfi_read_query16(map, base + 0xe * ofs_factor);
++		extendedId3 = cfi_read_query16(map, base + 0xf * ofs_factor);
++	}
++
++	/* Get AMD/Spansion extended JEDEC ID */
++	if (cfi->mfr == CFI_MFR_AMD && (cfi->id & 0xff) == 0x7e)
++		cfi->id = cfi_read_query(map, base + 0xe * ofs_factor) << 8 |
++			  cfi_read_query(map, base + 0xf * ofs_factor);
++
++	/* Put it back into Read Mode */
++	cfi_qry_mode_off(base, map, cfi);
++	xip_allowed(base, map);
++
+ 	/* Do any necessary byteswapping */
+ 	cfi->cfiq->P_ID = le16_to_cpu(cfi->cfiq->P_ID);
+ 
+@@ -231,6 +266,16 @@ static int __xipram cfi_chip_setup(struct map_info *map,
+ 	cfi->cfiq->InterfaceDesc = le16_to_cpu(cfi->cfiq->InterfaceDesc);
+ 	cfi->cfiq->MaxBufWriteSize = le16_to_cpu(cfi->cfiq->MaxBufWriteSize);
+ 
++   /* If the device is a M29EW used in 8-bit mode, adjust buffer size */
++	if ((cfi->cfiq->MaxBufWriteSize > 0x8) && (cfi->mfr == CFI_MFR_INTEL ||
++		 cfi->mfr == CFI_MFR_ST) && (extendedId1 == 0x7E) &&
++		 (extendedId2 == 0x22 || extendedId2 == 0x23 || extendedId2 == 0x28) &&
++		 (extendedId3 == 0x01)) {
++		cfi->cfiq->MaxBufWriteSize = 0x8;
++		pr_warn("Adjusted buffer size on Numonyx flash M29EW family");
++		pr_warn("in 8 bit mode\n");
++    }
++
+ #ifdef DEBUG_CFI
+ 	/* Dump the information therein */
+ 	print_cfi_ident(cfi->cfiq);
+diff --git a/drivers/mtd/nand/raw/Kconfig b/drivers/mtd/nand/raw/Kconfig
+index 6c46f25b5..3b3dd4953 100644
+--- a/drivers/mtd/nand/raw/Kconfig
++++ b/drivers/mtd/nand/raw/Kconfig
+@@ -556,4 +556,11 @@ config MTD_NAND_DISKONCHIP_BBTWRITE
+ 	  load time (assuming you build diskonchip as a module) with the module
+ 	  parameter "inftl_bbt_write=1".
+ 
++config MTD_NAND_PL353
++	tristate "ARM PL353 NAND Flash driver"
++	depends on MTD_RAW_NAND && ARM
++	depends on PL353_SMC
++	help
++	  Enables support for PrimeCell Static Memory Controller PL353
++
+ endif # MTD_RAW_NAND
+diff --git a/drivers/mtd/nand/raw/Makefile b/drivers/mtd/nand/raw/Makefile
+index 2930f5b90..b0db08b5f 100644
+--- a/drivers/mtd/nand/raw/Makefile
++++ b/drivers/mtd/nand/raw/Makefile
+@@ -58,6 +58,7 @@ obj-$(CONFIG_MTD_NAND_STM32_FMC2)	+= stm32_fmc2_nand.o
+ obj-$(CONFIG_MTD_NAND_MESON)		+= meson_nand.o
+ obj-$(CONFIG_MTD_NAND_CADENCE)		+= cadence-nand-controller.o
+ obj-$(CONFIG_MTD_NAND_ARASAN)		+= arasan-nand-controller.o
++obj-$(CONFIG_MTD_NAND_PL353)		+= pl353_nand.o
+ 
+ nand-objs := nand_base.o nand_legacy.o nand_bbt.o nand_timings.o nand_ids.o
+ nand-objs += nand_onfi.o
+diff --git a/drivers/mtd/nand/raw/arasan-nand-controller.c b/drivers/mtd/nand/raw/arasan-nand-controller.c
+index 0ee319291..2269289cd 100644
+--- a/drivers/mtd/nand/raw/arasan-nand-controller.c
++++ b/drivers/mtd/nand/raw/arasan-nand-controller.c
+@@ -53,6 +53,7 @@
+ #define   PROG_RST			BIT(8)
+ #define   PROG_GET_FEATURE		BIT(9)
+ #define   PROG_SET_FEATURE		BIT(10)
++#define   PROG_CHG_RD_COL_ENH		BIT(14)
+ 
+ #define INTR_STS_EN_REG			0x14
+ #define INTR_SIG_EN_REG			0x18
+@@ -91,7 +92,7 @@
+ 
+ #define DATA_INTERFACE_REG		0x6C
+ #define   DIFACE_SDR_MODE(x)		FIELD_PREP(GENMASK(2, 0), (x))
+-#define   DIFACE_DDR_MODE(x)		FIELD_PREP(GENMASK(5, 3), (X))
++#define   DIFACE_DDR_MODE(x)		FIELD_PREP(GENMASK(5, 3), (x))
+ #define   DIFACE_SDR			0
+ #define   DIFACE_NVDDR			BIT(9)
+ 
+@@ -676,7 +677,23 @@ static int anfc_param_read_type_exec(struct nand_chip *chip,
+ static int anfc_data_read_type_exec(struct nand_chip *chip,
+ 				    const struct nand_subop *subop)
+ {
+-	return anfc_misc_data_type_exec(chip, subop, PROG_PGRD);
++	u32 prog_reg = PROG_PGRD;
++
++	/*
++	 * Experience shows that while in SDR mode sending a CHANGE READ COLUMN
++	 * command through the READ PAGE "type" always works fine, when in
++	 * NV-DDR mode the same command simply fails. However, it was also
++	 * spotted that any CHANGE READ COLUMN command sent through the CHANGE
++	 * READ COLUMN ENHANCED "type" would correctly work in both cases (SDR
++	 * and NV-DDR). So, for simplicity, let's program the controller with
++	 * the CHANGE READ COLUMN ENHANCED "type" whenever we are requested to
++	 * perform a CHANGE READ COLUMN operation.
++	 */
++	if (subop->instrs[0].ctx.cmd.opcode == NAND_CMD_RNDOUT &&
++	    subop->instrs[2].ctx.cmd.opcode == NAND_CMD_RNDOUTSTART)
++		prog_reg = PROG_CHG_RD_COL_ENH;
++
++	return anfc_misc_data_type_exec(chip, subop, prog_reg);
+ }
+ 
+ static int anfc_param_write_type_exec(struct nand_chip *chip,
+@@ -810,6 +827,7 @@ static const struct nand_op_parser anfc_op_parser = NAND_OP_PARSER(
+ static int anfc_check_op(struct nand_chip *chip,
+ 			 const struct nand_operation *op)
+ {
++	struct mtd_info *mtd = nand_to_mtd(chip);
+ 	const struct nand_op_instr *instr;
+ 	int op_id;
+ 
+@@ -859,6 +877,35 @@ static int anfc_check_op(struct nand_chip *chip,
+ 	    op->instrs[1].type == NAND_OP_DATA_IN_INSTR)
+ 		return -ENOTSUPP;
+ 
++	/*
++	 * The controller only supports data payload requests which are a
++	 * multiple of 4. This may confuse the core as the core could request a
++	 * given number of bytes and then another number of bytes without
++	 * re-synchronizing the pointer. In practice, most data accesses are
++	 * 4-byte aligned and thus this is not an issue in practice. However,
++	 * rounding up will not work if we reached the end of the device. Any
++	 * unaligned data request that ends at the device boundary would confuse
++	 * the controller and cannot be performed.
++	 *
++	 * TODO: The nand_op_parser framework should be extended to
++	 * support custom checks on DATA instructions.
++	 */
++	if (op->ninstrs == 4 &&
++	    op->instrs[0].type == NAND_OP_CMD_INSTR &&
++	    op->instrs[1].type == NAND_OP_ADDR_INSTR &&
++	    op->instrs[1].ctx.addr.naddrs == 2 &&
++	    op->instrs[2].type == NAND_OP_CMD_INSTR &&
++	    op->instrs[3].type == NAND_OP_DATA_IN_INSTR) {
++		unsigned int start_off, end_off;
++
++		start_off = (op->instrs[1].ctx.addr.addrs[1] << 8) +
++			    op->instrs[1].ctx.addr.addrs[0];
++		end_off = start_off + round_up(op->instrs[3].ctx.data.len, 4);
++
++		if (end_off >= mtd->writesize + mtd->oobsize)
++			return -ENOTSUPP;
++	}
++
+ 	return nand_op_parser_exec_op(chip, &anfc_op_parser, op, true);
+ }
+ 
+@@ -884,21 +931,39 @@ static int anfc_setup_interface(struct nand_chip *chip, int target,
+ 	struct anand *anand = to_anand(chip);
+ 	struct arasan_nfc *nfc = to_anfc(chip->controller);
+ 	struct device_node *np = nfc->dev->of_node;
++	const struct nand_sdr_timings *sdr;
++	const struct nand_nvddr_timings *nvddr;
++
++	if (nand_interface_is_nvddr(conf)) {
++		nvddr = nand_get_nvddr_timings(conf);
++		if (IS_ERR(nvddr))
++			return PTR_ERR(nvddr);
++	} else {
++		sdr = nand_get_sdr_timings(conf);
++		if (IS_ERR(sdr))
++			return PTR_ERR(sdr);
++	}
+ 
+ 	if (target < 0)
+ 		return 0;
+ 
+-	anand->timings = DIFACE_SDR | DIFACE_SDR_MODE(conf->timings.mode);
++	if (nand_interface_is_sdr(conf))
++		anand->timings = DIFACE_SDR |
++				 DIFACE_SDR_MODE(conf->timings.mode);
++	else
++		anand->timings = DIFACE_NVDDR |
++				 DIFACE_DDR_MODE(conf->timings.mode);
++
+ 	anand->clk = ANFC_XLNX_SDR_DFLT_CORE_CLK;
+ 
+ 	/*
+ 	 * Due to a hardware bug in the ZynqMP SoC, SDR timing modes 0-1 work
+ 	 * with f > 90MHz (default clock is 100MHz) but signals are unstable
+ 	 * with higher modes. Hence we decrease a little bit the clock rate to
+-	 * 80MHz when using modes 2-5 with this SoC.
++	 * 80MHz when using SDR modes 2-5 with this SoC.
+ 	 */
+ 	if (of_device_is_compatible(np, "xlnx,zynqmp-nand-controller") &&
+-	    conf->timings.mode >= 2)
++	    nand_interface_is_sdr(conf) && conf->timings.mode >= 2)
+ 		anand->clk = ANFC_XLNX_SDR_HS_CORE_CLK;
+ 
+ 	return 0;
+diff --git a/drivers/mtd/nand/raw/atmel/nand-controller.c b/drivers/mtd/nand/raw/atmel/nand-controller.c
+index c048e8267..220e4e99c 100644
+--- a/drivers/mtd/nand/raw/atmel/nand-controller.c
++++ b/drivers/mtd/nand/raw/atmel/nand-controller.c
+@@ -1246,7 +1246,7 @@ static int atmel_smc_nand_prepare_smcconf(struct atmel_nand *nand,
+ 	nc = to_nand_controller(nand->base.controller);
+ 
+ 	/* DDR interface not supported. */
+-	if (conf->type != NAND_SDR_IFACE)
++	if (!nand_interface_is_sdr(conf))
+ 		return -ENOTSUPP;
+ 
+ 	/*
+@@ -1524,8 +1524,13 @@ static int atmel_nand_setup_interface(struct nand_chip *chip, int csline,
+ 				      const struct nand_interface_config *conf)
+ {
+ 	struct atmel_nand *nand = to_atmel_nand(chip);
++	const struct nand_sdr_timings *sdr;
+ 	struct atmel_nand_controller *nc;
+ 
++	sdr = nand_get_sdr_timings(conf);
++	if (IS_ERR(sdr))
++		return PTR_ERR(sdr);
++
+ 	nc = to_nand_controller(nand->base.controller);
+ 
+ 	if (csline >= nand->numcs ||
+diff --git a/drivers/mtd/nand/raw/cadence-nand-controller.c b/drivers/mtd/nand/raw/cadence-nand-controller.c
+index b46786cd5..7eec60ea9 100644
+--- a/drivers/mtd/nand/raw/cadence-nand-controller.c
++++ b/drivers/mtd/nand/raw/cadence-nand-controller.c
+@@ -2348,9 +2348,9 @@ cadence_nand_setup_interface(struct nand_chip *chip, int chipnr,
+ 	 * for tRP and tRH timings. If it is NOT possible to sample data
+ 	 * with optimal tRP/tRH settings, the parameters will be extended.
+ 	 * If clk_period is 50ns (the lowest value) this condition is met
+-	 * for asynchronous timing modes 1, 2, 3, 4 and 5.
+-	 * If clk_period is 20ns the condition is met only
+-	 * for asynchronous timing mode 5.
++	 * for SDR timing modes 1, 2, 3, 4 and 5.
++	 * If clk_period is 20ns the condition is met only for SDR timing
++	 * mode 5.
+ 	 */
+ 	if (sdr->tRC_min <= clk_period &&
+ 	    sdr->tRP_min <= (clk_period / 2) &&
+diff --git a/drivers/mtd/nand/raw/gpmi-nand/gpmi-nand.h b/drivers/mtd/nand/raw/gpmi-nand/gpmi-nand.h
+index fdc5ed7de..5e1c3ddae 100644
+--- a/drivers/mtd/nand/raw/gpmi-nand/gpmi-nand.h
++++ b/drivers/mtd/nand/raw/gpmi-nand/gpmi-nand.h
+@@ -79,7 +79,7 @@ enum gpmi_type {
+ struct gpmi_devdata {
+ 	enum gpmi_type type;
+ 	int bch_max_ecc_strength;
+-	int max_chain_delay; /* See the async EDO mode */
++	int max_chain_delay; /* See the SDR EDO mode */
+ 	const char * const *clks;
+ 	const int clks_count;
+ };
+diff --git a/drivers/mtd/nand/raw/internals.h b/drivers/mtd/nand/raw/internals.h
+index 012876e14..7016e0f38 100644
+--- a/drivers/mtd/nand/raw/internals.h
++++ b/drivers/mtd/nand/raw/internals.h
+@@ -90,9 +90,14 @@ void onfi_fill_interface_config(struct nand_chip *chip,
+ 				unsigned int timing_mode);
+ unsigned int
+ onfi_find_closest_sdr_mode(const struct nand_sdr_timings *spec_timings);
++unsigned int
++onfi_find_closest_nvddr_mode(const struct nand_nvddr_timings *spec_timings);
+ int nand_choose_best_sdr_timings(struct nand_chip *chip,
+ 				 struct nand_interface_config *iface,
+ 				 struct nand_sdr_timings *spec_timings);
++int nand_choose_best_nvddr_timings(struct nand_chip *chip,
++				   struct nand_interface_config *iface,
++				   struct nand_nvddr_timings *spec_timings);
+ const struct nand_interface_config *nand_get_reset_interface_config(void);
+ int nand_get_features(struct nand_chip *chip, int addr, u8 *subfeature_param);
+ int nand_set_features(struct nand_chip *chip, int addr, u8 *subfeature_param);
+diff --git a/drivers/mtd/nand/raw/nand_base.c b/drivers/mtd/nand/raw/nand_base.c
+index c41c0ff61..b800a979e 100644
+--- a/drivers/mtd/nand/raw/nand_base.c
++++ b/drivers/mtd/nand/raw/nand_base.c
+@@ -408,9 +408,11 @@ static int nand_do_write_oob(struct nand_chip *chip, loff_t to,
+ 	 * if we don't do this. I have no clue why, but I seem to have 'fixed'
+ 	 * it in the doc2000 driver in August 1999.  dwmw2.
+ 	 */
+-	ret = nand_reset(chip, chipnr);
+-	if (ret)
+-		return ret;
++	if (chip->parameters.onfi->jedec_id == NAND_MFR_TOSHIBA) {
++		ret = nand_reset(chip, chipnr);
++		if (ret)
++			return ret;
++	}
+ 
+ 	nand_select_target(chip, chipnr);
+ 
+@@ -607,7 +609,7 @@ static int nand_block_checkbad(struct nand_chip *chip, loff_t ofs, int allowbbt)
+  */
+ int nand_soft_waitrdy(struct nand_chip *chip, unsigned long timeout_ms)
+ {
+-	const struct nand_sdr_timings *timings;
++	const struct nand_interface_config *conf;
+ 	u8 status = 0;
+ 	int ret;
+ 
+@@ -615,8 +617,8 @@ int nand_soft_waitrdy(struct nand_chip *chip, unsigned long timeout_ms)
+ 		return -ENOTSUPP;
+ 
+ 	/* Wait tWB before polling the STATUS reg. */
+-	timings = nand_get_sdr_timings(nand_get_interface_config(chip));
+-	ndelay(PSEC_TO_NSEC(timings->tWB_max));
++	conf = nand_get_interface_config(chip);
++	ndelay(NAND_COMMON_TIMING_NS(conf, tWB_max));
+ 
+ 	ret = nand_status_op(chip, NULL);
+ 	if (ret)
+@@ -792,7 +794,7 @@ static int nand_reset_interface(struct nand_chip *chip, int chipnr)
+ static int nand_setup_interface(struct nand_chip *chip, int chipnr)
+ {
+ 	const struct nand_controller_ops *ops = chip->controller->ops;
+-	u8 tmode_param[ONFI_SUBFEATURE_PARAM_LEN] = { };
++	u8 tmode_param[ONFI_SUBFEATURE_PARAM_LEN] = { }, request;
+ 	int ret;
+ 
+ 	if (!nand_controller_can_setup_interface(chip))
+@@ -808,7 +810,12 @@ static int nand_setup_interface(struct nand_chip *chip, int chipnr)
+ 	if (!chip->best_interface_config)
+ 		return 0;
+ 
+-	tmode_param[0] = chip->best_interface_config->timings.mode;
++	request = chip->best_interface_config->timings.mode;
++	if (nand_interface_is_sdr(chip->best_interface_config))
++		request |= ONFI_DATA_INTERFACE_SDR;
++	else
++		request |= ONFI_DATA_INTERFACE_NVDDR;
++	tmode_param[0] = request;
+ 
+ 	/* Change the mode on the chip side (if supported by the NAND chip) */
+ 	if (nand_supports_set_features(chip, ONFI_FEATURE_ADDR_TIMING_MODE)) {
+@@ -837,9 +844,13 @@ static int nand_setup_interface(struct nand_chip *chip, int chipnr)
+ 	if (ret)
+ 		goto err_reset_chip;
+ 
+-	if (tmode_param[0] != chip->best_interface_config->timings.mode) {
+-		pr_warn("timing mode %d not acknowledged by the NAND chip\n",
++	if (request != tmode_param[0]) {
++		pr_warn("%s timing mode %d not acknowledged by the NAND chip\n",
++			nand_interface_is_nvddr(chip->best_interface_config) ? "NV-DDR" : "SDR",
+ 			chip->best_interface_config->timings.mode);
++		pr_debug("NAND chip would work in %s timing mode %d\n",
++			 tmode_param[0] & ONFI_DATA_INTERFACE_NVDDR ? "NV-DDR" : "SDR",
++			 (unsigned int)ONFI_TIMING_MODE_PARAM(tmode_param[0]));
+ 		goto err_reset_chip;
+ 	}
+ 
+@@ -895,7 +906,7 @@ int nand_choose_best_sdr_timings(struct nand_chip *chip,
+ 		/* Fallback to slower modes */
+ 		best_mode = iface->timings.mode;
+ 	} else if (chip->parameters.onfi) {
+-		best_mode = fls(chip->parameters.onfi->async_timing_mode) - 1;
++		best_mode = fls(chip->parameters.onfi->sdr_timing_modes) - 1;
+ 	}
+ 
+ 	for (mode = best_mode; mode >= 0; mode--) {
+@@ -903,13 +914,87 @@ int nand_choose_best_sdr_timings(struct nand_chip *chip,
+ 
+ 		ret = ops->setup_interface(chip, NAND_DATA_IFACE_CHECK_ONLY,
+ 					   iface);
+-		if (!ret)
++		if (!ret) {
++			chip->best_interface_config = iface;
+ 			break;
++		}
+ 	}
+ 
+-	chip->best_interface_config = iface;
++	return ret;
++}
+ 
+-	return 0;
++/**
++ * nand_choose_best_nvddr_timings - Pick up the best NVDDR timings that both the
++ *                                  NAND controller and the NAND chip support
++ * @chip: the NAND chip
++ * @iface: the interface configuration (can eventually be updated)
++ * @spec_timings: specific timings, when not fitting the ONFI specification
++ *
++ * If specific timings are provided, use them. Otherwise, retrieve supported
++ * timing modes from ONFI information.
++ */
++int nand_choose_best_nvddr_timings(struct nand_chip *chip,
++				   struct nand_interface_config *iface,
++				   struct nand_nvddr_timings *spec_timings)
++{
++	const struct nand_controller_ops *ops = chip->controller->ops;
++	int best_mode = 0, mode, ret;
++
++	iface->type = NAND_NVDDR_IFACE;
++
++	if (spec_timings) {
++		iface->timings.nvddr = *spec_timings;
++		iface->timings.mode = onfi_find_closest_nvddr_mode(spec_timings);
++
++		/* Verify the controller supports the requested interface */
++		ret = ops->setup_interface(chip, NAND_DATA_IFACE_CHECK_ONLY,
++					   iface);
++		if (!ret) {
++			chip->best_interface_config = iface;
++			return ret;
++		}
++
++		/* Fallback to slower modes */
++		best_mode = iface->timings.mode;
++	} else if (chip->parameters.onfi) {
++		best_mode = fls(chip->parameters.onfi->nvddr_timing_modes) - 1;
++	}
++
++	for (mode = best_mode; mode >= 0; mode--) {
++		onfi_fill_interface_config(chip, iface, NAND_NVDDR_IFACE, mode);
++
++		ret = ops->setup_interface(chip, NAND_DATA_IFACE_CHECK_ONLY,
++					   iface);
++		if (!ret) {
++			chip->best_interface_config = iface;
++			break;
++		}
++	}
++
++	return ret;
++}
++
++/**
++ * nand_choose_best_timings - Pick up the best NVDDR or SDR timings that both
++ *                            NAND controller and the NAND chip support
++ * @chip: the NAND chip
++ * @iface: the interface configuration (can eventually be updated)
++ *
++ * If specific timings are provided, use them. Otherwise, retrieve supported
++ * timing modes from ONFI information.
++ */
++static int nand_choose_best_timings(struct nand_chip *chip,
++				    struct nand_interface_config *iface)
++{
++	int ret;
++
++	/* Try the fastest timings: NV-DDR */
++	ret = nand_choose_best_nvddr_timings(chip, iface, NULL);
++	if (!ret)
++		return 0;
++
++	/* Fallback to SDR timings otherwise */
++	return nand_choose_best_sdr_timings(chip, iface, NULL);
+ }
+ 
+ /**
+@@ -940,7 +1025,7 @@ static int nand_choose_interface_config(struct nand_chip *chip)
+ 	if (chip->ops.choose_interface_config)
+ 		ret = chip->ops.choose_interface_config(chip, iface);
+ 	else
+-		ret = nand_choose_best_sdr_timings(chip, iface, NULL);
++		ret = nand_choose_best_timings(chip, iface);
+ 
+ 	if (ret)
+ 		kfree(iface);
+@@ -1006,15 +1091,15 @@ static int nand_sp_exec_read_page_op(struct nand_chip *chip, unsigned int page,
+ 				     unsigned int offset_in_page, void *buf,
+ 				     unsigned int len)
+ {
+-	const struct nand_sdr_timings *sdr =
+-		nand_get_sdr_timings(nand_get_interface_config(chip));
++	const struct nand_interface_config *conf =
++		nand_get_interface_config(chip);
+ 	struct mtd_info *mtd = nand_to_mtd(chip);
+ 	u8 addrs[4];
+ 	struct nand_op_instr instrs[] = {
+ 		NAND_OP_CMD(NAND_CMD_READ0, 0),
+-		NAND_OP_ADDR(3, addrs, PSEC_TO_NSEC(sdr->tWB_max)),
+-		NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tR_max),
+-				 PSEC_TO_NSEC(sdr->tRR_min)),
++		NAND_OP_ADDR(3, addrs, NAND_COMMON_TIMING_NS(conf, tWB_max)),
++		NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tR_max),
++				 NAND_COMMON_TIMING_NS(conf, tRR_min)),
+ 		NAND_OP_DATA_IN(len, buf, 0),
+ 	};
+ 	struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+@@ -1049,15 +1134,15 @@ static int nand_lp_exec_read_page_op(struct nand_chip *chip, unsigned int page,
+ 				     unsigned int offset_in_page, void *buf,
+ 				     unsigned int len)
+ {
+-	const struct nand_sdr_timings *sdr =
+-		nand_get_sdr_timings(nand_get_interface_config(chip));
++	const struct nand_interface_config *conf =
++		nand_get_interface_config(chip);
+ 	u8 addrs[5];
+ 	struct nand_op_instr instrs[] = {
+ 		NAND_OP_CMD(NAND_CMD_READ0, 0),
+ 		NAND_OP_ADDR(4, addrs, 0),
+-		NAND_OP_CMD(NAND_CMD_READSTART, PSEC_TO_NSEC(sdr->tWB_max)),
+-		NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tR_max),
+-				 PSEC_TO_NSEC(sdr->tRR_min)),
++		NAND_OP_CMD(NAND_CMD_READSTART, NAND_COMMON_TIMING_NS(conf, tWB_max)),
++		NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tR_max),
++				 NAND_COMMON_TIMING_NS(conf, tRR_min)),
+ 		NAND_OP_DATA_IN(len, buf, 0),
+ 	};
+ 	struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+@@ -1146,13 +1231,14 @@ int nand_read_param_page_op(struct nand_chip *chip, u8 page, void *buf,
+ 		return -EINVAL;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_PARAM, 0),
+-			NAND_OP_ADDR(1, &page, PSEC_TO_NSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tR_max),
+-					 PSEC_TO_NSEC(sdr->tRR_min)),
++			NAND_OP_ADDR(1, &page,
++				     NAND_COMMON_TIMING_NS(conf, tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tR_max),
++					 NAND_COMMON_TIMING_NS(conf, tRR_min)),
+ 			NAND_OP_8BIT_DATA_IN(len, buf, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+@@ -1187,6 +1273,15 @@ int nand_read_param_page_op(struct nand_chip *chip, u8 page, void *buf,
+ int nand_change_read_column_op(struct nand_chip *chip,
+ 			       unsigned int offset_in_page, void *buf,
+ 			       unsigned int len, bool force_8bit)
++{
++	return nand_check_change_read_column_op(chip, offset_in_page, buf,
++						len, force_8bit, false);
++}
++
++int nand_check_change_read_column_op(struct nand_chip *chip,
++				     unsigned int offset_in_page, void *buf,
++				     unsigned int len, bool force_8bit,
++				     bool check_only)
+ {
+ 	struct mtd_info *mtd = nand_to_mtd(chip);
+ 
+@@ -1201,14 +1296,14 @@ int nand_change_read_column_op(struct nand_chip *chip,
+ 		return -ENOTSUPP;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		u8 addrs[2] = {};
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_RNDOUT, 0),
+ 			NAND_OP_ADDR(2, addrs, 0),
+ 			NAND_OP_CMD(NAND_CMD_RNDOUTSTART,
+-				    PSEC_TO_NSEC(sdr->tCCS_min)),
++				    NAND_COMMON_TIMING_NS(conf, tCCS_min)),
+ 			NAND_OP_DATA_IN(len, buf, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+@@ -1224,9 +1319,15 @@ int nand_change_read_column_op(struct nand_chip *chip,
+ 
+ 		instrs[3].ctx.data.force_8bit = force_8bit;
+ 
++		if (check_only)
++			return nand_check_op(chip, &op);
++
+ 		return nand_exec_op(chip, &op);
+ 	}
+ 
++	if (check_only)
++		return 0;
++
+ 	chip->legacy.cmdfunc(chip, NAND_CMD_RNDOUT, offset_in_page, -1);
+ 	if (len)
+ 		chip->legacy.read_buf(chip, buf, len);
+@@ -1276,8 +1377,8 @@ static int nand_exec_prog_page_op(struct nand_chip *chip, unsigned int page,
+ 				  unsigned int offset_in_page, const void *buf,
+ 				  unsigned int len, bool prog)
+ {
+-	const struct nand_sdr_timings *sdr =
+-		nand_get_sdr_timings(nand_get_interface_config(chip));
++	const struct nand_interface_config *conf =
++		nand_get_interface_config(chip);
+ 	struct mtd_info *mtd = nand_to_mtd(chip);
+ 	u8 addrs[5] = {};
+ 	struct nand_op_instr instrs[] = {
+@@ -1288,10 +1389,11 @@ static int nand_exec_prog_page_op(struct nand_chip *chip, unsigned int page,
+ 		 */
+ 		NAND_OP_CMD(NAND_CMD_READ0, 0),
+ 		NAND_OP_CMD(NAND_CMD_SEQIN, 0),
+-		NAND_OP_ADDR(0, addrs, PSEC_TO_NSEC(sdr->tADL_min)),
++		NAND_OP_ADDR(0, addrs, NAND_COMMON_TIMING_NS(conf, tADL_min)),
+ 		NAND_OP_DATA_OUT(len, buf, 0),
+-		NAND_OP_CMD(NAND_CMD_PAGEPROG, PSEC_TO_NSEC(sdr->tWB_max)),
+-		NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tPROG_max), 0),
++		NAND_OP_CMD(NAND_CMD_PAGEPROG,
++			    NAND_COMMON_TIMING_NS(conf, tWB_max)),
++		NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tPROG_max), 0),
+ 	};
+ 	struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+ 	int naddrs = nand_fill_column_cycles(chip, addrs, offset_in_page);
+@@ -1400,12 +1502,13 @@ int nand_prog_page_end_op(struct nand_chip *chip)
+ 	u8 status;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_PAGEPROG,
+-				    PSEC_TO_NSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tPROG_max), 0),
++				    NAND_COMMON_TIMING_NS(conf, tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tPROG_max),
++					 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+ 
+@@ -1507,12 +1610,12 @@ int nand_change_write_column_op(struct nand_chip *chip,
+ 		return -ENOTSUPP;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		u8 addrs[2];
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_RNDIN, 0),
+-			NAND_OP_ADDR(2, addrs, PSEC_TO_NSEC(sdr->tCCS_min)),
++			NAND_OP_ADDR(2, addrs, NAND_COMMON_TIMING_NS(conf, tCCS_min)),
+ 			NAND_OP_DATA_OUT(len, buf, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+@@ -1556,26 +1659,46 @@ int nand_readid_op(struct nand_chip *chip, u8 addr, void *buf,
+ 		   unsigned int len)
+ {
+ 	unsigned int i;
+-	u8 *id = buf;
++	u8 *id = buf, *ddrbuf = NULL;
+ 
+ 	if (len && !buf)
+ 		return -EINVAL;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_READID, 0),
+-			NAND_OP_ADDR(1, &addr, PSEC_TO_NSEC(sdr->tADL_min)),
++			NAND_OP_ADDR(1, &addr,
++				     NAND_COMMON_TIMING_NS(conf, tADL_min)),
+ 			NAND_OP_8BIT_DATA_IN(len, buf, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
++		int ret;
++
++		/* READ_ID data bytes are received twice in NV-DDR mode */
++		if (len && nand_interface_is_nvddr(conf)) {
++			ddrbuf = kzalloc(len * 2, GFP_KERNEL);
++			if (!ddrbuf)
++				return -ENOMEM;
++
++			instrs[2].ctx.data.len *= 2;
++			instrs[2].ctx.data.buf.in = ddrbuf;
++		}
+ 
+ 		/* Drop the DATA_IN instruction if len is set to 0. */
+ 		if (!len)
+ 			op.ninstrs--;
+ 
+-		return nand_exec_op(chip, &op);
++		ret = nand_exec_op(chip, &op);
++		if (!ret && len && nand_interface_is_nvddr(conf)) {
++			for (i = 0; i < len; i++)
++				id[i] = ddrbuf[i * 2];
++		}
++
++		kfree(ddrbuf);
++
++		return ret;
+ 	}
+ 
+ 	chip->legacy.cmdfunc(chip, NAND_CMD_READID, addr, -1);
+@@ -1601,19 +1724,31 @@ EXPORT_SYMBOL_GPL(nand_readid_op);
+ int nand_status_op(struct nand_chip *chip, u8 *status)
+ {
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
++		u8 ddrstatus[2];
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_STATUS,
+-				    PSEC_TO_NSEC(sdr->tADL_min)),
++				    NAND_COMMON_TIMING_NS(conf, tADL_min)),
+ 			NAND_OP_8BIT_DATA_IN(1, status, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
++		int ret;
++
++		/* The status data byte will be received twice in NV-DDR mode */
++		if (status && nand_interface_is_nvddr(conf)) {
++			instrs[1].ctx.data.len *= 2;
++			instrs[1].ctx.data.buf.in = ddrstatus;
++		}
+ 
+ 		if (!status)
+ 			op.ninstrs--;
+ 
+-		return nand_exec_op(chip, &op);
++		ret = nand_exec_op(chip, &op);
++		if (!ret && status && nand_interface_is_nvddr(conf))
++			*status = ddrstatus[0];
++
++		return ret;
+ 	}
+ 
+ 	chip->legacy.cmdfunc(chip, NAND_CMD_STATUS, -1, -1);
+@@ -1670,15 +1805,16 @@ int nand_erase_op(struct nand_chip *chip, unsigned int eraseblock)
+ 	u8 status;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		u8 addrs[3] = {	page, page >> 8, page >> 16 };
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_ERASE1, 0),
+ 			NAND_OP_ADDR(2, addrs, 0),
+ 			NAND_OP_CMD(NAND_CMD_ERASE2,
+-				    PSEC_TO_MSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tBERS_max), 0),
++				    NAND_COMMON_TIMING_MS(conf, tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tBERS_max),
++					 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+ 
+@@ -1729,14 +1865,17 @@ static int nand_set_features_op(struct nand_chip *chip, u8 feature,
+ 	int i, ret;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_SET_FEATURES, 0),
+-			NAND_OP_ADDR(1, &feature, PSEC_TO_NSEC(sdr->tADL_min)),
++			NAND_OP_ADDR(1, &feature, NAND_COMMON_TIMING_NS(conf,
++									tADL_min)),
+ 			NAND_OP_8BIT_DATA_OUT(ONFI_SUBFEATURE_PARAM_LEN, data,
+-					      PSEC_TO_NSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tFEAT_max), 0),
++					      NAND_COMMON_TIMING_NS(conf,
++								    tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tFEAT_max),
++					 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+ 
+@@ -1772,23 +1911,37 @@ static int nand_set_features_op(struct nand_chip *chip, u8 feature,
+ static int nand_get_features_op(struct nand_chip *chip, u8 feature,
+ 				void *data)
+ {
+-	u8 *params = data;
++	u8 *params = data, ddrbuf[ONFI_SUBFEATURE_PARAM_LEN * 2];
+ 	int i;
+ 
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_CMD(NAND_CMD_GET_FEATURES, 0),
+-			NAND_OP_ADDR(1, &feature, PSEC_TO_NSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tFEAT_max),
+-					 PSEC_TO_NSEC(sdr->tRR_min)),
++			NAND_OP_ADDR(1, &feature,
++				     NAND_COMMON_TIMING_NS(conf, tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tFEAT_max),
++					 NAND_COMMON_TIMING_NS(conf, tRR_min)),
+ 			NAND_OP_8BIT_DATA_IN(ONFI_SUBFEATURE_PARAM_LEN,
+ 					     data, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
++		int ret;
+ 
+-		return nand_exec_op(chip, &op);
++		/* GET_FEATURE data bytes are received twice in NV-DDR mode */
++		if (nand_interface_is_nvddr(conf)) {
++			instrs[3].ctx.data.len *= 2;
++			instrs[3].ctx.data.buf.in = ddrbuf;
++		}
++
++		ret = nand_exec_op(chip, &op);
++		if (nand_interface_is_nvddr(conf)) {
++			for (i = 0; i < ONFI_SUBFEATURE_PARAM_LEN; i++)
++				params[i] = ddrbuf[i * 2];
++		}
++
++		return ret;
+ 	}
+ 
+ 	chip->legacy.cmdfunc(chip, NAND_CMD_GET_FEATURES, feature, -1);
+@@ -1833,11 +1986,13 @@ static int nand_wait_rdy_op(struct nand_chip *chip, unsigned int timeout_ms,
+ int nand_reset_op(struct nand_chip *chip)
+ {
+ 	if (nand_has_exec_op(chip)) {
+-		const struct nand_sdr_timings *sdr =
+-			nand_get_sdr_timings(nand_get_interface_config(chip));
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+-			NAND_OP_CMD(NAND_CMD_RESET, PSEC_TO_NSEC(sdr->tWB_max)),
+-			NAND_OP_WAIT_RDY(PSEC_TO_MSEC(sdr->tRST_max), 0),
++			NAND_OP_CMD(NAND_CMD_RESET,
++				    NAND_COMMON_TIMING_NS(conf, tWB_max)),
++			NAND_OP_WAIT_RDY(NAND_COMMON_TIMING_MS(conf, tRST_max),
++					 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
+ 
+@@ -1872,17 +2027,50 @@ int nand_read_data_op(struct nand_chip *chip, void *buf, unsigned int len,
+ 		return -EINVAL;
+ 
+ 	if (nand_has_exec_op(chip)) {
++		const struct nand_interface_config *conf =
++			nand_get_interface_config(chip);
+ 		struct nand_op_instr instrs[] = {
+ 			NAND_OP_DATA_IN(len, buf, 0),
+ 		};
+ 		struct nand_operation op = NAND_OPERATION(chip->cur_cs, instrs);
++		u8 *ddrbuf = NULL;
++		int ret, i;
+ 
+ 		instrs[0].ctx.data.force_8bit = force_8bit;
+ 
+-		if (check_only)
+-			return nand_check_op(chip, &op);
++		/*
++		 * Parameter payloads (ID, status, features, etc) do not go
++		 * through the same pipeline as regular data, hence the
++		 * force_8bit flag must be set and this also indicates that in
++		 * case NV-DDR timings are being used the data will be received
++		 * twice.
++		 */
++		if (force_8bit && nand_interface_is_nvddr(conf)) {
++			ddrbuf = kzalloc(len * 2, GFP_KERNEL);
++			if (!ddrbuf)
++				return -ENOMEM;
+ 
+-		return nand_exec_op(chip, &op);
++			instrs[0].ctx.data.len *= 2;
++			instrs[0].ctx.data.buf.in = ddrbuf;
++		}
++
++		if (check_only) {
++			ret = nand_check_op(chip, &op);
++			kfree(ddrbuf);
++			return ret;
++		}
++
++		ret = nand_exec_op(chip, &op);
++		if (!ret && force_8bit && nand_interface_is_nvddr(conf)) {
++			u8 *dst = buf;
++
++			for (i = 0; i < len; i++)
++				dst[i] = ddrbuf[i * 2];
++		}
++
++		kfree(ddrbuf);
++
++		return ret;
+ 	}
+ 
+ 	if (check_only)
+@@ -2837,10 +3025,19 @@ static int nand_read_subpage(struct nand_chip *chip, uint32_t data_offs,
+ 		    (busw - 1))
+ 			aligned_len++;
+ 
+-		ret = nand_change_read_column_op(chip,
+-						 mtd->writesize + aligned_pos,
+-						 &chip->oob_poi[aligned_pos],
+-						 aligned_len, false);
++		ret = nand_check_change_read_column_op(chip,
++						       mtd->writesize + aligned_pos,
++						       &chip->oob_poi[aligned_pos],
++						       aligned_len, false, true);
++		if (!ret)
++			ret = nand_change_read_column_op(chip,
++							 mtd->writesize + aligned_pos,
++							 &chip->oob_poi[aligned_pos],
++							 aligned_len, false);
++		else
++			ret = nand_change_read_column_op(chip, mtd->writesize,
++							 chip->oob_poi,
++							 mtd->oobsize, false);
+ 		if (ret)
+ 			return ret;
+ 	}
+@@ -3095,13 +3292,13 @@ static int nand_setup_read_retry(struct nand_chip *chip, int retry_mode)
+ 
+ static void nand_wait_readrdy(struct nand_chip *chip)
+ {
+-	const struct nand_sdr_timings *sdr;
++	const struct nand_interface_config *conf;
+ 
+ 	if (!(chip->options & NAND_NEED_READRDY))
+ 		return;
+ 
+-	sdr = nand_get_sdr_timings(nand_get_interface_config(chip));
+-	WARN_ON(nand_wait_rdy_op(chip, PSEC_TO_MSEC(sdr->tR_max), 0));
++	conf = nand_get_interface_config(chip);
++	WARN_ON(nand_wait_rdy_op(chip, NAND_COMMON_TIMING_MS(conf, tR_max), 0));
+ }
+ 
+ /**
+diff --git a/drivers/mtd/nand/raw/nand_legacy.c b/drivers/mtd/nand/raw/nand_legacy.c
+index 2bcc03714..f682f44b3 100644
+--- a/drivers/mtd/nand/raw/nand_legacy.c
++++ b/drivers/mtd/nand/raw/nand_legacy.c
+@@ -368,7 +368,7 @@ static void nand_ccs_delay(struct nand_chip *chip)
+ 	 * Wait tCCS_min if it is correctly defined, otherwise wait 500ns
+ 	 * (which should be safe for all NANDs).
+ 	 */
+-	if (nand_controller_can_setup_interface(chip))
++	if (!IS_ERR(sdr) && nand_controller_can_setup_interface(chip))
+ 		ndelay(sdr->tCCS_min / 1000);
+ 	else
+ 		ndelay(500);
+diff --git a/drivers/mtd/nand/raw/nand_onfi.c b/drivers/mtd/nand/raw/nand_onfi.c
+index 45649e037..7f7c7ff0d 100644
+--- a/drivers/mtd/nand/raw/nand_onfi.c
++++ b/drivers/mtd/nand/raw/nand_onfi.c
+@@ -315,7 +315,11 @@ int nand_onfi_detect(struct nand_chip *chip)
+ 	onfi->tBERS = le16_to_cpu(p->t_bers);
+ 	onfi->tR = le16_to_cpu(p->t_r);
+ 	onfi->tCCS = le16_to_cpu(p->t_ccs);
+-	onfi->async_timing_mode = le16_to_cpu(p->async_timing_mode);
++	onfi->fast_tCAD = le16_to_cpu(p->nvddr_nvddr2_features) & BIT(0);
++	onfi->sdr_timing_modes = le16_to_cpu(p->sdr_timing_modes);
++	if (le16_to_cpu(p->features) & ONFI_FEATURE_NV_DDR)
++		onfi->nvddr_timing_modes = le16_to_cpu(p->nvddr_timing_modes);
++	onfi->jedec_id = le16_to_cpu(p->jedec_id);
+ 	onfi->vendor_revision = le16_to_cpu(p->vendor_revision);
+ 	memcpy(onfi->vendor, p->vendor, sizeof(p->vendor));
+ 	chip->parameters.onfi = onfi;
+diff --git a/drivers/mtd/nand/raw/nand_timings.c b/drivers/mtd/nand/raw/nand_timings.c
+index 94d832646..7b41afc37 100644
+--- a/drivers/mtd/nand/raw/nand_timings.c
++++ b/drivers/mtd/nand/raw/nand_timings.c
+@@ -292,6 +292,261 @@ static const struct nand_interface_config onfi_sdr_timings[] = {
+ 	},
+ };
+ 
++static const struct nand_interface_config onfi_nvddr_timings[] = {
++	/* Mode 0 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 0,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 10000,
++			.tCALH_min = 10000,
++			.tCALS_min = 10000,
++			.tCAS_min = 10000,
++			.tCEH_min = 20000,
++			.tCH_min = 10000,
++			.tCK_min = 50000,
++			.tCS_min = 35000,
++			.tDH_min = 5000,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 5000,
++			.tDS_min = 5000,
++			.tDSC_min = 50000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 6000,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++	/* Mode 1 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 1,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 5000,
++			.tCALH_min = 5000,
++			.tCALS_min = 5000,
++			.tCAS_min = 5000,
++			.tCEH_min = 20000,
++			.tCH_min = 5000,
++			.tCK_min = 30000,
++			.tCS_min = 25000,
++			.tDH_min = 2500,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 2500,
++			.tDS_min = 3000,
++			.tDSC_min = 30000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 3000,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++	/* Mode 2 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 2,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 4000,
++			.tCALH_min = 4000,
++			.tCALS_min = 4000,
++			.tCAS_min = 4000,
++			.tCEH_min = 20000,
++			.tCH_min = 4000,
++			.tCK_min = 20000,
++			.tCS_min = 15000,
++			.tDH_min = 1700,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 1700,
++			.tDS_min = 2000,
++			.tDSC_min = 20000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 2000,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++	/* Mode 3 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 3,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 3000,
++			.tCALH_min = 3000,
++			.tCALS_min = 3000,
++			.tCAS_min = 3000,
++			.tCEH_min = 20000,
++			.tCH_min = 3000,
++			.tCK_min = 15000,
++			.tCS_min = 15000,
++			.tDH_min = 1300,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 1300,
++			.tDS_min = 1500,
++			.tDSC_min = 15000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 1500,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++	/* Mode 4 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 4,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 2500,
++			.tCALH_min = 2500,
++			.tCALS_min = 2500,
++			.tCAS_min = 2500,
++			.tCEH_min = 20000,
++			.tCH_min = 2500,
++			.tCK_min = 12000,
++			.tCS_min = 15000,
++			.tDH_min = 1100,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 1000,
++			.tDS_min = 1100,
++			.tDSC_min = 12000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 1200,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++	/* Mode 5 */
++	{
++		.type = NAND_NVDDR_IFACE,
++		.timings.mode = 5,
++		.timings.nvddr = {
++			.tCCS_min = 500000,
++			.tR_max = 200000000,
++			.tPROG_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tBERS_max = 1000000ULL * ONFI_DYN_TIMING_MAX,
++			.tAC_min = 3000,
++			.tAC_max = 25000,
++			.tADL_min = 400000,
++			.tCAD_min = 45000,
++			.tCAH_min = 2000,
++			.tCALH_min = 2000,
++			.tCALS_min = 2000,
++			.tCAS_min = 2000,
++			.tCEH_min = 20000,
++			.tCH_min = 2000,
++			.tCK_min = 10000,
++			.tCS_min = 15000,
++			.tDH_min = 900,
++			.tDQSCK_min = 3000,
++			.tDQSCK_max = 25000,
++			.tDQSD_min = 0,
++			.tDQSD_max = 18000,
++			.tDQSHZ_max = 20000,
++			.tDQSQ_max = 850,
++			.tDS_min = 900,
++			.tDSC_min = 10000,
++			.tFEAT_max = 1000000,
++			.tITC_max = 1000000,
++			.tQHS_max = 1000,
++			.tRHW_min = 100000,
++			.tRR_min = 20000,
++			.tRST_max = 500000000,
++			.tWB_max = 100000,
++			.tWHR_min = 80000,
++			.tWRCK_min = 20000,
++			.tWW_min = 100000,
++		},
++	},
++};
++
+ /* All NAND chips share the same reset data interface: SDR mode 0 */
+ const struct nand_interface_config *nand_get_reset_interface_config(void)
+ {
+@@ -346,23 +601,60 @@ onfi_find_closest_sdr_mode(const struct nand_sdr_timings *spec_timings)
+ }
+ 
+ /**
+- * onfi_fill_interface_config - Initialize an interface config from a given
+- *                              ONFI mode
++ * onfi_find_closest_nvddr_mode - Derive the closest ONFI NVDDR timing mode
++ *                                given a set of timings
++ * @spec_timings: the timings to challenge
++ */
++unsigned int
++onfi_find_closest_nvddr_mode(const struct nand_nvddr_timings *spec_timings)
++{
++	const struct nand_nvddr_timings *onfi_timings;
++	int mode;
++
++	for (mode = ARRAY_SIZE(onfi_nvddr_timings) - 1; mode > 0; mode--) {
++		onfi_timings = &onfi_nvddr_timings[mode].timings.nvddr;
++
++		if (spec_timings->tCCS_min <= onfi_timings->tCCS_min &&
++		    spec_timings->tAC_min <= onfi_timings->tAC_min &&
++		    spec_timings->tADL_min <= onfi_timings->tADL_min &&
++		    spec_timings->tCAD_min <= onfi_timings->tCAD_min &&
++		    spec_timings->tCAH_min <= onfi_timings->tCAH_min &&
++		    spec_timings->tCALH_min <= onfi_timings->tCALH_min &&
++		    spec_timings->tCALS_min <= onfi_timings->tCALS_min &&
++		    spec_timings->tCAS_min <= onfi_timings->tCAS_min &&
++		    spec_timings->tCEH_min <= onfi_timings->tCEH_min &&
++		    spec_timings->tCH_min <= onfi_timings->tCH_min &&
++		    spec_timings->tCK_min <= onfi_timings->tCK_min &&
++		    spec_timings->tCS_min <= onfi_timings->tCS_min &&
++		    spec_timings->tDH_min <= onfi_timings->tDH_min &&
++		    spec_timings->tDQSCK_min <= onfi_timings->tDQSCK_min &&
++		    spec_timings->tDQSD_min <= onfi_timings->tDQSD_min &&
++		    spec_timings->tDS_min <= onfi_timings->tDS_min &&
++		    spec_timings->tDSC_min <= onfi_timings->tDSC_min &&
++		    spec_timings->tRHW_min <= onfi_timings->tRHW_min &&
++		    spec_timings->tRR_min <= onfi_timings->tRR_min &&
++		    spec_timings->tWHR_min <= onfi_timings->tWHR_min &&
++		    spec_timings->tWRCK_min <= onfi_timings->tWRCK_min &&
++		    spec_timings->tWW_min <= onfi_timings->tWW_min)
++			return mode;
++	}
++
++	return 0;
++}
++
++/*
++ * onfi_fill_sdr_interface_config - Initialize a SDR interface config from a
++ *                                  given ONFI mode
+  * @chip: The NAND chip
+  * @iface: The interface configuration to fill
+- * @type: The interface type
+  * @timing_mode: The ONFI timing mode
+  */
+-void onfi_fill_interface_config(struct nand_chip *chip,
+-				struct nand_interface_config *iface,
+-				enum nand_interface_type type,
+-				unsigned int timing_mode)
++static void onfi_fill_sdr_interface_config(struct nand_chip *chip,
++					   struct nand_interface_config *iface,
++					   unsigned int timing_mode)
+ {
+ 	struct onfi_params *onfi = chip->parameters.onfi;
+ 
+-	if (WARN_ON(type != NAND_SDR_IFACE))
+-		return;
+-
+ 	if (WARN_ON(timing_mode >= ARRAY_SIZE(onfi_sdr_timings)))
+ 		return;
+ 
+@@ -385,3 +677,61 @@ void onfi_fill_interface_config(struct nand_chip *chip,
+ 		timings->tCCS_min = 1000UL * onfi->tCCS;
+ 	}
+ }
++
++/**
++ * onfi_fill_nvddr_interface_config - Initialize a NVDDR interface config from a
++ *                                    given ONFI mode
++ * @chip: The NAND chip
++ * @iface: The interface configuration to fill
++ * @timing_mode: The ONFI timing mode
++ */
++static void onfi_fill_nvddr_interface_config(struct nand_chip *chip,
++					     struct nand_interface_config *iface,
++					     unsigned int timing_mode)
++{
++	struct onfi_params *onfi = chip->parameters.onfi;
++
++	if (WARN_ON(timing_mode >= ARRAY_SIZE(onfi_nvddr_timings)))
++		return;
++
++	*iface = onfi_nvddr_timings[timing_mode];
++
++	/*
++	 * Initialize timings that cannot be deduced from timing mode:
++	 * tPROG, tBERS, tR, tCCS and tCAD.
++	 * These information are part of the ONFI parameter page.
++	 */
++	if (onfi) {
++		struct nand_nvddr_timings *timings = &iface->timings.nvddr;
++
++		/* microseconds -> picoseconds */
++		timings->tPROG_max = 1000000ULL * onfi->tPROG;
++		timings->tBERS_max = 1000000ULL * onfi->tBERS;
++		timings->tR_max = 1000000ULL * onfi->tR;
++
++		/* nanoseconds -> picoseconds */
++		timings->tCCS_min = 1000UL * onfi->tCCS;
++
++		if (onfi->fast_tCAD)
++			timings->tCAD_min = 25000;
++	}
++}
++
++/**
++ * onfi_fill_interface_config - Initialize an interface config from a given
++ *                              ONFI mode
++ * @chip: The NAND chip
++ * @iface: The interface configuration to fill
++ * @type: The interface type
++ * @timing_mode: The ONFI timing mode
++ */
++void onfi_fill_interface_config(struct nand_chip *chip,
++				struct nand_interface_config *iface,
++				enum nand_interface_type type,
++				unsigned int timing_mode)
++{
++	if (type == NAND_SDR_IFACE)
++		return onfi_fill_sdr_interface_config(chip, iface, timing_mode);
++	else
++		return onfi_fill_nvddr_interface_config(chip, iface, timing_mode);
++}
+diff --git a/drivers/mtd/nand/raw/pl353_nand.c b/drivers/mtd/nand/raw/pl353_nand.c
+new file mode 100644
+index 000000000..df9dfa1d2
+--- /dev/null
++++ b/drivers/mtd/nand/raw/pl353_nand.c
+@@ -0,0 +1,1232 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * ARM PL353 NAND flash controller driver
++ *
++ * Copyright (C) 2017 Xilinx, Inc
++ * Author: Punnaiah chowdary kalluri <punnaiah@xilinx.com>
++ * Author: Naga Sureshkumar Relli <nagasure@xilinx.com>
++ *
++ */
++
++#include <linux/err.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/ioport.h>
++#include <linux/irq.h>
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/mtd/mtd.h>
++#include <linux/mtd/rawnand.h>
++#include <linux/mtd/nand_ecc.h>
++#include <linux/mtd/partitions.h>
++#include <linux/of_address.h>
++#include <linux/of_device.h>
++#include <linux/of_platform.h>
++#include <linux/platform_device.h>
++#include <linux/slab.h>
++#include <linux/pl353-smc.h>
++#include <linux/clk.h>
++
++#define PL353_NAND_DRIVER_NAME "pl353-nand"
++
++/* NAND flash driver defines */
++#define PL353_NAND_ECC_SIZE	512	/* Size of data for ECC operation */
++
++/* AXI Address definitions */
++#define START_CMD_SHIFT		3
++#define END_CMD_SHIFT		11
++#define END_CMD_VALID_SHIFT	20
++#define ADDR_CYCLES_SHIFT	21
++#define CLEAR_CS_SHIFT		21
++#define ECC_LAST_SHIFT		10
++#define COMMAND_PHASE		(0 << 19)
++#define DATA_PHASE		BIT(19)
++#define GET_ADDR(pos, val)	(((val) & 0xFF) << (8 * (pos)))
++
++#define PL353_NAND_ECC_LAST	BIT(ECC_LAST_SHIFT)	/* Set ECC_Last */
++#define PL353_NAND_CLEAR_CS	BIT(CLEAR_CS_SHIFT)	/* Clear chip select */
++
++#define PL353_NAND_ECC_BUSY_TIMEOUT	(1 * HZ)
++#define PL353_NAND_DEV_BUSY_TIMEOUT	(1 * HZ)
++#define PL353_NAND_LAST_TRANSFER_LENGTH	4
++#define PL353_NAND_ECC_VALID_SHIFT	24
++#define PL353_NAND_ECC_VALID_MASK	0x40
++#define PL353_ECC_BITS_BYTEOFF_MASK	0x1FF
++#define PL353_ECC_BITS_BITOFF_MASK	0x7
++#define PL353_ECC_BIT_MASK		0xFFF
++#define PL353_TREA_MAX_VALUE		1
++#define PL353_MAX_ECC_CHUNKS		4
++#define PL353_MAX_ECC_BYTES		3
++#define PL353_MAX_CHUNK_SIZE		2112
++
++struct pl353_nfc_op {
++	u32 cmnds[2];
++	u32 addrs;
++	unsigned int data_instr_idx;
++	unsigned int rdy_timeout_ms;
++	unsigned int rdy_delay_ns;
++	const struct nand_op_instr *data_instr;
++};
++
++/**
++ * struct pl353_nand_controller - Defines the NAND flash controller driver
++ *				  instance
++ * @controller:		NAND controller structure
++ * @chip:		NAND chip information structure
++ * @dev:		Parent device (used to print error messages)
++ * @regs:		Virtual address of the NAND flash device
++ * @dataphase_addrflags:Flags required for data phase transfers
++ * @addr_cycles:	Address cycles
++ * @mclk_rate:		Clock rate of the Memory controller
++ * @buswidth:		Bus width 8 or 16
++ */
++struct pl353_nand_controller {
++	struct nand_controller controller;
++	struct nand_chip chip;
++	struct device *dev;
++	void __iomem *regs;
++	u32 dataphase_addrflags;
++	u8 addr_cycles;
++	ulong mclk_rate;
++	u32 buswidth;
++};
++
++static inline struct pl353_nand_controller *
++			to_pl353_nand(struct nand_chip *chip)
++{
++	return container_of(chip, struct pl353_nand_controller, chip);
++}
++
++static int pl353_ecc_ooblayout16_ecc(struct mtd_info *mtd, int section,
++				     struct mtd_oob_region *oobregion)
++{
++	struct nand_chip *chip = mtd_to_nand(mtd);
++
++	if (section >= chip->ecc.steps)
++		return -ERANGE;
++
++	oobregion->offset = (section * chip->ecc.bytes);
++	oobregion->length = chip->ecc.bytes;
++
++	return 0;
++}
++
++static int pl353_ecc_ooblayout16_free(struct mtd_info *mtd, int section,
++				      struct mtd_oob_region *oobregion)
++{
++	struct nand_chip *chip = mtd_to_nand(mtd);
++
++	if (section >= chip->ecc.steps)
++		return -ERANGE;
++
++	oobregion->offset = (section * chip->ecc.bytes) + 8;
++	oobregion->length = 8;
++
++	return 0;
++}
++
++static const struct mtd_ooblayout_ops pl353_ecc_ooblayout16_ops = {
++	.ecc = pl353_ecc_ooblayout16_ecc,
++	.free = pl353_ecc_ooblayout16_free,
++};
++
++static int pl353_ecc_ooblayout64_ecc(struct mtd_info *mtd, int section,
++				     struct mtd_oob_region *oobregion)
++{
++	struct nand_chip *chip = mtd_to_nand(mtd);
++
++	if (section >= chip->ecc.steps)
++		return -ERANGE;
++
++	oobregion->offset = (section * chip->ecc.bytes) + 52;
++	oobregion->length = chip->ecc.bytes;
++
++	return 0;
++}
++
++static int pl353_ecc_ooblayout64_free(struct mtd_info *mtd, int section,
++				      struct mtd_oob_region *oobregion)
++{
++	if (section)
++		return -ERANGE;
++
++	oobregion->offset = 2;
++	oobregion->length = 50;
++
++	return 0;
++}
++
++static const struct mtd_ooblayout_ops pl353_ecc_ooblayout64_ops = {
++	.ecc = pl353_ecc_ooblayout64_ecc,
++	.free = pl353_ecc_ooblayout64_free,
++};
++
++/* Generic flash bbt decriptors */
++static u8 bbt_pattern[] = { 'B', 'b', 't', '0' };
++static u8 mirror_pattern[] = { '1', 't', 'b', 'B' };
++
++static struct nand_bbt_descr bbt_main_descr = {
++	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE
++		| NAND_BBT_2BIT | NAND_BBT_VERSION | NAND_BBT_PERCHIP,
++	.offs = 4,
++	.len = 4,
++	.veroffs = 20,
++	.maxblocks = 4,
++	.pattern = bbt_pattern
++};
++
++static struct nand_bbt_descr bbt_mirror_descr = {
++	.options = NAND_BBT_LASTBLOCK | NAND_BBT_CREATE | NAND_BBT_WRITE
++		| NAND_BBT_2BIT | NAND_BBT_VERSION | NAND_BBT_PERCHIP,
++	.offs = 4,
++	.len = 4,
++	.veroffs = 20,
++	.maxblocks = 4,
++	.pattern = mirror_pattern
++};
++
++static void pl353_nfc_force_byte_access(struct nand_chip *chip,
++					bool force_8bit)
++{
++	int ret;
++	struct pl353_nand_controller *xnfc =
++		container_of(chip, struct pl353_nand_controller, chip);
++
++	if (xnfc->buswidth == 8)
++		return;
++
++	if (force_8bit)
++		ret = pl353_smc_set_buswidth(PL353_SMC_MEM_WIDTH_8);
++	else
++		ret = pl353_smc_set_buswidth(PL353_SMC_MEM_WIDTH_16);
++
++	if (ret)
++		dev_err(xnfc->dev, "Error in Buswidth\n");
++}
++
++static inline int pl353_wait_for_dev_ready(struct nand_chip *chip)
++{
++	unsigned long timeout = jiffies + PL353_NAND_DEV_BUSY_TIMEOUT;
++
++	while (!pl353_smc_get_nand_int_status_raw()) {
++		if (time_after_eq(jiffies, timeout)) {
++			pr_err("%s timed out\n", __func__);
++			return -ETIMEDOUT;
++		}
++		cond_resched();
++	}
++
++	pl353_smc_clr_nand_int();
++
++	return 0;
++}
++
++/**
++ * pl353_nand_read_data_op - read chip data into buffer
++ * @chip:	Pointer to the NAND chip info structure
++ * @in:		Pointer to the buffer to store read data
++ * @len:	Number of bytes to read
++ * @force_8bit:	Force 8-bit bus access
++ * Return:	Always return zero
++ */
++static void pl353_nand_read_data_op(struct nand_chip *chip, u8 *in,
++				    unsigned int len, bool force_8bit)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	int i;
++
++	if (force_8bit)
++		pl353_nfc_force_byte_access(chip, true);
++
++	if ((IS_ALIGNED((uint32_t)in, sizeof(uint32_t)) &&
++	     IS_ALIGNED(len, sizeof(uint32_t))) || !force_8bit) {
++		u32 *ptr = (u32 *)in;
++
++		len /= 4;
++		for (i = 0; i < len; i++)
++			ptr[i] = readl(xnfc->regs + xnfc->dataphase_addrflags);
++	} else {
++		for (i = 0; i < len; i++)
++			in[i] = readb(xnfc->regs + xnfc->dataphase_addrflags);
++	}
++
++	if (force_8bit)
++		pl353_nfc_force_byte_access(chip, false);
++}
++
++/**
++ * pl353_nand_write_data_op - write buffer to chip
++ * @chip:	Pointer to the nand_chip structure
++ * @buf:	Pointer to the buffer to store write data
++ * @len:	Number of bytes to write
++ * @force_8bit:	Force 8-bit bus access
++ */
++static void pl353_nand_write_data_op(struct nand_chip *chip, const u8 *buf,
++				     int len, bool force_8bit)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	int i;
++
++	if (force_8bit)
++		pl353_nfc_force_byte_access(chip, true);
++
++	if ((IS_ALIGNED((uint32_t)buf, sizeof(uint32_t)) &&
++	     IS_ALIGNED(len, sizeof(uint32_t))) || !force_8bit) {
++		u32 *ptr = (u32 *)buf;
++
++		len /= 4;
++		for (i = 0; i < len; i++)
++			writel(ptr[i], xnfc->regs + xnfc->dataphase_addrflags);
++	} else {
++		for (i = 0; i < len; i++)
++			writeb(buf[i], xnfc->regs + xnfc->dataphase_addrflags);
++	}
++
++	if (force_8bit)
++		pl353_nfc_force_byte_access(chip, false);
++}
++
++static inline int pl353_wait_for_ecc_done(void)
++{
++	unsigned long timeout = jiffies + PL353_NAND_ECC_BUSY_TIMEOUT;
++
++	while (pl353_smc_ecc_is_busy()) {
++		if (time_after_eq(jiffies, timeout)) {
++			pr_err("%s timed out\n", __func__);
++			return -ETIMEDOUT;
++		}
++		cond_resched();
++	}
++
++	return 0;
++}
++
++/**
++ * pl353_nand_calculate_hwecc - Calculate Hardware ECC
++ * @chip:	Pointer to the nand_chip structure
++ * @data:	Pointer to the page data
++ * @ecc:	Pointer to the ECC buffer where ECC data needs to be stored
++ *
++ * This function retrieves the Hardware ECC data from the controller and returns
++ * ECC data back to the MTD subsystem.
++ * It operates on a number of 512 byte blocks of NAND memory and can be
++ * programmed to store the ECC codes after the data in memory. For writes,
++ * the ECC is written to the spare area of the page. For reads, the result of
++ * a block ECC check are made available to the device driver.
++ *
++ * ------------------------------------------------------------------------
++ * |               n * 512 blocks                  | extra  | ecc    |     |
++ * |                                               | block  | codes  |     |
++ * ------------------------------------------------------------------------
++ *
++ * The ECC calculation uses a simple Hamming code, using 1-bit correction 2-bit
++ * detection. It starts when a valid read or write command with a 512 byte
++ * aligned address is detected on the memory interface.
++ *
++ * Return:	0 on success or error value on failure
++ */
++static int pl353_nand_calculate_hwecc(struct nand_chip *chip,
++				      const u8 *data, u8 *ecc)
++{
++	u32 ecc_value;
++	u8 chunk, ecc_byte, ecc_status;
++
++	for (chunk = 0; chunk < PL353_MAX_ECC_CHUNKS; chunk++) {
++		/* Read ECC value for each block */
++		ecc_value = pl353_smc_get_ecc_val(chunk);
++		ecc_status = (ecc_value >> PL353_NAND_ECC_VALID_SHIFT);
++
++		/* ECC value valid */
++		if (ecc_status & PL353_NAND_ECC_VALID_MASK) {
++			for (ecc_byte = 0; ecc_byte < PL353_MAX_ECC_BYTES;
++			     ecc_byte++) {
++				/* Copy ECC bytes to MTD buffer */
++				*ecc = ~ecc_value & 0xFF;
++				ecc_value = ecc_value >> 8;
++				ecc++;
++			}
++		} else {
++			pr_warn("%s status failed\n", __func__);
++			return -1;
++		}
++	}
++
++	return 0;
++}
++
++/**
++ * pl353_nand_correct_data - ECC correction function
++ * @chip:	Pointer to the nand_chip structure
++ * @buf:	Pointer to the page data
++ * @read_ecc:	Pointer to the ECC value read from spare data area
++ * @calc_ecc:	Pointer to the calculated ECC value
++ *
++ * This function corrects the ECC single bit errors & detects 2-bit errors.
++ *
++ * Return:	0 if no ECC errors found
++ *		1 if single bit error found and corrected.
++ *		-1 if multiple uncorrectable ECC errors found.
++ */
++static int pl353_nand_correct_data(struct nand_chip *chip, unsigned char *buf,
++				   unsigned char *read_ecc,
++				   unsigned char *calc_ecc)
++{
++	unsigned char bit_addr;
++	unsigned int byte_addr;
++	unsigned short ecc_odd, ecc_even, read_ecc_lower, read_ecc_upper;
++	unsigned short calc_ecc_lower, calc_ecc_upper;
++
++	read_ecc_lower = (read_ecc[0] | (read_ecc[1] << 8)) &
++			  PL353_ECC_BIT_MASK;
++	read_ecc_upper = ((read_ecc[1] >> 4) | (read_ecc[2] << 4)) &
++			  PL353_ECC_BIT_MASK;
++
++	calc_ecc_lower = (calc_ecc[0] | (calc_ecc[1] << 8)) &
++			  PL353_ECC_BIT_MASK;
++	calc_ecc_upper = ((calc_ecc[1] >> 4) | (calc_ecc[2] << 4)) &
++			  PL353_ECC_BIT_MASK;
++
++	ecc_odd = read_ecc_lower ^ calc_ecc_lower;
++	ecc_even = read_ecc_upper ^ calc_ecc_upper;
++
++	/* no error */
++	if (!ecc_odd && !ecc_even)
++		return 0;
++
++	if (ecc_odd == (~ecc_even & PL353_ECC_BIT_MASK)) {
++		/* bits [11:3] of error code is byte offset */
++		byte_addr = (ecc_odd >> 3) & PL353_ECC_BITS_BYTEOFF_MASK;
++		/* bits [2:0] of error code is bit offset */
++		bit_addr = ecc_odd & PL353_ECC_BITS_BITOFF_MASK;
++		/* Toggling error bit */
++		buf[byte_addr] ^= (BIT(bit_addr));
++		return 1;
++	}
++
++	/* one error in parity */
++	if (hweight32(ecc_odd | ecc_even) == 1)
++		return 1;
++
++	/* Uncorrectable error */
++	return -1;
++}
++
++static void pl353_prepare_cmd(struct nand_chip *chip,
++			      int page, int column, int start_cmd, int end_cmd,
++			      bool read)
++{
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	unsigned long cmd_phase_data = 0;
++	u32 end_cmd_valid = 0, cmdphase_addrflags;
++
++	end_cmd_valid = read ? 1 : 0;
++	cmdphase_addrflags = ((xnfc->addr_cycles
++			      << ADDR_CYCLES_SHIFT) |
++			      (end_cmd_valid << END_CMD_VALID_SHIFT) |
++			      (COMMAND_PHASE) |
++			      (end_cmd << END_CMD_SHIFT) |
++			      (start_cmd << START_CMD_SHIFT));
++
++	/* Get the data phase address */
++	xnfc->dataphase_addrflags = ((0x0 << CLEAR_CS_SHIFT) |
++				(0 << END_CMD_VALID_SHIFT) |
++			  (DATA_PHASE) |
++			  (end_cmd << END_CMD_SHIFT) |
++			  (0x0 << ECC_LAST_SHIFT));
++
++	if (chip->options & NAND_BUSWIDTH_16)
++		column /= 2;
++
++	cmd_phase_data = column;
++	if (mtd->writesize > PL353_NAND_ECC_SIZE) {
++		cmd_phase_data |= page << 16;
++
++		/* Another address cycle for devices > 128MiB */
++		if (chip->options & NAND_ROW_ADDR_3) {
++			writel_relaxed(cmd_phase_data,
++				       xnfc->regs + cmdphase_addrflags);
++			cmd_phase_data = (page >> 16);
++		}
++	} else {
++		cmd_phase_data |= page << 8;
++	}
++
++	writel_relaxed(cmd_phase_data, xnfc->regs + cmdphase_addrflags);
++}
++
++/**
++ * pl353_nand_read_oob - [REPLACEABLE] the most common OOB data read function
++ * @chip:	Pointer to the nand_chip structure
++ * @chip:	Pointer to the nand_chip structure
++ * @page:	Page number to read
++ *
++ * Return:	Always return zero
++ */
++static int pl353_nand_read_oob(struct nand_chip *chip,
++			       int page)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	u8 *p;
++
++	if (mtd->writesize < PL353_NAND_ECC_SIZE)
++		return 0;
++
++	pl353_prepare_cmd(chip, page, mtd->writesize, NAND_CMD_READ0,
++			  NAND_CMD_READSTART, 1);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++
++	p = chip->oob_poi;
++	pl353_nand_read_data_op(chip, p,
++				(mtd->oobsize -
++				PL353_NAND_LAST_TRANSFER_LENGTH), false);
++	p += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	pl353_nand_read_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
++				false);
++
++	return 0;
++}
++
++/**
++ * pl353_nand_write_oob - [REPLACEABLE] the most common OOB data write function
++ * @chip:	Pointer to the nand_chip structure
++ * @chip:	Pointer to the NAND chip info structure
++ * @page:	Page number to write
++ *
++ * Return:	Zero on success and EIO on failure
++ */
++static int pl353_nand_write_oob(struct nand_chip *chip,
++				int page)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	const u8 *buf = chip->oob_poi;
++
++	pl353_prepare_cmd(chip, page, mtd->writesize, NAND_CMD_SEQIN,
++			  NAND_CMD_PAGEPROG, 0);
++
++	pl353_nand_write_data_op(chip, buf,
++				 (mtd->oobsize -
++				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
++	buf += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	xnfc->dataphase_addrflags |= (1 << END_CMD_VALID_SHIFT);
++	pl353_nand_write_data_op(chip, buf, PL353_NAND_LAST_TRANSFER_LENGTH,
++				 false);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++
++	return 0;
++}
++
++/**
++ * pl353_nand_read_page_raw - [Intern] read page data without ecc
++ * @chip:		Pointer to the nand_chip structure
++ * @buf:		Pointer to the data buffer
++ * @oob_required:	Caller requires OOB data read to chip->oob_poi
++ * @page:		Page number to read
++ *
++ * Return:	Always return zero
++ */
++static int pl353_nand_read_page_raw(struct nand_chip *chip,
++				    u8 *buf, int oob_required, int page)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	u8 *p;
++
++	pl353_prepare_cmd(chip, page, 0, NAND_CMD_READ0,
++			  NAND_CMD_READSTART, 1);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++	if (!buf)
++		return 0;
++	pl353_nand_read_data_op(chip, buf, mtd->writesize, false);
++	p = chip->oob_poi;
++	pl353_nand_read_data_op(chip, p,
++				(mtd->oobsize -
++				PL353_NAND_LAST_TRANSFER_LENGTH), false);
++	p += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	pl353_nand_read_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
++				false);
++
++	return 0;
++}
++
++/**
++ * pl353_nand_write_page_raw - [Intern] raw page write function
++ * @chip:		Pointer to the nand_chip structure
++ * @buf:		Pointer to the data buffer
++ * @oob_required:	Caller requires OOB data read to chip->oob_poi
++ * @page:		Page number to write
++ *
++ * Return:	Always return zero
++ */
++static int pl353_nand_write_page_raw(struct nand_chip *chip,
++				     const u8 *buf, int oob_required,
++				     int page)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	u8 *p;
++
++	pl353_prepare_cmd(chip, page, 0, NAND_CMD_SEQIN,
++			  NAND_CMD_PAGEPROG, 0);
++	pl353_nand_write_data_op(chip, buf, mtd->writesize, false);
++	p = chip->oob_poi;
++	pl353_nand_write_data_op(chip, p,
++				 (mtd->oobsize -
++				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
++	p += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	xnfc->dataphase_addrflags |= (1 << END_CMD_VALID_SHIFT);
++	pl353_nand_write_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
++				 false);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++
++	return 0;
++}
++
++/**
++ * nand_write_page_hwecc - Hardware ECC based page write function
++ * @chip:		Pointer to the nand_chip structure
++ * @buf:		Pointer to the data buffer
++ * @oob_required:	Caller requires OOB data read to chip->oob_poi
++ * @page:		Page number to write
++ *
++ * This functions writes data and hardware generated ECC values in to the page.
++ *
++ * Return:	Always return zero
++ */
++static int pl353_nand_write_page_hwecc(struct nand_chip *chip,
++				       const u8 *buf, int oob_required,
++				       int page)
++{
++	int eccsize = chip->ecc.size;
++	int eccsteps = chip->ecc.steps;
++	u8 *ecc_calc = chip->ecc.calc_buf;
++	u8 *oob_ptr;
++	const u8 *p = buf;
++	u32 ret;
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++
++	pl353_prepare_cmd(chip, page, 0, NAND_CMD_SEQIN,
++			  NAND_CMD_PAGEPROG, 0);
++
++	for ( ; (eccsteps - 1); eccsteps--) {
++		pl353_nand_write_data_op(chip, p, eccsize, false);
++		p += eccsize;
++	}
++
++	pl353_nand_write_data_op(chip, p,
++				 (eccsize - PL353_NAND_LAST_TRANSFER_LENGTH),
++				 false);
++	p += (eccsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++
++	/* Set ECC Last bit to 1 */
++	xnfc->dataphase_addrflags |= PL353_NAND_ECC_LAST;
++	pl353_nand_write_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
++				 false);
++
++	/* Wait till the ECC operation is complete or timeout */
++	ret = pl353_wait_for_ecc_done();
++	if (ret)
++		dev_err(xnfc->dev, "ECC Timeout\n");
++
++	p = buf;
++	ret = chip->ecc.calculate(chip, p, &ecc_calc[0]);
++	if (ret)
++		return ret;
++
++	/* Wait for ECC to be calculated and read the error values */
++	ret = mtd_ooblayout_set_eccbytes(mtd, ecc_calc, chip->oob_poi,
++					 0, chip->ecc.total);
++	if (ret)
++		return ret;
++
++	/* Clear ECC last bit */
++	xnfc->dataphase_addrflags &= ~PL353_NAND_ECC_LAST;
++
++	/* Write the spare area with ECC bytes */
++	oob_ptr = chip->oob_poi;
++	pl353_nand_write_data_op(chip, oob_ptr,
++				 (mtd->oobsize -
++				 PL353_NAND_LAST_TRANSFER_LENGTH), false);
++
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	xnfc->dataphase_addrflags |= (1 << END_CMD_VALID_SHIFT);
++	oob_ptr += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	pl353_nand_write_data_op(chip, oob_ptr, PL353_NAND_LAST_TRANSFER_LENGTH,
++				 false);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++
++	return 0;
++}
++
++/**
++ * pl353_nand_read_page_hwecc - Hardware ECC based page read function
++ * @chip:		Pointer to the nand_chip structure
++ * @buf:		Pointer to the buffer to store read data
++ * @oob_required:	Caller requires OOB data read to chip->oob_poi
++ * @page:		Page number to read
++ *
++ * This functions reads data and checks the data integrity by comparing
++ * hardware generated ECC values and read ECC values from spare area.
++ * There is a limitation in SMC controller, that we must set ECC LAST on
++ * last data phase access, to tell ECC block not to expect any data further.
++ * Ex:  When number of ECC STEPS are 4, then till 3 we will write to flash
++ * using SMC with HW ECC enabled. And for the last ECC STEP, we will subtract
++ * 4bytes from page size, and will initiate a transfer. And the remaining 4 as
++ * one more transfer with ECC_LAST bit set in NAND data phase register to
++ * notify ECC block not to expect any more data. The last block should be align
++ * with end of 512 byte block. Because of this limitation, we are not using
++ * core routines.
++ *
++ * Return:	0 always and updates ECC operation status in to MTD structure
++ */
++static int pl353_nand_read_page_hwecc(struct nand_chip *chip,
++				      u8 *buf, int oob_required, int page)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	int i, stat, eccsize = chip->ecc.size;
++	int eccbytes = chip->ecc.bytes;
++	int eccsteps = chip->ecc.steps;
++	unsigned int max_bitflips = 0;
++	u8 *p = buf;
++	u8 *ecc_calc = chip->ecc.calc_buf;
++	u8 *ecc = chip->ecc.code_buf;
++	u8 *oob_ptr;
++	u32 ret;
++
++	pl353_prepare_cmd(chip, page, 0, NAND_CMD_READ0,
++			  NAND_CMD_READSTART, 1);
++	if (pl353_wait_for_dev_ready(chip))
++		return -ETIMEDOUT;
++
++	for ( ; (eccsteps - 1); eccsteps--) {
++		pl353_nand_read_data_op(chip, p, eccsize, false);
++		p += eccsize;
++	}
++
++	pl353_nand_read_data_op(chip, p,
++				(eccsize - PL353_NAND_LAST_TRANSFER_LENGTH),
++				false);
++	p += (eccsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++
++	/* Set ECC Last bit to 1 */
++	xnfc->dataphase_addrflags |= PL353_NAND_ECC_LAST;
++	pl353_nand_read_data_op(chip, p, PL353_NAND_LAST_TRANSFER_LENGTH,
++				false);
++
++	/* Wait till the ECC operation is complete or timeout */
++	ret = pl353_wait_for_ecc_done();
++	if (ret)
++		dev_err(xnfc->dev, "ECC Timeout\n");
++
++	/* Read the calculated ECC value */
++	p = buf;
++	ret = chip->ecc.calculate(chip, p, &ecc_calc[0]);
++	if (ret)
++		return ret;
++
++	/* Clear ECC last bit */
++	xnfc->dataphase_addrflags &= ~PL353_NAND_ECC_LAST;
++
++	/* Read the stored ECC value */
++	oob_ptr = chip->oob_poi;
++	pl353_nand_read_data_op(chip, oob_ptr,
++				(mtd->oobsize -
++				PL353_NAND_LAST_TRANSFER_LENGTH), false);
++
++	/* de-assert chip select */
++	xnfc->dataphase_addrflags |= PL353_NAND_CLEAR_CS;
++	oob_ptr += (mtd->oobsize - PL353_NAND_LAST_TRANSFER_LENGTH);
++	pl353_nand_read_data_op(chip, oob_ptr, PL353_NAND_LAST_TRANSFER_LENGTH,
++				false);
++
++	ret = mtd_ooblayout_get_eccbytes(mtd, ecc, chip->oob_poi, 0,
++					 chip->ecc.total);
++	if (ret)
++		return ret;
++
++	eccsteps = chip->ecc.steps;
++	p = buf;
++
++	/* Check ECC error for all blocks and correct if it is correctable */
++	for (i = 0 ; eccsteps; eccsteps--, i += eccbytes, p += eccsize) {
++		stat = chip->ecc.correct(chip, p, &ecc[i], &ecc_calc[i]);
++		if (stat < 0) {
++			mtd->ecc_stats.failed++;
++		} else {
++			mtd->ecc_stats.corrected += stat;
++			max_bitflips = max_t(unsigned int, max_bitflips, stat);
++		}
++	}
++
++	return max_bitflips;
++}
++
++static int pl353_nand_exec_op_cmd(struct nand_chip *chip,
++				  const struct nand_subop *subop)
++{
++	struct pl353_nfc_op nfc_op = {};
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	unsigned long end_cmd_valid = 0;
++	unsigned int op_id, len;
++	bool reading;
++	u32 cmdphase_addrflags;
++	const struct nand_op_instr *instr = NULL;
++	int i;
++	u32 col = 0, row = 0;
++	u32 naddrs = 0;
++
++	memset(&nfc_op, 0, sizeof(struct pl353_nfc_op));
++	for (op_id = 0; op_id < subop->ninstrs; op_id++) {
++		instr = &subop->instrs[op_id];
++
++		switch (instr->type) {
++		case NAND_OP_CMD_INSTR:
++			if (op_id) {
++				nfc_op.cmnds[1] = instr->ctx.cmd.opcode;
++
++				/*
++				 * end_cmd_valid is set when there is a
++				 * command cycle followed by Address cycle
++				 */
++				if (naddrs)
++					end_cmd_valid = 1;
++			} else {
++				nfc_op.cmnds[0] = instr->ctx.cmd.opcode;
++				end_cmd_valid = 0;
++			}
++
++			break;
++
++		case NAND_OP_ADDR_INSTR:
++			i = nand_subop_get_addr_start_off(subop, op_id);
++			naddrs = nand_subop_get_num_addr_cyc(subop,
++							     op_id);
++			for (i = 0; i < min_t(unsigned int, 4, naddrs); i++)
++				col |= instr->ctx.addr.addrs[i] << (8 * i);
++
++			if (naddrs >= 5)
++				row = instr->ctx.addr.addrs[4];
++
++			if (naddrs >= 6)
++				row |= (instr->ctx.addr.addrs[5] << 8);
++
++			break;
++
++		case NAND_OP_DATA_IN_INSTR:
++		case NAND_OP_DATA_OUT_INSTR:
++			nfc_op.data_instr = instr;
++			nfc_op.data_instr_idx = op_id;
++			break;
++
++		case NAND_OP_WAITRDY_INSTR:
++			nfc_op.rdy_timeout_ms = instr->ctx.waitrdy.timeout_ms;
++			nfc_op.rdy_delay_ns = instr->delay_ns;
++			break;
++		}
++	}
++
++	instr = nfc_op.data_instr;
++	op_id = nfc_op.data_instr_idx;
++
++	/* Clear interrupts */
++	pl353_smc_clr_nand_int();
++
++	cmdphase_addrflags = ((naddrs << ADDR_CYCLES_SHIFT) |
++			 (end_cmd_valid << END_CMD_VALID_SHIFT) |
++			 (COMMAND_PHASE) |
++			 (nfc_op.cmnds[1] << END_CMD_SHIFT) |
++			 (nfc_op.cmnds[0] << START_CMD_SHIFT));
++
++	xnfc->dataphase_addrflags = ((0x0 << CLEAR_CS_SHIFT) |
++			  (0 << END_CMD_VALID_SHIFT) |
++			  (DATA_PHASE) |
++			  (nfc_op.cmnds[0] << END_CMD_SHIFT) |
++			  (0x0 << ECC_LAST_SHIFT));
++
++	if (naddrs >= 2) {
++		writel_relaxed(col, xnfc->regs + cmdphase_addrflags);
++		writel_relaxed(row, xnfc->regs + cmdphase_addrflags);
++	} else {
++		writel_relaxed(col, xnfc->regs + cmdphase_addrflags);
++	}
++
++	if (!nfc_op.data_instr) {
++		if (nfc_op.rdy_timeout_ms) {
++			if (pl353_wait_for_dev_ready(chip))
++				return -ETIMEDOUT;
++		}
++		return 0;
++	}
++
++	reading = (nfc_op.data_instr->type == NAND_OP_DATA_IN_INSTR);
++	len = nand_subop_get_data_len(subop, op_id);
++
++	if (!reading) {
++		pl353_nand_write_data_op(chip, instr->ctx.data.buf.out,
++					 len, instr->ctx.data.force_8bit);
++		if (nfc_op.rdy_timeout_ms) {
++			if (pl353_wait_for_dev_ready(chip))
++				return -ETIMEDOUT;
++		}
++		ndelay(nfc_op.rdy_delay_ns);
++	} else {
++		ndelay(nfc_op.rdy_delay_ns);
++
++		if (nfc_op.rdy_timeout_ms) {
++			if (pl353_wait_for_dev_ready(chip))
++				return -ETIMEDOUT;
++		}
++
++		pl353_nand_read_data_op(chip, instr->ctx.data.buf.in, len,
++					instr->ctx.data.force_8bit);
++	}
++
++	return 0;
++}
++
++static const struct nand_op_parser pl353_nfc_op_parser = NAND_OP_PARSER(
++	NAND_OP_PARSER_PATTERN(pl353_nand_exec_op_cmd,
++		NAND_OP_PARSER_PAT_CMD_ELEM(true),
++		NAND_OP_PARSER_PAT_ADDR_ELEM(true, 7),
++		NAND_OP_PARSER_PAT_CMD_ELEM(true),
++		NAND_OP_PARSER_PAT_WAITRDY_ELEM(true),
++		NAND_OP_PARSER_PAT_DATA_IN_ELEM(true, PL353_MAX_CHUNK_SIZE)),
++	NAND_OP_PARSER_PATTERN(pl353_nand_exec_op_cmd,
++		NAND_OP_PARSER_PAT_CMD_ELEM(true),
++		NAND_OP_PARSER_PAT_ADDR_ELEM(true, 7),
++		NAND_OP_PARSER_PAT_DATA_OUT_ELEM(true, PL353_MAX_CHUNK_SIZE),
++		NAND_OP_PARSER_PAT_CMD_ELEM(true),
++		NAND_OP_PARSER_PAT_WAITRDY_ELEM(true)),
++	NAND_OP_PARSER_PATTERN(pl353_nand_exec_op_cmd,
++		NAND_OP_PARSER_PAT_DATA_OUT_ELEM(false, PL353_MAX_CHUNK_SIZE),
++		NAND_OP_PARSER_PAT_WAITRDY_ELEM(true)),
++	);
++
++static int pl353_nfc_exec_op(struct nand_chip *chip,
++			     const struct nand_operation *op,
++			     bool check_only)
++{
++	return nand_op_parser_exec_op(chip, &pl353_nfc_op_parser,
++					      op, check_only);
++}
++
++/**
++ * pl353_nand_ecc_init - Initialize the ecc information as per the ecc mode
++ * @mtd:	Pointer to the mtd_info structure
++ * @ecc:	Pointer to ECC control structure
++ * @ecc_mode:	ondie ecc status
++ *
++ * This function initializes the ecc block and functional pointers as per the
++ * ecc mode
++ *
++ * Return:	0 on success or negative errno.
++ */
++static int pl353_nand_ecc_init(struct mtd_info *mtd, struct nand_ecc_ctrl *ecc,
++			       int ecc_engine_type)
++{
++	struct nand_chip *chip = mtd_to_nand(mtd);
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	int ret = 0;
++
++	ecc->read_oob = pl353_nand_read_oob;
++	ecc->write_oob = pl353_nand_write_oob;
++	ecc->write_page_raw = pl353_nand_write_page_raw;
++	ecc->read_page_raw = pl353_nand_read_page_raw;
++
++	if (ecc_engine_type == NAND_ECC_ENGINE_TYPE_ON_DIE) {
++		ecc->write_page = pl353_nand_write_page_raw;
++		ecc->read_page = pl353_nand_read_page_raw;
++
++		/*
++		 * On-Die ECC spare bytes offset 8 is used for ECC codes
++		 * Use the BBT pattern descriptors
++		 */
++		chip->bbt_td = &bbt_main_descr;
++		chip->bbt_md = &bbt_mirror_descr;
++		ret = pl353_smc_set_ecc_mode(PL353_SMC_ECCMODE_BYPASS);
++		if (ret)
++			return ret;
++
++	} else {
++		ecc->engine_type = NAND_ECC_ENGINE_TYPE_ON_HOST;
++
++		/* Hardware ECC generates 3 bytes ECC code for each 512 bytes */
++		ecc->bytes = 3;
++		ecc->strength = 1;
++		ecc->calculate = pl353_nand_calculate_hwecc;
++		ecc->correct = pl353_nand_correct_data;
++		ecc->read_page = pl353_nand_read_page_hwecc;
++		ecc->size = PL353_NAND_ECC_SIZE;
++		ecc->read_page = pl353_nand_read_page_hwecc;
++		ecc->write_page = pl353_nand_write_page_hwecc;
++		pl353_smc_set_ecc_pg_size(mtd->writesize);
++		switch (mtd->writesize) {
++		case SZ_512:
++		case SZ_1K:
++		case SZ_2K:
++			pl353_smc_set_ecc_mode(PL353_SMC_ECCMODE_APB);
++			break;
++		default:
++			ecc->calculate = nand_calculate_ecc;
++			ecc->correct = nand_correct_data;
++			ecc->size = 256;
++			break;
++		}
++
++		if (mtd->oobsize == 16) {
++			mtd_set_ooblayout(mtd, &pl353_ecc_ooblayout16_ops);
++		} else if (mtd->oobsize == 64) {
++			mtd_set_ooblayout(mtd, &pl353_ecc_ooblayout64_ops);
++		} else {
++			dev_err(xnfc->dev, "Unsupported oob Layout\n");
++			ret = -ENXIO;
++		}
++	}
++
++	return ret;
++}
++
++static int pl353_nfc_setup_interface(struct nand_chip *chip, int csline,
++					  const struct nand_interface_config
++					  *conf)
++{
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	const struct nand_sdr_timings *sdr;
++	u32 timings[7], mckperiodps;
++
++	if (csline == NAND_DATA_IFACE_CHECK_ONLY)
++		return 0;
++
++	sdr = nand_get_sdr_timings(conf);
++	if (IS_ERR(sdr))
++		return PTR_ERR(sdr);
++
++	/*
++	 * SDR timings are given in pico-seconds while NFC timings must be
++	 * expressed in NAND controller clock cycles.
++	 */
++	mckperiodps = NSEC_PER_SEC / xnfc->mclk_rate;
++	mckperiodps *= 1000;
++
++	if (sdr->tRC_min <= 20000)
++		/*
++		 * PL353 SMC needs one extra read cycle in SDR Mode 5
++		 * This is not written anywhere in the datasheet but
++		 * the results observed during testing.
++		 */
++		timings[0] = DIV_ROUND_UP(sdr->tRC_min, mckperiodps) + 1;
++	else
++		timings[0] = DIV_ROUND_UP(sdr->tRC_min, mckperiodps);
++
++	timings[1] = DIV_ROUND_UP(sdr->tWC_min, mckperiodps);
++
++	/*
++	 * For all SDR modes, PL353 SMC needs tREA max value as 1,
++	 * Results observed during testing.
++	 */
++	timings[2] = PL353_TREA_MAX_VALUE;
++	timings[3] = DIV_ROUND_UP(sdr->tWP_min, mckperiodps);
++	timings[4] = DIV_ROUND_UP(sdr->tCLR_min, mckperiodps);
++	timings[5] = DIV_ROUND_UP(sdr->tAR_min, mckperiodps);
++	timings[6] = DIV_ROUND_UP(sdr->tRR_min, mckperiodps);
++	pl353_smc_set_cycles(timings);
++
++	return 0;
++}
++
++static int pl353_nand_attach_chip(struct nand_chip *chip)
++{
++	struct mtd_info *mtd = nand_to_mtd(chip);
++	struct pl353_nand_controller *xnfc = to_pl353_nand(chip);
++	int ret;
++
++	if (chip->options & NAND_BUSWIDTH_16) {
++		ret = pl353_smc_set_buswidth(PL353_SMC_MEM_WIDTH_16);
++		if (ret) {
++			dev_err(xnfc->dev, "Set BusWidth failed\n");
++			return ret;
++		}
++	}
++
++	if (mtd->writesize <= SZ_512)
++		xnfc->addr_cycles = 1;
++	else
++		xnfc->addr_cycles = 2;
++
++	if (chip->options & NAND_ROW_ADDR_3)
++		xnfc->addr_cycles += 3;
++	else
++		xnfc->addr_cycles += 2;
++
++	ret = pl353_nand_ecc_init(mtd, &chip->ecc, chip->ecc.engine_type);
++	if (ret) {
++		dev_err(xnfc->dev, "ECC init failed\n");
++		return ret;
++	}
++
++	if (!mtd->name) {
++		/*
++		 * If the new bindings are used and the bootloader has not been
++		 * updated to pass a new mtdparts parameter on the cmdline, you
++		 * should define the following property in your NAND node, ie:
++		 *
++		 *	label = "pl353-nand";
++		 *
++		 * This way, mtd->name will be set by the core when
++		 * nand_set_flash_node() is called.
++		 */
++		mtd->name = devm_kasprintf(xnfc->dev, GFP_KERNEL,
++					   "%s", PL353_NAND_DRIVER_NAME);
++		if (!mtd->name) {
++			dev_err(xnfc->dev, "Failed to allocate mtd->name\n");
++			return -ENOMEM;
++		}
++	}
++
++	return 0;
++}
++
++static const struct nand_controller_ops pl353_nand_controller_ops = {
++	.attach_chip = pl353_nand_attach_chip,
++	.exec_op = pl353_nfc_exec_op,
++	.setup_interface = pl353_nfc_setup_interface,
++};
++
++/**
++ * pl353_nand_probe - Probe method for the NAND driver
++ * @pdev:	Pointer to the platform_device structure
++ *
++ * This function initializes the driver data structures and the hardware.
++ * The NAND driver has dependency with the pl353_smc memory controller
++ * driver for initializing the NAND timing parameters, bus width, ECC modes,
++ * control and status information.
++ *
++ * Return:	0 on success or error value on failure
++ */
++static int pl353_nand_probe(struct platform_device *pdev)
++{
++	struct pl353_nand_controller *xnfc;
++	struct mtd_info *mtd;
++	struct nand_chip *chip;
++	struct resource *res;
++	struct device_node *np, *dn;
++	struct clk *mclk;
++	u32 ret, val = 0;
++
++	xnfc = devm_kzalloc(&pdev->dev, sizeof(*xnfc), GFP_KERNEL);
++	if (!xnfc)
++		return -ENOMEM;
++
++	xnfc->dev = &pdev->dev;
++	nand_controller_init(&xnfc->controller);
++	xnfc->controller.ops = &pl353_nand_controller_ops;
++
++	/* Map physical address of NAND flash */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	xnfc->regs = devm_ioremap_resource(xnfc->dev, res);
++	if (IS_ERR(xnfc->regs))
++		return PTR_ERR(xnfc->regs);
++
++	chip = &xnfc->chip;
++	chip->controller = &xnfc->controller;
++	mtd = nand_to_mtd(chip);
++	nand_set_controller_data(chip, xnfc);
++	mtd->priv = chip;
++	mtd->owner = THIS_MODULE;
++	nand_set_flash_node(chip, xnfc->dev->of_node);
++
++	np = of_get_next_parent(xnfc->dev->of_node);
++	mclk = of_clk_get_by_name(np, "memclk");
++	if (IS_ERR(mclk)) {
++		dev_err(xnfc->dev, "Failed to retrieve MCK clk\n");
++		return PTR_ERR(mclk);
++	}
++
++	xnfc->mclk_rate = clk_get_rate(mclk);
++	dn = nand_get_flash_node(chip);
++	ret = of_property_read_u32(dn, "nand-bus-width", &val);
++	if (ret)
++		val = 8;
++
++	xnfc->buswidth = val;
++
++	/* Set the device option and flash width */
++	chip->options = NAND_BUSWIDTH_AUTO;
++	chip->bbt_options = NAND_BBT_USE_FLASH;
++	platform_set_drvdata(pdev, xnfc);
++	ret = nand_scan(chip, 1);
++	if (ret) {
++		dev_err(xnfc->dev, "could not scan the nand chip\n");
++		return ret;
++	}
++
++	ret = mtd_device_register(mtd, NULL, 0);
++	if (ret) {
++		dev_err(xnfc->dev, "Failed to register mtd device: %d\n", ret);
++		nand_cleanup(chip);
++		return ret;
++	}
++
++	return 0;
++}
++
++/**
++ * pl353_nand_remove - Remove method for the NAND driver
++ * @pdev:	Pointer to the platform_device structure
++ *
++ * This function is called if the driver module is being unloaded. It frees all
++ * resources allocated to the device.
++ *
++ * Return:	0 on success or error value on failure
++ */
++static int pl353_nand_remove(struct platform_device *pdev)
++{
++	struct pl353_nand_controller *xnfc = platform_get_drvdata(pdev);
++	struct mtd_info *mtd = nand_to_mtd(&xnfc->chip);
++	struct nand_chip *chip = mtd_to_nand(mtd);
++
++	/* Release resources, unregister device */
++	nand_cleanup(chip);
++
++	return 0;
++}
++
++/* Match table for device tree binding */
++static const struct of_device_id pl353_nand_of_match[] = {
++	{ .compatible = "arm,pl353-nand-r2p1" },
++	{},
++};
++MODULE_DEVICE_TABLE(of, pl353_nand_of_match);
++
++/*
++ * pl353_nand_driver - This structure defines the NAND subsystem platform driver
++ */
++static struct platform_driver pl353_nand_driver = {
++	.probe		= pl353_nand_probe,
++	.remove		= pl353_nand_remove,
++	.driver		= {
++		.name	= PL353_NAND_DRIVER_NAME,
++		.of_match_table = pl353_nand_of_match,
++	},
++};
++
++module_platform_driver(pl353_nand_driver);
++
++MODULE_AUTHOR("Xilinx, Inc.");
++MODULE_ALIAS("platform:" PL353_NAND_DRIVER_NAME);
++MODULE_DESCRIPTION("ARM PL353 NAND Flash Driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/mtd/spi-nor/core.c b/drivers/mtd/spi-nor/core.c
+index 2b26a875a..da01e1a0e 100644
+--- a/drivers/mtd/spi-nor/core.c
++++ b/drivers/mtd/spi-nor/core.c
+@@ -179,7 +179,7 @@ static ssize_t spi_nor_spimem_write_data(struct spi_nor *nor, loff_t to,
+ 	if (spi_nor_spimem_bounce(nor, &op))
+ 		memcpy(nor->bouncebuf, buf, op.data.nbytes);
+ 
+-	if (nor->dirmap.wdesc) {
++	if (nor->dirmap.wdesc && !(nor->info->flags & SST_WRITE)) {
+ 		nbytes = spi_mem_dirmap_write(nor->dirmap.wdesc, op.addr.val,
+ 					      op.data.nbytes, op.data.buf.out);
+ 	} else {
+@@ -279,23 +279,28 @@ int spi_nor_write_disable(struct spi_nor *nor)
+ static int spi_nor_read_sr(struct spi_nor *nor, u8 *sr)
+ {
+ 	int ret;
++	int len;
+ 
++	nor->isparallel ? (len = 2) : (len = 1);
+ 	if (nor->spimem) {
+ 		struct spi_mem_op op =
+ 			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RDSR, 1),
+ 				   SPI_MEM_OP_NO_ADDR,
+ 				   SPI_MEM_OP_NO_DUMMY,
+-				   SPI_MEM_OP_DATA_IN(1, sr, 1));
++				   SPI_MEM_OP_DATA_IN(len, sr, 1));
+ 
+ 		ret = spi_mem_exec_op(nor->spimem, &op);
+ 	} else {
+ 		ret = nor->controller_ops->read_reg(nor, SPINOR_OP_RDSR,
+-						    sr, 1);
++						    sr, len);
+ 	}
+ 
+ 	if (ret)
+ 		dev_dbg(nor->dev, "error %d reading SR\n", ret);
+ 
++	if (nor->isparallel)
++		sr[0] |= sr[1];
++
+ 	return ret;
+ }
+ 
+@@ -310,23 +315,28 @@ static int spi_nor_read_sr(struct spi_nor *nor, u8 *sr)
+ static int spi_nor_read_fsr(struct spi_nor *nor, u8 *fsr)
+ {
+ 	int ret;
++	int len;
+ 
++	nor->isparallel ? (len = 2) : (len = 1);
+ 	if (nor->spimem) {
+ 		struct spi_mem_op op =
+ 			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RDFSR, 1),
+ 				   SPI_MEM_OP_NO_ADDR,
+ 				   SPI_MEM_OP_NO_DUMMY,
+-				   SPI_MEM_OP_DATA_IN(1, fsr, 1));
++				   SPI_MEM_OP_DATA_IN(len, fsr, 1));
+ 
+ 		ret = spi_mem_exec_op(nor->spimem, &op);
+ 	} else {
+ 		ret = nor->controller_ops->read_reg(nor, SPINOR_OP_RDFSR,
+-						    fsr, 1);
++						    fsr, len);
+ 	}
+ 
+ 	if (ret)
+ 		dev_dbg(nor->dev, "error %d reading FSR\n", ret);
+ 
++	if (nor->isparallel)
++		fsr[0] &= fsr[1];
++
+ 	return ret;
+ }
+ 
+@@ -438,27 +448,54 @@ static int spansion_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
+  *
+  * Return: 0 on success, -errno otherwise.
+  */
+-int spi_nor_write_ear(struct spi_nor *nor, u8 ear)
++int spi_nor_write_ear(struct spi_nor *nor, u32 addr)
+ {
++	u8 code = SPINOR_OP_WREAR;
++	u32 ear;
+ 	int ret;
++	struct mtd_info *mtd = &nor->mtd;
++
++	/* Wait until finished previous write command. */
++	if (spi_nor_wait_till_ready(nor))
++		return 1;
++
++	if (mtd->size <= (0x1000000) << nor->shift)
++		return 0;
++
++	addr = addr % (u32)mtd->size;
++	ear = addr >> 24;
+ 
++	if (!nor->isstacked && ear == nor->curbank)
++		return 0;
++
++	if (nor->isstacked && mtd->size <= 0x2000000)
++		return 0;
++
++	if (nor->jedec_id == CFI_MFR_AMD)
++		code = SPINOR_OP_BRWR;
++	if (nor->jedec_id == CFI_MFR_ST ||
++	    nor->jedec_id == CFI_MFR_MACRONIX ||
++	    nor->jedec_id == CFI_MFR_PMC) {
++		spi_nor_write_enable(nor);
++		code = SPINOR_OP_WREAR;
++	}
+ 	nor->bouncebuf[0] = ear;
+ 
+ 	if (nor->spimem) {
+ 		struct spi_mem_op op =
+-			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_WREAR, 1),
++			SPI_MEM_OP(SPI_MEM_OP_CMD(code, 1),
+ 				   SPI_MEM_OP_NO_ADDR,
+ 				   SPI_MEM_OP_NO_DUMMY,
+ 				   SPI_MEM_OP_DATA_OUT(1, nor->bouncebuf, 1));
+ 
+ 		ret = spi_mem_exec_op(nor->spimem, &op);
+ 	} else {
+-		ret = nor->controller_ops->write_reg(nor, SPINOR_OP_WREAR,
+-						     nor->bouncebuf, 1);
++		ret = nor->controller_ops->write_reg(nor, code, nor->bouncebuf, 1);
++		if (ret < 0)
++			return ret;
+ 	}
+ 
+-	if (ret)
+-		dev_dbg(nor->dev, "error %d writing EAR\n", ret);
++	nor->curbank = ear;
+ 
+ 	return ret;
+ }
+@@ -494,6 +531,49 @@ int spi_nor_xread_sr(struct spi_nor *nor, u8 *sr)
+ 	return ret;
+ }
+ 
++/**
++ * read_ear - Get the extended/bank address register value
++ * @nor:	Pointer to the flash control structure
++ *
++ * This routine reads the Extended/bank address register value
++ *
++ * Return:	Negative if error occurred.
++ */
++static int read_ear(struct spi_nor *nor, struct flash_info *info)
++{
++	int ret;
++	u8 code;
++
++	/* This is actually Spansion */
++	if (nor->jedec_id == CFI_MFR_AMD)
++		code = SPINOR_OP_BRRD;
++	/* This is actually Micron */
++	else if (nor->jedec_id == CFI_MFR_ST ||
++		 nor->jedec_id == CFI_MFR_MACRONIX ||
++		 nor->jedec_id == CFI_MFR_PMC)
++		code = SPINOR_OP_RDEAR;
++	else
++		return -EINVAL;
++	if (nor->spimem) {
++		struct spi_mem_op op =
++			SPI_MEM_OP(SPI_MEM_OP_CMD(code, 1),
++				   SPI_MEM_OP_NO_ADDR,
++				   SPI_MEM_OP_NO_DUMMY,
++				   SPI_MEM_OP_DATA_IN(1, nor->bouncebuf, 1));
++
++		ret = spi_mem_exec_op(nor->spimem, &op);
++	} else {
++		ret = nor->controller_ops->read_reg(nor, code, nor->bouncebuf, 1);
++	}
++	if (ret < 0) {
++		pr_err("error %d reading EAR\n", ret);
++		return ret;
++	}
++
++	return nor->bouncebuf[0];
++}
++
++
+ /**
+  * spi_nor_xsr_ready() - Query the Status Register of the S3AN flash to see if
+  * the flash is ready for new commands.
+@@ -1001,8 +1081,21 @@ static int spi_nor_erase_chip(struct spi_nor *nor)
+ 				   SPI_MEM_OP_NO_ADDR,
+ 				   SPI_MEM_OP_NO_DUMMY,
+ 				   SPI_MEM_OP_NO_DATA);
+-
++		if (nor->isstacked)
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
+ 		ret = spi_mem_exec_op(nor->spimem, &op);
++		if (ret)
++			return ret;
++
++		if (nor->isstacked) {
++			/* Wait until previous write command finished */
++			ret = spi_nor_wait_till_ready(nor);
++			if (ret)
++				return ret;
++			nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++			ret = spi_mem_exec_op(nor->spimem, &op);
++		}
++		return ret;
+ 	} else {
+ 		ret = nor->controller_ops->write_reg(nor, SPINOR_OP_CHIP_ERASE,
+ 						     NULL, 0);
+@@ -1080,6 +1173,16 @@ static bool spi_nor_has_uniform_erase(const struct spi_nor *nor)
+ 
+ static void spi_nor_set_4byte_opcodes(struct spi_nor *nor)
+ {
++	/* Do some manufacturer fixups first */
++	switch (nor->jedec_id) {
++	case CFI_MFR_AMD:
++		/* No small sector erase for 4-byte command set */
++		nor->erase_opcode = SPINOR_OP_SE;
++		nor->mtd.erasesize = nor->info->sector_size;
++		break;
++	default:
++		break;
++	}
+ 	nor->read_opcode = spi_nor_convert_3to4_read(nor->read_opcode);
+ 	nor->program_opcode = spi_nor_convert_3to4_program(nor->program_opcode);
+ 	nor->erase_opcode = spi_nor_convert_3to4_erase(nor->erase_opcode);
+@@ -1212,15 +1315,14 @@ spi_nor_find_best_erase_type(const struct spi_nor_erase_map *map,
+ 
+ 		erase = &map->erase_type[i];
+ 
+-		/* Alignment is not mandatory for overlaid regions */
+-		if (region->offset & SNOR_OVERLAID_REGION &&
+-		    region->size <= len)
+-			return erase;
+-
+ 		/* Don't erase more than what the user has asked for. */
+ 		if (erase->size > len)
+ 			continue;
+ 
++		/* Alignment is not mandatory for overlaid regions */
++		if (region->offset & SNOR_OVERLAID_REGION)
++			return erase;
++
+ 		spi_nor_div_by_erase_size(erase, addr, &rem);
+ 		if (rem)
+ 			continue;
+@@ -1364,7 +1466,6 @@ static int spi_nor_init_erase_cmd_list(struct spi_nor *nor,
+ 			goto destroy_erase_cmd_list;
+ 
+ 		if (prev_erase != erase ||
+-		    erase->size != cmd->size ||
+ 		    region->offset & SNOR_OVERLAID_REGION) {
+ 			cmd = spi_nor_init_erase_cmd(region, erase);
+ 			if (IS_ERR(cmd)) {
+@@ -1454,7 +1555,7 @@ static int spi_nor_erase_multi_sectors(struct spi_nor *nor, u64 addr, u32 len)
+ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
+ {
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+-	u32 addr, len;
++	u32 addr, len, offset;
+ 	uint32_t rem;
+ 	int ret;
+ 
+@@ -1508,10 +1609,35 @@ static int spi_nor_erase(struct mtd_info *mtd, struct erase_info *instr)
+ 	} else if (spi_nor_has_uniform_erase(nor)) {
+ 		while (len) {
+ 			ret = spi_nor_write_enable(nor);
++			if (ret)
++				goto erase_err;
++			offset = addr;
++			if (nor->isparallel == 1)
++				offset /= 2;
++			if (nor->isstacked == 1) {
++				if (offset >= (mtd->size / 2)) {
++					offset = offset - (mtd->size / 2);
++					nor->spimem->spi->master->flags |=
++						SPI_MASTER_U_PAGE;
++				} else {
++					nor->spimem->spi->master->flags &=
++						~SPI_MASTER_U_PAGE;
++				}
++			}
++			if (nor->addr_width == 3) {
++				/* Update Extended Address Register */
++				ret = spi_nor_write_ear(nor, offset);
++				if (ret)
++					goto erase_err;
++			}
++			ret = spi_nor_wait_till_ready(nor);
+ 			if (ret)
+ 				goto erase_err;
+ 
+-			ret = spi_nor_erase_sector(nor, addr);
++			ret = spi_nor_write_enable(nor);
++			if (ret)
++				goto erase_err;
++			ret = spi_nor_erase_sector(nor, offset);
+ 			if (ret)
+ 				goto erase_err;
+ 
+@@ -1544,6 +1670,8 @@ static u8 spi_nor_get_sr_bp_mask(struct spi_nor *nor)
+ 
+ 	if (nor->flags & SNOR_F_HAS_SR_BP3_BIT6)
+ 		return mask | SR_BP3_BIT6;
++	else if (nor->flags & SNOR_F_HAS_SR_BP3_BIT5)
++		return mask | SR_BP3_BIT5;
+ 
+ 	if (nor->flags & SNOR_F_HAS_4BIT_BP)
+ 		return mask | SR_BP3;
+@@ -1728,6 +1856,9 @@ static int spi_nor_sr_lock(struct spi_nor *nor, loff_t ofs, uint64_t len)
+ 
+ 		if (nor->flags & SNOR_F_HAS_SR_BP3_BIT6 && val & SR_BP3)
+ 			val = (val & ~SR_BP3) | SR_BP3_BIT6;
++		else if (nor->flags & SNOR_F_HAS_SR_BP3_BIT5 &&
++			 val & SR_BP3_BIT5)
++			val |= SR_BP3_BIT5;
+ 
+ 		if (val & ~mask)
+ 			return -EINVAL;
+@@ -1808,11 +1939,14 @@ static int spi_nor_sr_unlock(struct spi_nor *nor, loff_t ofs, uint64_t len)
+ 		val = 0; /* fully unlocked */
+ 	} else {
+ 		min_prot_len = spi_nor_get_min_prot_length_sr(nor);
+-		pow = ilog2(lock_len) - ilog2(min_prot_len) + 1;
++		pow = ilog2(mtd->size) - ilog2(min_prot_len) + 1;
+ 		val = pow << SR_BP_SHIFT;
+ 
+ 		if (nor->flags & SNOR_F_HAS_SR_BP3_BIT6 && val & SR_BP3)
+ 			val = (val & ~SR_BP3) | SR_BP3_BIT6;
++		else if (nor->flags & SNOR_F_HAS_SR_BP3_BIT5 &&
++			 val & SR_BP3_BIT5)
++			val |= SR_BP3_BIT5;
+ 
+ 		/* Some power-of-two sizes are not supported */
+ 		if (val & ~mask)
+@@ -1863,17 +1997,166 @@ static const struct spi_nor_locking_ops spi_nor_sr_locking_ops = {
+ 	.is_locked = spi_nor_sr_is_locked,
+ };
+ 
++static int write_sr_modify_protection(struct spi_nor *nor, u8 status,
++				      u8 lock_bits)
++{
++	u8 status_new, bp_mask;
++
++	status_new = status & ~SR_BP_BIT_MASK;
++	bp_mask = (lock_bits << SR_BP_BIT_OFFSET) & SR_BP_BIT_MASK;
++
++	/* Micron */
++	if (nor->jedec_id == CFI_MFR_ST) {
++		/* To support chips with more than 896 sectors (56MB) */
++		status_new &= ~SR_BP3;
++
++		/* Protected area starts from top */
++		status_new &= ~SR_BP_TB;
++
++		if (lock_bits > 7)
++			bp_mask |= SR_BP3;
++	} else if (nor->jedec_id == CFI_MFR_WINBND) { /* Winbond */
++		status_new &= ~SR_BP3_BIT5;
++
++		/* Protected area starts from top */
++		status_new &= ~SR_BP_TB;
++
++		if (lock_bits > 7)
++			bp_mask |= SR_BP3_BIT5;
++	}
++
++	if (nor->is_lock)
++		status_new |= bp_mask;
++
++	/* For spansion flashes */
++	if (nor->jedec_id == CFI_MFR_AMD) {
++		spi_nor_read_cr(nor, &nor->bouncebuf[1]);
++		nor->bouncebuf[0] |= status_new;
++		if (spi_nor_write_sr(nor, nor->bouncebuf, 2) < 0)
++			return 1;
++	} else {
++		nor->bouncebuf[0] = status_new;
++		if (spi_nor_write_sr(nor, &nor->bouncebuf[0], 1) < 0)
++			return 1;
++	}
++	return 0;
++}
++
++static u8 bp_bits_from_sr(struct spi_nor *nor, u8 status)
++{
++	u8 ret;
++
++	ret = (((status) & SR_BP_BIT_MASK) >> SR_BP_BIT_OFFSET);
++	if (nor->jedec_id == 0x20)
++		ret |= ((status & SR_BP3) >> (SR_BP_BIT_OFFSET + 1));
++	else if ((nor->jedec_id == CFI_MFR_WINBND) &&
++		 (nor->flags & SNOR_F_HAS_4BIT_BP))
++		ret |= ((status & SR_BP3_BIT5) >> SR_BP_BIT_OFFSET);
++
++	return ret;
++}
++
++static inline u16 min_lockable_sectors(struct spi_nor *nor,
++				       u16 n_sectors)
++{
++	u16 lock_granularity;
++
++	/*
++	 * Revisit - SST (not used by us) has the same JEDEC ID as micron but
++	 * protected area table is similar to that of spansion.
++	 */
++	lock_granularity = max(1, n_sectors / M25P_MAX_LOCKABLE_SECTORS);
++	if (nor->jedec_id == CFI_MFR_ST)	/* Micron */
++		lock_granularity = 1;
++
++	return lock_granularity;
++}
++
++static inline uint32_t get_protected_area_start(struct spi_nor *nor,
++						u8 lock_bits)
++{
++	u16 n_sectors;
++	u32 sector_size;
++	u64 mtd_size;
++	struct mtd_info *mtd = &nor->mtd;
++
++	n_sectors = nor->n_sectors;
++	sector_size = nor->sector_size;
++	mtd_size = mtd->size;
++
++	if (nor->isparallel) {
++		sector_size = (nor->sector_size >> 1);
++		mtd_size = (mtd->size >> 1);
++	}
++	if (nor->isstacked) {
++		n_sectors = (nor->n_sectors >> 1);
++		mtd_size = (mtd->size >> 1);
++	}
++
++	return mtd_size - (1 << (lock_bits - 1)) *
++		min_lockable_sectors(nor, n_sectors) * sector_size;
++}
++
++static u8 min_protected_area_including_offset(struct spi_nor *nor,
++					      uint32_t offset)
++{
++	u8 lock_bits, lockbits_limit;
++
++	/*
++	 * Revisit - SST (not used by us) has the same JEDEC ID as micron but
++	 * protected area table is similar to that of spansion.
++	 * Mircon has 4 block protect bits.
++	 */
++	lockbits_limit = 7;
++	if (nor->jedec_id == CFI_MFR_ST)	/* Micron */
++		lockbits_limit = 15;
++
++	for (lock_bits = 1; lock_bits < lockbits_limit; lock_bits++) {
++		if (offset >= get_protected_area_start(nor, lock_bits))
++			break;
++	}
++	return lock_bits;
++}
++
+ static int spi_nor_lock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+ 	int ret;
++	u8 lock_bits;
+ 
+ 	ret = spi_nor_lock_and_prep(nor);
+ 	if (ret)
+ 		return ret;
+ 
++	if (nor->isparallel == 1)
++		ofs = ofs >> nor->shift;
++
++	if (nor->isstacked == 1) {
++		if (ofs >= (mtd->size / 2)) {
++			ofs = ofs - (mtd->size / 2);
++			nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++		} else {
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
++		}
++	}
+ 	ret = nor->params->locking_ops->lock(nor, ofs, len);
++	/* Wait until finished previous command */
++	ret = spi_nor_wait_till_ready(nor);
++	if (ret)
++		goto err;
++
++	ret = spi_nor_read_sr(nor, nor->bouncebuf);
++
++	lock_bits = min_protected_area_including_offset(nor, ofs);
+ 
++	/* Only modify protection if it will not unlock other areas */
++	if (lock_bits > bp_bits_from_sr(nor, nor->bouncebuf[0])) {
++		nor->is_lock = 1;
++		ret = write_sr_modify_protection(nor, nor->bouncebuf[0], lock_bits);
++	} else {
++		dev_err(nor->dev, "trying to unlock already locked area\n");
++	}
++err:
+ 	spi_nor_unlock_and_unprep(nor);
+ 	return ret;
+ }
+@@ -1882,13 +2165,40 @@ static int spi_nor_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len)
+ {
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+ 	int ret;
++	u8 lock_bits;
+ 
+ 	ret = spi_nor_lock_and_prep(nor);
+ 	if (ret)
+ 		return ret;
+ 
++	if (nor->isparallel == 1)
++		ofs = ofs >> nor->shift;
++
++	if (nor->isstacked == 1) {
++		if (ofs >= (mtd->size / 2)) {
++			ofs = ofs - (mtd->size / 2);
++			nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++		} else {
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
++		}
++	}
+ 	ret = nor->params->locking_ops->unlock(nor, ofs, len);
++	/* Wait until finished previous command */
++	ret = spi_nor_wait_till_ready(nor);
++	if (ret)
++		goto err;
+ 
++	ret = spi_nor_read_sr(nor, nor->bouncebuf);
++
++	lock_bits = min_protected_area_including_offset(nor, ofs + len) - 1;
++	/* Only modify protection if it will not lock other areas */
++	if (lock_bits < bp_bits_from_sr(nor, nor->bouncebuf[0])) {
++		nor->is_lock = 0;
++		ret = write_sr_modify_protection(nor, nor->bouncebuf[0], lock_bits);
++	} else {
++		dev_err(nor->dev, "trying to lock already unlocked area\n");
++	}
++err:
+ 	spi_nor_unlock_and_unprep(nor);
+ 	return ret;
+ }
+@@ -2067,6 +2377,9 @@ static const struct flash_info *spi_nor_read_id(struct spi_nor *nor)
+ 		return ERR_PTR(ret);
+ 	}
+ 
++	for (i = 0; i < SPI_NOR_MAX_ID_LEN; i++)
++		nor->spimem->device_id[i] = id[i];
++
+ 	for (i = 0; i < ARRAY_SIZE(manufacturers); i++) {
+ 		info = spi_nor_search_part_by_id(manufacturers[i]->parts,
+ 						 manufacturers[i]->nparts,
+@@ -2087,19 +2400,106 @@ static int spi_nor_read(struct mtd_info *mtd, loff_t from, size_t len,
+ {
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+ 	ssize_t ret;
+-
++	u32 offset = from;
++	u32 stack_shift = 0;
++	u32 read_len = 0;
++	u32 rem_bank_len = 0;
++	u8 bank;
++	u8 cur_bank;
++	u8 nxt_bank;
++	u32 bank_size;
++
++#define OFFSET_16_MB 0x1000000
+ 	dev_dbg(nor->dev, "from 0x%08x, len %zd\n", (u32)from, len);
++	if (nor->isparallel && (from & 1)) {
++		u8 two[2];
++		size_t local_retlen;
+ 
++		ret = spi_nor_read(mtd, (from & ~1), 2, &local_retlen, two);
++		if (ret < 0)
++			return ret;
++		buf[0] = two[1]; /* copy odd byte to buffer */
++		++buf;
++		*retlen += 1; /* We've read only one actual byte */
++		--len;
++		++from;
++	}
+ 	ret = spi_nor_lock_and_prep(nor);
+-	if (ret)
++	if (ret) {
+ 		return ret;
++	}
+ 
+ 	while (len) {
+-		loff_t addr = from;
++		if (nor->addr_width == 3) {
++			bank = (u32)from / (OFFSET_16_MB << nor->shift);
++			rem_bank_len = ((OFFSET_16_MB << nor->shift) *
++							(bank + 1)) - from;
++		}
++		offset = from;
++		if (nor->isparallel == 1)
++			offset /= 2;
++		if (nor->isstacked == 1) {
++			stack_shift = 1;
++			if (offset >= (mtd->size / 2)) {
++				offset = offset - (mtd->size / 2);
++				nor->spimem->spi->master->flags |=
++					SPI_MASTER_U_PAGE;
++			} else {
++				nor->spimem->spi->master->flags &=
++					~SPI_MASTER_U_PAGE;
++			}
++		}
++		if (nor->addr_width == 4) {
++			/*
++			 * Some flash devices like N25Q512 have multiple dies
++			 * in it. Read operation in these devices is bounded
++			 * by its die segment. In a continuous read, across
++			 * multiple dies, when the last byte of the selected
++			 * die segment is read, the next byte read is the
++			 * first byte of the same die segment. This is Die
++			 * cross over issue. So to handle this issue, split
++			 * a read transaction, that spans across multiple
++			 * banks, into one read per bank. Bank size is 16MB
++			 * for single and dual stacked mode and 32MB for dual
++			 * parallel mode.
++			 */
++			if (nor->spi && nor->spi->multi_die) {
++				bank_size = (OFFSET_16_MB << nor->shift);
++				cur_bank = offset / bank_size;
++				nxt_bank = (offset + len) / bank_size;
++				if (cur_bank != nxt_bank)
++					rem_bank_len = ((bank_size *
++							(cur_bank + 1)) -
++							offset) << nor->shift;
++				else
++					rem_bank_len = (mtd->size >>
++							stack_shift) -
++							(offset << nor->shift);
++			} else {
++				rem_bank_len = (mtd->size >> stack_shift) -
++						(offset << nor->shift);
++			}
++		}
++		if (nor->addr_width == 3) {
++			ret = spi_nor_write_ear(nor, offset);
++			if (ret) {
++				dev_err(nor->dev, "While writing ear register\n");
++				goto read_err;
++			}
++		}
++		if (len < rem_bank_len)
++			read_len = len;
++		else
++			read_len = rem_bank_len;
++
++		/* Wait till previous write/erase is done. */
++		ret = spi_nor_wait_till_ready(nor);
++		if (ret)
++			goto read_err;
+ 
+-		addr = spi_nor_convert_addr(nor, addr);
++		offset = spi_nor_convert_addr(nor, offset);
+ 
+-		ret = spi_nor_read_data(nor, addr, len, buf);
++		ret = spi_nor_read_data(nor, (offset), read_len, buf);
+ 		if (ret == 0) {
+ 			/* We shouldn't see 0-length reads */
+ 			ret = -EIO;
+@@ -2132,8 +2532,29 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+ 	size_t page_offset, page_remain, i;
+ 	ssize_t ret;
++	u32 offset, stack_shift = 0;
++	u8 bank = 0;
++	u32 rem_bank_len = 0;
+ 
++#define OFFSET_16_MB 0x1000000
+ 	dev_dbg(nor->dev, "to 0x%08x, len %zd\n", (u32)to, len);
++	/*
++	 * Cannot write to odd offset in parallel mode,
++	 * so write 2 bytes first
++	 */
++	if (nor->isparallel && (to & 1)) {
++		u8 two[2] = {0xff, buf[0]};
++		size_t local_retlen;
++
++		ret = spi_nor_write(mtd, to & ~1, 2, &local_retlen, two);
++		if (ret < 0)
++			return ret;
++
++		*retlen += 1; /* We've written only one actual byte */
++		++buf;
++		--len;
++		++to;
++	}
+ 
+ 	ret = spi_nor_lock_and_prep(nor);
+ 	if (ret)
+@@ -2143,6 +2564,11 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
+ 		ssize_t written;
+ 		loff_t addr = to + i;
+ 
++		if (nor->addr_width == 3) {
++			bank = (u32)to / (OFFSET_16_MB << nor->shift);
++			rem_bank_len = ((OFFSET_16_MB << nor->shift) *
++							(bank + 1)) - to;
++		}
+ 		/*
+ 		 * If page_size is a power of two, the offset can be quickly
+ 		 * calculated with an AND operation. On the other cases we
+@@ -2158,17 +2584,62 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
+ 
+ 			page_offset = do_div(aux, nor->page_size);
+ 		}
+-		/* the size of data remaining on the first page */
+-		page_remain = min_t(size_t,
+-				    nor->page_size - page_offset, len - i);
++		offset = (to + i);
++		if (nor->isparallel == 1)
++			offset /= 2;
++
++		if (nor->isstacked == 1) {
++			stack_shift = 1;
++			if (offset >= (mtd->size / 2)) {
++				offset = offset - (mtd->size / 2);
++				nor->spimem->spi->master->flags |=
++					SPI_MASTER_U_PAGE;
++			} else {
++				nor->spimem->spi->master->flags &=
++					~SPI_MASTER_U_PAGE;
++			}
++		}
++
++		/* Die cross over issue is not handled */
++		if (nor->addr_width == 4)
++			rem_bank_len = (mtd->size >> stack_shift) - offset;
++		if (nor->addr_width == 3) {
++			ret = spi_nor_write_ear(nor, offset);
++			if (ret) {
++				dev_err(nor->dev, "While writing ear register\n");
++				goto write_err;
++			}
++		}
++		if (nor->isstacked == 1) {
++			if ((len - i) <= rem_bank_len) {
++				page_remain = min_t(size_t,
++						    nor->page_size -
++						    page_offset, len - i);
++			} else {
++				/*
++				 * the size of data remaining
++				 * on the first page
++				 */
++				page_remain = min_t(size_t,
++						    nor->page_size -
++						    page_offset, rem_bank_len);
++			}
++		} else {
++			page_remain = min_t(size_t,
++					    nor->page_size -
++					    page_offset, len - i);
++		}
++		ret = spi_nor_wait_till_ready(nor);
++		if (ret)
++			goto write_err;
+ 
+-		addr = spi_nor_convert_addr(nor, addr);
++		offset = spi_nor_convert_addr(nor, offset);
+ 
+ 		ret = spi_nor_write_enable(nor);
+ 		if (ret)
+ 			goto write_err;
+ 
+-		ret = spi_nor_write_data(nor, addr, page_remain, buf + i);
++		ret = spi_nor_write_data(nor, (offset), page_remain, buf + i);
+ 		if (ret < 0)
+ 			goto write_err;
+ 		written = ret;
+@@ -2178,6 +2649,13 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
+ 			goto write_err;
+ 		*retlen += written;
+ 		i += written;
++		if (written != page_remain) {
++			dev_err(nor->dev,
++				"While writing %zu bytes written %zd bytes\n",
++				page_remain, written);
++			ret = -EIO;
++			goto write_err;
++		}
+ 	}
+ 
+ write_err:
+@@ -2373,9 +2851,6 @@ spi_nor_spimem_adjust_hwcaps(struct spi_nor *nor, u32 *hwcaps)
+ 	/* DTR modes are not supported yet, mask them all. */
+ 	*hwcaps &= ~SNOR_HWCAPS_DTR;
+ 
+-	/* X-X-X modes are not supported yet, mask them all. */
+-	*hwcaps &= ~SNOR_HWCAPS_X_X_X;
+-
+ 	for (cap = 0; cap < sizeof(*hwcaps) * BITS_PER_BYTE; cap++) {
+ 		int rdidx, ppidx;
+ 
+@@ -2564,6 +3039,9 @@ static int spi_nor_select_erase(struct spi_nor *nor)
+ 	u32 wanted_size = nor->info->sector_size;
+ 	int i;
+ 
++	if (mtd->erasesize &&
++	    nor->jedec_id != CFI_MFR_AMD)
++		return 0;
+ 	/*
+ 	 * The previous implementation handling Sector Erase commands assumed
+ 	 * that the SPI flash memory has an uniform layout then used only one
+@@ -2583,6 +3061,9 @@ static int spi_nor_select_erase(struct spi_nor *nor)
+ 			return -EINVAL;
+ 		nor->erase_opcode = erase->opcode;
+ 		mtd->erasesize = erase->size;
++		if (nor->shift)
++			mtd->erasesize = mtd->erasesize << nor->shift;
++
+ 		return 0;
+ 	}
+ 
+@@ -2674,6 +3155,92 @@ static int spi_nor_setup(struct spi_nor *nor,
+ 	return nor->params->setup(nor, hwcaps);
+ }
+ 
++static int spi_nor_switch_macronix_octal_ddr(struct spi_nor *nor)
++{
++	int ret;
++
++	if (nor->isstacked && nor->spimem)
++		nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++
++	ret = spi_nor_write_enable(nor);
++	if (ret)
++		return ret;
++
++	if (nor->spimem) {
++		struct spi_mem_op op =
++			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_WR_CFG_REG2, 1),
++				   SPI_MEM_OP_ADDR(4, 0, 1),
++				   SPI_MEM_OP_NO_DUMMY,
++				   SPI_MEM_OP_DATA_OUT(1, nor->bouncebuf, 1));
++		nor->bouncebuf[0] = SPINOR_MACRONIX_CFG2_OCTAL_DDR;
++		if (!nor->isstacked)
++			op.cmd.tune_clk = 1;
++
++		ret = spi_mem_exec_op(nor->spimem, &op);
++		if (nor->isstacked) {
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
++
++			ret = spi_nor_write_enable(nor);
++			if (ret)
++				return ret;
++
++			op.cmd.tune_clk = 1;
++			ret = spi_mem_exec_op(nor->spimem, &op);
++		}
++	}
++
++	if (ret < 0) {
++		dev_err(nor->dev,
++			"error while writing configuration register\n");
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
++static int spi_nor_switch_micron_octal_ddr(struct spi_nor *nor)
++{
++	int ret;
++
++	if (nor->isstacked && nor->spimem)
++		nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++
++	ret = spi_nor_write_enable(nor);
++	if (ret)
++		return ret;
++
++	if (nor->spimem) {
++		struct spi_mem_op op =
++			SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_WRCR, 1),
++				   SPI_MEM_OP_ADDR(4, 0, 1),
++				   SPI_MEM_OP_NO_DUMMY,
++				   SPI_MEM_OP_DATA_OUT(1, nor->bouncebuf, 1));
++		nor->bouncebuf[0] = SPINOR_VCR_OCTAL_DDR;
++		if (!nor->isstacked)
++			op.cmd.tune_clk = 1;
++
++		ret = spi_mem_exec_op(nor->spimem, &op);
++		if (nor->isstacked) {
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
++
++			ret = spi_nor_write_enable(nor);
++			if (ret)
++				return ret;
++
++			op.cmd.tune_clk = 1;
++			ret = spi_mem_exec_op(nor->spimem, &op);
++		}
++	}
++
++	if (ret < 0) {
++		dev_err(nor->dev,
++			"error while writing configuration register\n");
++		return -EINVAL;
++	}
++
++	return 0;
++}
++
+ /**
+  * spi_nor_manufacturer_init_params() - Initialize the flash's parameters and
+  * settings based on MFR register and ->default_init() hook.
+@@ -2773,6 +3340,10 @@ static void spi_nor_info_init_params(struct spi_nor *nor)
+ 		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_1_1_8],
+ 					  0, 8, SPINOR_OP_READ_1_1_8,
+ 					  SNOR_PROTO_1_1_8);
++		params->hwcaps.mask |= SNOR_HWCAPS_READ_8_8_8;
++		spi_nor_set_read_settings(&params->reads[SNOR_CMD_READ_8_8_8],
++					  0, 16, SPINOR_OP_READ_1_1_8,
++					  SNOR_PROTO_8_8_8);
+ 	}
+ 
+ 	/* Page Program settings. */
+@@ -2780,6 +3351,16 @@ static void spi_nor_info_init_params(struct spi_nor *nor)
+ 	spi_nor_set_pp_settings(&params->page_programs[SNOR_CMD_PP],
+ 				SPINOR_OP_PP, SNOR_PROTO_1_1_1);
+ 
++	if (info->flags & SPI_NOR_OCTAL_WRITE) {
++		params->hwcaps.mask |= SNOR_HWCAPS_PP_1_1_8;
++		spi_nor_set_pp_settings(&params->page_programs[SNOR_CMD_PP_1_1_8],
++					SPINOR_OP_PP_1_1_8, SNOR_PROTO_1_1_8);
++		params->hwcaps.mask |= SNOR_HWCAPS_PP_8_8_8;
++		spi_nor_set_pp_settings(&params->page_programs[SNOR_CMD_PP_8_8_8],
++					SPINOR_OP_PP_1_1_8,
++					SNOR_PROTO_8_8_8);
++	}
++
+ 	/*
+ 	 * Sector Erase settings. Sort Erase Types in ascending order, with the
+ 	 * smallest erase size starting at BIT(0).
+@@ -2916,43 +3497,78 @@ static int spi_nor_quad_enable(struct spi_nor *nor)
+ 	return nor->params->quad_enable(nor);
+ }
+ 
++static void spi_nor_prot_unlock(struct spi_nor *nor)
++{
++	if (nor->info->flags & SST_GLOBAL_PROT_UNLK) {
++		spi_nor_write_enable(nor);
++		if (nor->spimem) {
++			struct spi_mem_op op =
++				SPI_MEM_OP(SPI_MEM_OP_CMD(GLOBAL_BLKPROT_UNLK, 1),
++					   SPI_MEM_OP_NO_ADDR,
++					   SPI_MEM_OP_NO_DUMMY,
++					   SPI_MEM_OP_NO_DATA);
++
++			spi_mem_exec_op(nor->spimem, &op);
++		} else {
++			/* Unlock global write protection bits */
++			nor->controller_ops->write_reg(nor, GLOBAL_BLKPROT_UNLK, NULL, 0);
++		}
++	}
++	spi_nor_wait_till_ready(nor);
++}
++
+ /**
+- * spi_nor_try_unlock_all() - Tries to unlock the entire flash memory array.
++ * spi_nor_unlock_all() - Unlocks the entire flash memory array.
+  * @nor:	pointer to a 'struct spi_nor'.
+  *
+  * Some SPI NOR flashes are write protected by default after a power-on reset
+  * cycle, in order to avoid inadvertent writes during power-up. Backward
+  * compatibility imposes to unlock the entire flash memory array at power-up
+  * by default.
+- *
+- * Unprotecting the entire flash array will fail for boards which are hardware
+- * write-protected. Thus any errors are ignored.
+  */
+-static void spi_nor_try_unlock_all(struct spi_nor *nor)
++static int spi_nor_unlock_all(struct spi_nor *nor)
+ {
+-	int ret;
+-
+-	if (!(nor->flags & SNOR_F_HAS_LOCK))
+-		return;
++	const struct flash_info *info = nor->info;
+ 
+-	ret = spi_nor_unlock(&nor->mtd, 0, nor->params->size);
+-	if (ret)
+-		dev_dbg(nor->dev, "Failed to unlock the entire flash memory array\n");
++	if (nor->jedec_id == CFI_MFR_ATMEL ||
++	    nor->jedec_id == CFI_MFR_INTEL ||
++	    nor->jedec_id == CFI_MFR_SST ||
++	    nor->flags & SNOR_F_HAS_LOCK) {
++		if (info->flags & SST_GLOBAL_PROT_UNLK) {
++			spi_nor_prot_unlock(nor);
++		} else {
++			return spi_nor_unlock(&nor->mtd, 0, nor->params->size);
++		}
++	}
++	return 0;
+ }
+ 
+ static int spi_nor_init(struct spi_nor *nor)
+ {
+ 	int err;
+ 
++	if (nor->jedec_id == CFI_MFR_ATMEL ||
++	    nor->jedec_id == CFI_MFR_INTEL ||
++	    nor->jedec_id == CFI_MFR_SST ||
++	    nor->flags & SNOR_F_HAS_LOCK) {
++		spi_nor_write_enable(nor);
++		nor->bouncebuf[0] = 0;
++		spi_nor_write_sr(nor, nor->bouncebuf, 1);
++	}
+ 	err = spi_nor_quad_enable(nor);
+ 	if (err) {
+ 		dev_dbg(nor->dev, "quad mode not supported\n");
+ 		return err;
+ 	}
+ 
+-	spi_nor_try_unlock_all(nor);
++	err = spi_nor_unlock_all(nor);
++	if (err) {
++		dev_dbg(nor->dev, "Failed to unlock the entire flash memory array\n");
++		return err;
++	}
+ 
+-	if (nor->addr_width == 4 && !(nor->flags & SNOR_F_4B_OPCODES)) {
++	if (nor->addr_width == 4 && !(nor->info->flags & SNOR_F_4B_OPCODES) &&
++	    (nor->jedec_id != CFI_MFR_AMD)) {
+ 		/*
+ 		 * If the RESET# pin isn't hooked up properly, or the system
+ 		 * otherwise doesn't perform a reset command in the boot
+@@ -2963,6 +3579,11 @@ static int spi_nor_init(struct spi_nor *nor)
+ 		WARN_ONCE(nor->flags & SNOR_F_BROKEN_RESET,
+ 			  "enabling reset hack; may not recover from unexpected reboots\n");
+ 		nor->params->set_4byte_addr_mode(nor, true);
++		if (nor->isstacked) {
++			nor->spimem->spi->master->flags |= SPI_MASTER_U_PAGE;
++			nor->params->set_4byte_addr_mode(nor, true);
++			nor->spimem->spi->master->flags &= ~SPI_MASTER_U_PAGE;
++		}
+ 	}
+ 
+ 	return 0;
+@@ -2981,42 +3602,13 @@ static void spi_nor_resume(struct mtd_info *mtd)
+ 		dev_err(dev, "resume() failed\n");
+ }
+ 
+-static int spi_nor_get_device(struct mtd_info *mtd)
+-{
+-	struct mtd_info *master = mtd_get_master(mtd);
+-	struct spi_nor *nor = mtd_to_spi_nor(master);
+-	struct device *dev;
+-
+-	if (nor->spimem)
+-		dev = nor->spimem->spi->controller->dev.parent;
+-	else
+-		dev = nor->dev;
+-
+-	if (!try_module_get(dev->driver->owner))
+-		return -ENODEV;
+-
+-	return 0;
+-}
+-
+-static void spi_nor_put_device(struct mtd_info *mtd)
+-{
+-	struct mtd_info *master = mtd_get_master(mtd);
+-	struct spi_nor *nor = mtd_to_spi_nor(master);
+-	struct device *dev;
+-
+-	if (nor->spimem)
+-		dev = nor->spimem->spi->controller->dev.parent;
+-	else
+-		dev = nor->dev;
+-
+-	module_put(dev->driver->owner);
+-}
+-
+ void spi_nor_restore(struct spi_nor *nor)
+ {
+ 	/* restore the addressing mode */
+-	if (nor->addr_width == 4 && !(nor->flags & SNOR_F_4B_OPCODES) &&
+-	    nor->flags & SNOR_F_BROKEN_RESET)
++	if (nor->addr_width == 4 && !(nor->info->flags & SNOR_F_4B_OPCODES) &&
++	    (nor->flags & SNOR_F_BROKEN_RESET) &&
++	    (nor->jedec_id != CFI_MFR_AMD) &&
++	    !(nor->info->flags & SPI_NOR_4B_OPCODES))
+ 		nor->params->set_4byte_addr_mode(nor, false);
+ }
+ EXPORT_SYMBOL_GPL(spi_nor_restore);
+@@ -3040,6 +3632,8 @@ static const struct flash_info *spi_nor_match_id(struct spi_nor *nor,
+ 
+ static int spi_nor_set_addr_width(struct spi_nor *nor)
+ {
++	struct device_node *np = spi_nor_get_flash_node(nor);
++	struct device_node *np_spi;
+ 	if (nor->addr_width) {
+ 		/* already configured from SFDP */
+ 	} else if (nor->info->addr_width) {
+@@ -3049,8 +3643,50 @@ static int spi_nor_set_addr_width(struct spi_nor *nor)
+ 	}
+ 
+ 	if (nor->addr_width == 3 && nor->mtd.size > 0x1000000) {
+-		/* enable 4-byte addressing if the device exceeds 16MiB */
+-		nor->addr_width = 4;
++#ifdef CONFIG_OF
++		np_spi = of_get_next_parent(np);
++		if (of_property_match_string(np_spi, "compatible",
++					     "xlnx,zynq-qspi-1.0") >= 0) {
++			int status;
++
++			nor->addr_width = 3;
++			nor->params->set_4byte_addr_mode(nor, false);
++			status = read_ear(nor, (struct flash_info *)nor->info);
++			if (status < 0)
++				dev_warn(nor->dev, "failed to read ear reg\n");
++			else
++				nor->curbank = status & EAR_SEGMENT_MASK;
++		} else {
++#endif
++			/*
++			 * enable 4-byte addressing if the
++			 * device exceeds 16MiB
++			 */
++			nor->addr_width = 4;
++			if (nor->jedec_id == CFI_MFR_AMD ||
++			    nor->info->flags & SPI_NOR_4B_OPCODES) {
++				spi_nor_set_4byte_opcodes(nor);
++			} else {
++				np_spi = of_get_next_parent(np);
++				if (of_property_match_string(np_spi,
++							     "compatible",
++							     "xlnx,xps-spi-2.00.a") >= 0) {
++					nor->addr_width = 3;
++					nor->params->set_4byte_addr_mode(nor, false);
++				} else {
++					nor->params->set_4byte_addr_mode(nor, true);
++					if (nor->isstacked) {
++						nor->spimem->spi->master->flags |=
++							SPI_MASTER_U_PAGE;
++						nor->params->set_4byte_addr_mode(nor, true);
++						nor->spimem->spi->master->flags &=
++							~SPI_MASTER_U_PAGE;
++					}
++				}
++			}
++#ifdef CONFIG_OF
++		}
++#endif
+ 	}
+ 
+ 	if (nor->addr_width > SPI_NOR_MAX_ADDR_WIDTH) {
+@@ -3120,12 +3756,14 @@ static const struct flash_info *spi_nor_get_flash_info(struct spi_nor *nor,
+ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 		 const struct spi_nor_hwcaps *hwcaps)
+ {
+-	const struct flash_info *info;
++	struct flash_info *info = NULL;
+ 	struct device *dev = nor->dev;
+ 	struct mtd_info *mtd = &nor->mtd;
+ 	struct device_node *np = spi_nor_get_flash_node(nor);
+ 	int ret;
+ 	int i;
++	struct device_node *np_spi;
++	u32 is_dual;
+ 
+ 	ret = spi_nor_check(nor);
+ 	if (ret)
+@@ -3150,7 +3788,7 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 	if (!nor->bouncebuf)
+ 		return -ENOMEM;
+ 
+-	info = spi_nor_get_flash_info(nor, name);
++	info = (struct flash_info *)spi_nor_get_flash_info(nor, name);
+ 	if (IS_ERR(info))
+ 		return PTR_ERR(info);
+ 
+@@ -3171,7 +3809,11 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 	if (info->flags & SPI_NOR_HAS_LOCK)
+ 		nor->flags |= SNOR_F_HAS_LOCK;
+ 
+-	mtd->_write = spi_nor_write;
++	/* sst nor chips use AAI word program */
++	if (info->flags & SST_WRITE)
++		mtd->_write = sst_write;
++	else
++		mtd->_write = spi_nor_write;
+ 
+ 	/* Init flash parameters based on flash_info struct and SFDP */
+ 	ret = spi_nor_init_params(nor);
+@@ -3187,9 +3829,77 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 	mtd->size = nor->params->size;
+ 	mtd->_erase = spi_nor_erase;
+ 	mtd->_read = spi_nor_read;
++	nor->page_size = nor->params->page_size;
++#ifdef CONFIG_OF
++	np_spi = of_get_next_parent(np);
++	if (((of_property_match_string(np_spi, "compatible",
++				       "xlnx,zynq-qspi-1.0") >= 0) ||
++		(of_property_match_string(np_spi, "compatible",
++				"xlnx,zynqmp-qspi-1.0") >= 0)) ||
++		(of_property_match_string(np_spi, "compatible",
++				"xlnx,versal-qspi-1.0") >= 0) ||
++		(of_property_match_string(np_spi, "compatible",
++				"xlnx,versal-ospi-1.0") >= 0)) {
++		if (of_property_read_u32(np_spi, "is-dual",
++					 &is_dual) < 0) {
++			/* Default to single if prop not defined */
++			nor->shift = 0;
++			nor->isstacked = 0;
++			nor->isparallel = 0;
++		} else {
++			if (is_dual == 1) {
++				/* dual parallel */
++				nor->shift = 1;
++				info->sector_size <<= nor->shift;
++				info->page_size <<= nor->shift;
++				nor->page_size = info->page_size;
++				mtd->size <<= nor->shift;
++				nor->isparallel = 1;
++				nor->isstacked = 0;
++				nor->spi->master->flags |=
++						(SPI_MASTER_DATA_STRIPE
++						| SPI_MASTER_BOTH_CS);
++			} else {
++#ifdef CONFIG_SPI_ZYNQ_QSPI_DUAL_STACKED
++				/* dual stacked */
++				nor->shift = 0;
++				mtd->size <<= 1;
++				info->n_sectors <<= 1;
++				nor->isstacked = 1;
++				nor->isparallel = 0;
++#else
++				u32 is_stacked;
++
++				if (of_property_read_u32(np_spi,
++							 "is-stacked",
++							 &is_stacked) < 0) {
++					is_stacked = 0;
++				}
++				if (is_stacked) {
++					/* dual stacked */
++					nor->shift = 0;
++					mtd->size <<= 1;
++					info->n_sectors <<= 1;
++					nor->isstacked = 1;
++					nor->isparallel = 0;
++				} else {
++					/* single */
++					nor->shift = 0;
++					nor->isstacked = 0;
++					nor->isparallel = 0;
++				}
++#endif
++			}
++		}
++	}
++#else
++	/* Default to single */
++	nor->shift = 0;
++	nor->isstacked = 0;
++	nor->isparallel = 0;
++#endif
++
+ 	mtd->_resume = spi_nor_resume;
+-	mtd->_get_device = spi_nor_get_device;
+-	mtd->_put_device = spi_nor_put_device;
+ 
+ 	if (nor->params->locking_ops) {
+ 		mtd->_lock = spi_nor_lock;
+@@ -3214,13 +3924,15 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 		nor->flags |= SNOR_F_HAS_4BIT_BP;
+ 		if (info->flags & SPI_NOR_BP3_SR_BIT6)
+ 			nor->flags |= SNOR_F_HAS_SR_BP3_BIT6;
++		else if (info->flags & SPI_NOR_BP3_SR_BIT5)
++			nor->flags |= SNOR_F_HAS_SR_BP3_BIT5;
+ 	}
+ 
+ 	if (info->flags & SPI_NOR_NO_ERASE)
+ 		mtd->flags |= MTD_NO_ERASE;
+ 
+ 	mtd->dev.parent = dev;
+-	nor->page_size = nor->params->page_size;
++	nor->jedec_id = info->id[0];
+ 	mtd->writebufsize = nor->page_size;
+ 
+ 	if (of_property_read_bool(np, "broken-flash-reset"))
+@@ -3257,6 +3969,16 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
+ 		mtd->name, (long long)mtd->size, (long long)(mtd->size >> 20),
+ 		mtd->erasesize, mtd->erasesize / 1024, mtd->numeraseregions);
+ 
++	if (hwcaps->mask & nor->params->hwcaps.mask &
++	    (SNOR_HWCAPS_READ_8_8_8 | SNOR_HWCAPS_PP_8_8_8)) {
++		if (nor->jedec_id == CFI_MFR_MACRONIX)
++			ret = spi_nor_switch_macronix_octal_ddr(nor);
++		else
++			ret = spi_nor_switch_micron_octal_ddr(nor);
++		if (ret)
++			return ret;
++	}
++
+ 	if (mtd->numeraseregions)
+ 		for (i = 0; i < mtd->numeraseregions; i++)
+ 			dev_dbg(dev,
+@@ -3346,6 +4068,7 @@ static int spi_nor_probe(struct spi_mem *spimem)
+ 
+ 	spi_mem_set_drvdata(spimem, nor);
+ 
++	nor->spi = spi;
+ 	if (data && data->name)
+ 		nor->mtd.name = data->name;
+ 
+@@ -3410,6 +4133,9 @@ static void spi_nor_shutdown(struct spi_mem *spimem)
+ {
+ 	struct spi_nor *nor = spi_mem_get_drvdata(spimem);
+ 
++	if (nor->addr_width == 3 &&
++	    (nor->mtd.size >> nor->shift) > 0x1000000)
++		spi_nor_write_ear(nor, 0);
+ 	spi_nor_restore(nor);
+ }
+ 
+diff --git a/drivers/mtd/spi-nor/core.h b/drivers/mtd/spi-nor/core.h
+index 6f62ee861..9165b06f1 100644
+--- a/drivers/mtd/spi-nor/core.h
++++ b/drivers/mtd/spi-nor/core.h
+@@ -26,6 +26,7 @@ enum spi_nor_option_flags {
+ 	SNOR_F_HAS_SR_TB_BIT6	= BIT(11),
+ 	SNOR_F_HAS_4BIT_BP      = BIT(12),
+ 	SNOR_F_HAS_SR_BP3_BIT6  = BIT(13),
++	SNOR_F_HAS_SR_BP3_BIT5  = BIT(14),
+ };
+ 
+ struct spi_nor_read_command {
+@@ -311,7 +312,15 @@ struct flash_info {
+ 					 * BP3 is bit 6 of status register.
+ 					 * Must be used with SPI_NOR_4BIT_BP.
+ 					 */
+-
++#define SPI_NOR_OCTAL_WRITE     BIT(19)
++#define	SST_GLOBAL_PROT_UNLK	BIT(16)	/* Unlock the Global protection for
++					 * sst flashes
++					 */
++#define SPI_NOR_BP3_SR_BIT5	BIT(20) /*
++					 * BP3 is bit 5 of status register.
++					 * Must be used with SPI_NOR_4BIT_BP.
++					 */
++	int	(*quad_enable)(struct spi_nor *nor);
+ 	/* Part specific fixup hooks. */
+ 	const struct spi_nor_fixups *fixups;
+ };
+@@ -402,7 +411,7 @@ extern const struct spi_nor_manufacturer spi_nor_xmc;
+ int spi_nor_write_enable(struct spi_nor *nor);
+ int spi_nor_write_disable(struct spi_nor *nor);
+ int spi_nor_set_4byte_addr_mode(struct spi_nor *nor, bool enable);
+-int spi_nor_write_ear(struct spi_nor *nor, u8 ear);
++int spi_nor_write_ear(struct spi_nor *nor, u32 addr);
+ int spi_nor_wait_till_ready(struct spi_nor *nor);
+ int spi_nor_lock_and_prep(struct spi_nor *nor);
+ void spi_nor_unlock_and_unprep(struct spi_nor *nor);
+@@ -439,4 +448,7 @@ static struct spi_nor __maybe_unused *mtd_to_spi_nor(struct mtd_info *mtd)
+ 	return mtd->priv;
+ }
+ 
++int sst_write(struct mtd_info *mtd, loff_t to, size_t len,
++	      size_t *retlen, const u_char *buf);
++
+ #endif /* __LINUX_MTD_SPI_NOR_INTERNAL_H */
+diff --git a/drivers/mtd/spi-nor/gigadevice.c b/drivers/mtd/spi-nor/gigadevice.c
+index 447d84bb2..86b5ace62 100644
+--- a/drivers/mtd/spi-nor/gigadevice.c
++++ b/drivers/mtd/spi-nor/gigadevice.c
+@@ -23,6 +23,44 @@ static struct spi_nor_fixups gd25q256_fixups = {
+ 	.default_init = gd25q256_default_init,
+ };
+ 
++/**
++ * gd25lx256e_set_4byte_addr_mode() - Set 4-byte address mode for Octal SPI
++ * Gigadevice flashes.
++ * @nor:        pointer to 'struct spi_nor'.
++ * @enable:     true to enter the 4-byte address mode, false to exit the 4-byte
++ *              address mode.
++ *
++ * Return: 0 on success, -errno otherwise.
++ */
++static int gd25lx256e_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
++{
++	int ret;
++
++	ret = spi_nor_write_enable(nor);
++	if (ret)
++		return ret;
++
++	ret = spi_nor_set_4byte_addr_mode(nor, enable);
++	if (ret)
++		return ret;
++
++	return spi_nor_write_disable(nor);
++}
++
++static void gd25lx256e_default_init(struct spi_nor *nor)
++{
++	/*
++	 * Some manufacturer like gd25lx256e(Octal SPI) may use
++	 * Enter/Exit 4-Byte Address Mode, we need
++	 * to set it in the default_init fixup hook.
++	 */
++	nor->params->set_4byte_addr_mode = gd25lx256e_set_4byte_addr_mode;
++}
++
++static struct spi_nor_fixups gd25lx256e_fixups = {
++	.default_init = gd25lx256e_default_init,
++};
++
+ static const struct flash_info gigadevice_parts[] = {
+ 	{ "gd25q16", INFO(0xc84015, 0, 64 * 1024,  32,
+ 			  SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+@@ -50,6 +88,10 @@ static const struct flash_info gigadevice_parts[] = {
+ 			   SPI_NOR_4B_OPCODES | SPI_NOR_HAS_LOCK |
+ 			   SPI_NOR_HAS_TB | SPI_NOR_TB_SR_BIT6)
+ 		.fixups = &gd25q256_fixups },
++	{ "gd25lx256e",  INFO(0xc86819, 0, 64 * 1024, 512,
++			      SECT_4K | USE_FSR | SPI_NOR_OCTAL_READ |
++			      SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES)
++		.fixups = &gd25lx256e_fixups },
+ };
+ 
+ const struct spi_nor_manufacturer spi_nor_gigadevice = {
+diff --git a/drivers/mtd/spi-nor/issi.c b/drivers/mtd/spi-nor/issi.c
+index ffcb60e54..1a71069c9 100644
+--- a/drivers/mtd/spi-nor/issi.c
++++ b/drivers/mtd/spi-nor/issi.c
+@@ -30,35 +30,103 @@ static struct spi_nor_fixups is25lp256_fixups = {
+ 	.post_bfpt = is25lp256_post_bfpt_fixups,
+ };
+ 
+-static const struct flash_info issi_parts[] = {
++/**
++ * is25wx256_set_4byte_addr_mode() - Set 4-byte address mode for Octal SPI
++ * ISSI flashes.
++ * @nor:        pointer to 'struct spi_nor'.
++ * @enable:     true to enter the 4-byte address mode, false to exit the 4-byte
++ *              address mode.
++ *
++ * Return: 0 on success, -errno otherwise.
++ */
++static int is25wx256_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
++{
++	int ret;
++
++	ret = spi_nor_write_enable(nor);
++	if (ret)
++		return ret;
++
++	ret = spi_nor_set_4byte_addr_mode(nor, enable);
++	if (ret)
++		return ret;
++
++	return spi_nor_write_disable(nor);
++}
++
++static void is25wx256_default_init(struct spi_nor *nor)
++{
++	/*
++	 * Some manufacturer like is25wx256(Octal SPI) may use
++	 * Enter/Exit 4-Byte Address Mode, we need
++	 * to set it in the default_init fixup hook.
++	 */
++	nor->params->set_4byte_addr_mode = is25wx256_set_4byte_addr_mode;
++}
++
++static struct spi_nor_fixups is25wx256_fixups = {
++	.default_init = is25wx256_default_init,
++};
++
++static struct flash_info issi_parts[] = {
+ 	/* ISSI */
++	{ "is25wp080d", INFO(0x9d7014, 0, 64 * 1024, 32, SECT_4K |
++		SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK) },
++	{ "is25wp016d", INFO(0x9d7015, 0, 64 * 1024, 32, SECT_4K |
++		SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK) },
+ 	{ "is25cd512",  INFO(0x7f9d20, 0, 32 * 1024,   2, SECT_4K) },
+ 	{ "is25lq040b", INFO(0x9d4013, 0, 64 * 1024,   8,
+ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "is25lp016d", INFO(0x9d6015, 0, 64 * 1024,  32,
+ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "is25lp080d", INFO(0x9d6014, 0, 64 * 1024,  16,
+-			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
++			SPI_NOR_HAS_LOCK) },
+ 	{ "is25lp032",  INFO(0x9d6016, 0, 64 * 1024,  64,
+-			     SECT_4K | SPI_NOR_DUAL_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_HAS_LOCK) },
+ 	{ "is25lp064",  INFO(0x9d6017, 0, 64 * 1024, 128,
+-			     SECT_4K | SPI_NOR_DUAL_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_HAS_LOCK) },
+ 	{ "is25lp128",  INFO(0x9d6018, 0, 64 * 1024, 256,
+-			     SECT_4K | SPI_NOR_DUAL_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_HAS_LOCK) },
+ 	{ "is25lp256",  INFO(0x9d6019, 0, 64 * 1024, 512,
+ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+-			     SPI_NOR_4B_OPCODES)
++			SPI_NOR_4B_OPCODES | SPI_NOR_HAS_LOCK)
+ 		.fixups = &is25lp256_fixups },
++	{ "is25wp256d", INFO(0x9d7019, 0, 64 * 1024, 512,
++			SECT_4K | SPI_NOR_DUAL_READ |
++			SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK |
++			SPI_NOR_4B_OPCODES) },
+ 	{ "is25wp032",  INFO(0x9d7016, 0, 64 * 1024,  64,
+-			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
++			SPI_NOR_HAS_LOCK) },
+ 	{ "is25wp064",  INFO(0x9d7017, 0, 64 * 1024, 128,
+-			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
++			SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ
++			 | SPI_NOR_HAS_LOCK) },
+ 	{ "is25wp128",  INFO(0x9d7018, 0, 64 * 1024, 256,
+ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "is25wp256", INFO(0x9d7019, 0, 64 * 1024, 512,
+ 			    SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+ 			    SPI_NOR_4B_OPCODES)
+ 		.fixups = &is25lp256_fixups },
++	{ "is25lp512m", INFO(0x9d601a, 0, 64 * 1024, 1024,
++			SECT_4K | SPI_NOR_DUAL_READ |
++			SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK) },
++	{ "is25wp512m", INFO(0x9d701a, 0, 64 * 1024, 1024,
++			SECT_4K | SPI_NOR_DUAL_READ |
++			SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK |
++			SPI_NOR_4B_OPCODES) },
++        { "is25lp01g", INFO(0x9d601b, 0, 64 * 1024, 2048,
++                        SECT_4K | SPI_NOR_DUAL_READ |
++                        SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK |
++                        SPI_NOR_4B_OPCODES) },
++        { "is25wp01g", INFO(0x9d701b, 0, 64 * 1024, 2048,
++                        SECT_4K | SPI_NOR_DUAL_READ |
++                        SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK |
++                        SPI_NOR_4B_OPCODES) },
++	{ "is25wx256",  INFO(0x9d5b19, 0, 128 * 1024, 256,
++			     SECT_4K | USE_FSR | SPI_NOR_OCTAL_READ |
++			     SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES)
++		.fixups = &is25wx256_fixups },
+ 
+ 	/* PMC */
+ 	{ "pm25lv512",   INFO(0,        0, 32 * 1024,    2, SECT_4K_PMC) },
+diff --git a/drivers/mtd/spi-nor/macronix.c b/drivers/mtd/spi-nor/macronix.c
+index 662b21278..a7cffca0b 100644
+--- a/drivers/mtd/spi-nor/macronix.c
++++ b/drivers/mtd/spi-nor/macronix.c
+@@ -33,7 +33,48 @@ static struct spi_nor_fixups mx25l25635_fixups = {
+ 	.post_bfpt = mx25l25635_post_bfpt_fixups,
+ };
+ 
+-static const struct flash_info macronix_parts[] = {
++static int mx25um51345g_set_4byte(struct spi_nor *nor, bool enable)
++{
++	(void)enable;
++
++	return 0;
++}
++
++static void mx25um51345g_default_init_fixups(struct spi_nor *nor)
++{
++	u8 id_byte1, id_byte2;
++
++	nor->params->set_4byte_addr_mode = mx25um51345g_set_4byte;
++	/* Octal SPI Macronix require dual-byte opcode for DDR mode */
++	nor->spimem->spi->master->flags |= SPI_DUAL_BYTE_OP;
++
++	/*
++	 * Macronix Read Id bytes are always output in STR mode. Since tuning
++	 * is based on Read Id command, adjust the Read Id bytes that will
++	 * match the Read Id output in DTR mode.
++	 */
++	id_byte1 = nor->spimem->device_id[1];
++	id_byte2 = nor->spimem->device_id[2];
++	nor->spimem->device_id[1] = nor->spimem->device_id[0];
++	nor->spimem->device_id[2] = id_byte1;
++	nor->spimem->device_id[3] = id_byte1;
++	nor->spimem->device_id[4] = id_byte2;
++	nor->spimem->device_id[5] = id_byte2;
++
++	nor->params->reads[SNOR_CMD_READ_8_8_8].num_wait_states = 20;
++	nor->params->reads[SNOR_CMD_READ_8_8_8].opcode =
++			SPINOR_OP_READ_1_4_4_DTR_4B;
++	nor->params->page_programs[SNOR_CMD_PP_8_8_8].opcode =
++			SPINOR_OP_PP_4B;
++	spi_nor_set_erase_type(&nor->params->erase_map.erase_type[1],
++			       nor->info->sector_size, SPINOR_OP_BE_4K_4B);
++}
++
++static struct spi_nor_fixups mx25um51345g_fixups = {
++	.default_init = mx25um51345g_default_init_fixups,
++};
++
++static struct flash_info macronix_parts[] = {
+ 	/* Macronix */
+ 	{ "mx25l512e",   INFO(0xc22010, 0, 64 * 1024,   1, SECT_4K) },
+ 	{ "mx25l2005a",  INFO(0xc22012, 0, 64 * 1024,   4, SECT_4K) },
+@@ -82,11 +123,17 @@ static const struct flash_info macronix_parts[] = {
+ 	{ "mx66l1g45g",  INFO(0xc2201b, 0, 64 * 1024, 2048,
+ 			      SECT_4K | SPI_NOR_DUAL_READ |
+ 			      SPI_NOR_QUAD_READ) },
++	{ "mx66u1g45g",  INFO(0xc2253b, 0, 64 * 1024, 2048, SECT_4K |
++			SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "mx66l1g55g",  INFO(0xc2261b, 0, 64 * 1024, 2048,
+ 			      SPI_NOR_QUAD_READ) },
+ 	{ "mx66u2g45g",	 INFO(0xc2253c, 0, 64 * 1024, 4096,
+ 			      SECT_4K | SPI_NOR_DUAL_READ |
+ 			      SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES) },
++	{ "mx25um51345g",  INFO(0xc2813a, 0, 4 * 1024, 16384,
++				SECT_4K | SPI_NOR_OCTAL_READ |
++				SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES)
++		.fixups = &mx25um51345g_fixups },
+ };
+ 
+ static void macronix_default_init(struct spi_nor *nor)
+diff --git a/drivers/mtd/spi-nor/micron-st.c b/drivers/mtd/spi-nor/micron-st.c
+index ef3695080..aa25a0ef9 100644
+--- a/drivers/mtd/spi-nor/micron-st.c
++++ b/drivers/mtd/spi-nor/micron-st.c
+@@ -8,16 +8,19 @@
+ 
+ #include "core.h"
+ 
+-static const struct flash_info micron_parts[] = {
++static struct flash_info micron_parts[] = {
+ 	{ "mt35xu512aba", INFO(0x2c5b1a, 0, 128 * 1024, 512,
+ 			       SECT_4K | USE_FSR | SPI_NOR_OCTAL_READ |
+-			       SPI_NOR_4B_OPCODES) },
++			       SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES) },
++	{ "mt35xu01g", INFO(0x2c5b1b, 0, 128 * 1024, 1024,
++			    SECT_4K | USE_FSR | SPI_NOR_OCTAL_READ |
++			    SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES) },
+ 	{ "mt35xu02g", INFO(0x2c5b1c, 0, 128 * 1024, 2048,
+ 			    SECT_4K | USE_FSR | SPI_NOR_OCTAL_READ |
+-			    SPI_NOR_4B_OPCODES) },
++			    SPI_NOR_OCTAL_WRITE | SPI_NOR_4B_OPCODES) },
+ };
+ 
+-static const struct flash_info st_parts[] = {
++static struct flash_info st_parts[] = {
+ 	{ "n25q016a",	 INFO(0x20bb15, 0, 64 * 1024,   32,
+ 			      SECT_4K | SPI_NOR_QUAD_READ) },
+ 	{ "n25q032",	 INFO(0x20ba16, 0, 64 * 1024,   64,
+@@ -28,15 +31,13 @@ static const struct flash_info st_parts[] = {
+ 			      SECT_4K | SPI_NOR_QUAD_READ) },
+ 	{ "n25q064a",    INFO(0x20bb17, 0, 64 * 1024,  128,
+ 			      SECT_4K | SPI_NOR_QUAD_READ) },
+-	{ "n25q128a11",  INFO(0x20bb18, 0, 64 * 1024,  256,
+-			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+-			      SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
+-			      SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6) },
+-	{ "n25q128a13",  INFO(0x20ba18, 0, 64 * 1024,  256,
+-			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ) },
+-	{ "mt25ql256a",  INFO6(0x20ba19, 0x104400, 64 * 1024,  512,
+-			       SECT_4K | USE_FSR | SPI_NOR_DUAL_READ |
+-			       SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES) },
++	{ "n25q128a11",  INFO(0x20bb18, 0, 64 * 1024,  256, SECT_4K |
++			SPI_NOR_QUAD_READ | USE_FSR | SPI_NOR_HAS_LOCK) },
++	{ "n25q128a13",  INFO(0x20ba18, 0, 64 * 1024,  256, SECT_4K |
++			SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK) },
++	{ "n25q256a",    INFO(0x20ba19, 0, 64 * 1024,  512, SECT_4K |
++			SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ | USE_FSR |
++			SPI_NOR_HAS_LOCK) },
+ 	{ "n25q256a",    INFO(0x20ba19, 0, 64 * 1024,  512, SECT_4K |
+ 			      USE_FSR | SPI_NOR_DUAL_READ |
+ 			      SPI_NOR_QUAD_READ) },
+@@ -48,31 +49,29 @@ static const struct flash_info st_parts[] = {
+ 	{ "mt25ql512a",  INFO6(0x20ba20, 0x104400, 64 * 1024, 1024,
+ 			       SECT_4K | USE_FSR | SPI_NOR_DUAL_READ |
+ 			       SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES) },
+-	{ "n25q512ax3",  INFO(0x20ba20, 0, 64 * 1024, 1024,
+-			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+-			      SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
+-			      SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6) },
++	{ "n25q512ax3",  INFO(0x20ba20, 0, 64 * 1024, 1024, SECT_4K |
++			USE_FSR | SPI_NOR_QUAD_READ | SPI_NOR_HAS_LOCK) },
+ 	{ "mt25qu512a",  INFO6(0x20bb20, 0x104400, 64 * 1024, 1024,
+ 			       SECT_4K | USE_FSR | SPI_NOR_DUAL_READ |
+-			       SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES) },
++			       SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES |
++				   SPI_NOR_HAS_LOCK) },
+ 	{ "n25q512a",    INFO(0x20bb20, 0, 64 * 1024, 1024,
+ 			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+ 			      SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
+ 			      SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6) },
+-	{ "n25q00",      INFO(0x20ba21, 0, 64 * 1024, 2048,
+-			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+-			      SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
+-			      SPI_NOR_4BIT_BP | SPI_NOR_BP3_SR_BIT6 |
+-			      NO_CHIP_ERASE) },
+-	{ "n25q00a",     INFO(0x20bb21, 0, 64 * 1024, 2048,
+-			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+-			      NO_CHIP_ERASE) },
++	{ "n25q00",      INFO(0x20ba21, 0, 64 * 1024, 2048, SECT_4K |
++			USE_FSR | SPI_NOR_QUAD_READ | NO_CHIP_ERASE |
++			SPI_NOR_HAS_LOCK | SPI_NOR_HAS_LOCK) },
++	{ "n25q00a",     INFO(0x20bb21, 0, 64 * 1024, 2048, SECT_4K |
++			USE_FSR | SPI_NOR_QUAD_READ | NO_CHIP_ERASE |
++			SPI_NOR_HAS_LOCK) },
+ 	{ "mt25ql02g",   INFO(0x20ba22, 0, 64 * 1024, 4096,
+ 			      SECT_4K | USE_FSR | SPI_NOR_QUAD_READ |
+-			      NO_CHIP_ERASE) },
++			      NO_CHIP_ERASE | SPI_NOR_HAS_LOCK) },
+ 	{ "mt25qu02g",   INFO(0x20bb22, 0, 64 * 1024, 4096,
+ 			      SECT_4K | USE_FSR | SPI_NOR_DUAL_READ |
+-			      SPI_NOR_QUAD_READ | NO_CHIP_ERASE) },
++			      SPI_NOR_QUAD_READ | NO_CHIP_ERASE |
++				  SPI_NOR_HAS_LOCK) },
+ 
+ 	{ "m25p05",  INFO(0x202010,  0,  32 * 1024,   2, 0) },
+ 	{ "m25p10",  INFO(0x202011,  0,  32 * 1024,   4, 0) },
+diff --git a/drivers/mtd/spi-nor/sfdp.c b/drivers/mtd/spi-nor/sfdp.c
+index 08de2a2b4..bbce80580 100644
+--- a/drivers/mtd/spi-nor/sfdp.c
++++ b/drivers/mtd/spi-nor/sfdp.c
+@@ -1178,11 +1178,18 @@ int spi_nor_parse_sfdp(struct spi_nor *nor,
+ 		case SFDP_SECTOR_MAP_ID:
+ 			err = spi_nor_parse_smpt(nor, param_header, params);
+ 			break;
+-
++#ifdef CONFIG_OF
+ 		case SFDP_4BAIT_ID:
+-			err = spi_nor_parse_4bait(nor, param_header, params);
++			{
++				struct device_node *np = spi_nor_get_flash_node(nor);
++				struct device_node *np_spi = of_get_next_parent(np);
++
++				if (of_property_match_string(np_spi, "compatible",
++							     "xlnx,zynq-qspi-1.0") < 0)
++					err = spi_nor_parse_4bait(nor, param_header, params);
++			}
+ 			break;
+-
++#endif
+ 		default:
+ 			break;
+ 		}
+diff --git a/drivers/mtd/spi-nor/spansion.c b/drivers/mtd/spi-nor/spansion.c
+index 8429b4af9..24fbe56b8 100644
+--- a/drivers/mtd/spi-nor/spansion.c
++++ b/drivers/mtd/spi-nor/spansion.c
+@@ -29,7 +29,7 @@ static struct spi_nor_fixups s25fs_s_fixups = {
+ 	.post_bfpt = s25fs_s_post_bfpt_fixups,
+ };
+ 
+-static const struct flash_info spansion_parts[] = {
++static struct flash_info spansion_parts[] = {
+ 	/* Spansion/Cypress -- single (large) sector size only, at least
+ 	 * for the chips listed here (without boot sectors).
+ 	 */
+@@ -39,10 +39,10 @@ static const struct flash_info spansion_parts[] = {
+ 			     SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "s25fl128s0", INFO6(0x012018, 0x4d0080, 256 * 1024, 64,
+ 			      SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+-			      USE_CLSR) },
++			      USE_CLSR | SPI_NOR_HAS_LOCK) },
+ 	{ "s25fl128s1", INFO6(0x012018, 0x4d0180, 64 * 1024, 256,
+ 			      SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+-			      USE_CLSR) },
++			      USE_CLSR | SPI_NOR_HAS_LOCK) },
+ 	{ "s25fl256s0", INFO6(0x010219, 0x4d0080, 256 * 1024, 128,
+ 			      SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ |
+ 			      USE_CLSR) },
+@@ -104,6 +104,8 @@ static const struct flash_info spansion_parts[] = {
+ 			     SPI_NOR_4B_OPCODES) },
+ 	{ "cy15x104q",  INFO6(0x042cc2, 0x7f7f7f, 512 * 1024, 1,
+ 			      SPI_NOR_NO_ERASE) },
++	{ "sst26wf016B", INFO(0xbf2651, 0, 64 * 1024, 32,
++			SECT_4K | SST_GLOBAL_PROT_UNLK) },
+ };
+ 
+ static void spansion_post_sfdp_fixups(struct spi_nor *nor)
+diff --git a/drivers/mtd/spi-nor/sst.c b/drivers/mtd/spi-nor/sst.c
+index 0ab07624f..012750b92 100644
+--- a/drivers/mtd/spi-nor/sst.c
++++ b/drivers/mtd/spi-nor/sst.c
+@@ -33,17 +33,16 @@ static const struct flash_info sst_parts[] = {
+ 	{ "sst25wf080",  INFO(0xbf2505, 0, 64 * 1024, 16,
+ 			      SECT_4K | SST_WRITE) },
+ 	{ "sst26wf016b", INFO(0xbf2651, 0, 64 * 1024, 32,
+-			      SECT_4K | SPI_NOR_DUAL_READ |
+-			      SPI_NOR_QUAD_READ) },
++			      SECT_4K | SST_GLOBAL_PROT_UNLK) },
+ 	{ "sst26vf016b", INFO(0xbf2641, 0, 64 * 1024, 32,
+-			      SECT_4K | SPI_NOR_DUAL_READ) },
++			      SECT_4K | SST_GLOBAL_PROT_UNLK) },
+ 	{ "sst26vf064b", INFO(0xbf2643, 0, 64 * 1024, 128,
+ 			      SECT_4K | SPI_NOR_DUAL_READ |
+ 			      SPI_NOR_QUAD_READ) },
+ };
+ 
+-static int sst_write(struct mtd_info *mtd, loff_t to, size_t len,
+-		     size_t *retlen, const u_char *buf)
++int sst_write(struct mtd_info *mtd, loff_t to, size_t len,
++	      size_t *retlen, const u_char *buf)
+ {
+ 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+ 	size_t actual = 0;
+diff --git a/drivers/mtd/spi-nor/winbond.c b/drivers/mtd/spi-nor/winbond.c
+index e5dfa786f..ed4f4ff91 100644
+--- a/drivers/mtd/spi-nor/winbond.c
++++ b/drivers/mtd/spi-nor/winbond.c
+@@ -33,7 +33,7 @@ static struct spi_nor_fixups w25q256_fixups = {
+ 	.post_bfpt = w25q256_post_bfpt_fixups,
+ };
+ 
+-static const struct flash_info winbond_parts[] = {
++static struct flash_info winbond_parts[] = {
+ 	/* Winbond -- w25x "blocks" are 64K, "sectors" are 4KiB */
+ 	{ "w25x05", INFO(0xef3010, 0, 64 * 1024,  1,  SECT_4K) },
+ 	{ "w25x10", INFO(0xef3011, 0, 64 * 1024,  2,  SECT_4K) },
+@@ -97,6 +97,11 @@ static const struct flash_info winbond_parts[] = {
+ 			     SECT_4K | SPI_NOR_DUAL_READ | SPI_NOR_QUAD_READ) },
+ 	{ "w25m512jv", INFO(0xef7119, 0, 64 * 1024, 1024,
+ 			    SECT_4K | SPI_NOR_QUAD_READ | SPI_NOR_DUAL_READ) },
++	{ "w25h02jv", INFO(0xef9022, 0, 64 * 1024, 4096,
++			    SECT_4K | SPI_NOR_QUAD_READ | SPI_NOR_DUAL_READ |
++			    SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB |
++			    SPI_NOR_TB_SR_BIT6 | SPI_NOR_4BIT_BP |
++			    SPI_NOR_BP3_SR_BIT5) },
+ };
+ 
+ /**
+diff --git a/include/linux/mtd/cfi.h b/include/linux/mtd/cfi.h
+index fd1ecb821..a76059ae9 100644
+--- a/include/linux/mtd/cfi.h
++++ b/include/linux/mtd/cfi.h
+@@ -373,6 +373,7 @@ struct cfi_fixup {
+ #define CFI_MFR_MICRON		0x002C /* Micron */
+ #define CFI_MFR_TOSHIBA		0x0098
+ #define CFI_MFR_WINBOND		0x00DA
++#define CFI_MFR_WINBND		0x00EF /* Winbond */
+ 
+ void cfi_fixup(struct mtd_info *mtd, struct cfi_fixup* fixups);
+ 
+diff --git a/include/linux/mtd/mtd.h b/include/linux/mtd/mtd.h
+index fc41fecfe..1150a72bb 100644
+--- a/include/linux/mtd/mtd.h
++++ b/include/linux/mtd/mtd.h
+@@ -73,7 +73,8 @@ struct mtd_oob_ops {
+ };
+ 
+ #define MTD_MAX_OOBFREE_ENTRIES_LARGE	32
+-#define MTD_MAX_ECCPOS_ENTRIES_LARGE	640
++#define MTD_MAX_ECCPOS_ENTRIES_LARGE	1260
++
+ /**
+  * struct mtd_oob_region - oob region definition
+  * @offset: region offset
+diff --git a/include/linux/mtd/onfi.h b/include/linux/mtd/onfi.h
+index 339ac7985..9c3c01b9f 100644
+--- a/include/linux/mtd/onfi.h
++++ b/include/linux/mtd/onfi.h
+@@ -11,6 +11,7 @@
+ #define __LINUX_MTD_ONFI_H
+ 
+ #include <linux/types.h>
++#include <linux/bitfield.h>
+ 
+ /* ONFI version bits */
+ #define ONFI_VERSION_1_0		BIT(1)
+@@ -24,17 +25,22 @@
+ #define ONFI_VERSION_4_0		BIT(9)
+ 
+ /* ONFI features */
+-#define ONFI_FEATURE_16_BIT_BUS		(1 << 0)
+-#define ONFI_FEATURE_EXT_PARAM_PAGE	(1 << 7)
++#define ONFI_FEATURE_16_BIT_BUS		BIT(0)
++#define ONFI_FEATURE_NV_DDR		BIT(5)
++#define ONFI_FEATURE_EXT_PARAM_PAGE	BIT(7)
+ 
+ /* ONFI timing mode, used in both asynchronous and synchronous mode */
+-#define ONFI_TIMING_MODE_0		(1 << 0)
+-#define ONFI_TIMING_MODE_1		(1 << 1)
+-#define ONFI_TIMING_MODE_2		(1 << 2)
+-#define ONFI_TIMING_MODE_3		(1 << 3)
+-#define ONFI_TIMING_MODE_4		(1 << 4)
+-#define ONFI_TIMING_MODE_5		(1 << 5)
+-#define ONFI_TIMING_MODE_UNKNOWN	(1 << 6)
++#define ONFI_DATA_INTERFACE_SDR		0
++#define ONFI_DATA_INTERFACE_NVDDR	BIT(4)
++#define ONFI_DATA_INTERFACE_NVDDR2	BIT(5)
++#define ONFI_TIMING_MODE_0		BIT(0)
++#define ONFI_TIMING_MODE_1		BIT(1)
++#define ONFI_TIMING_MODE_2		BIT(2)
++#define ONFI_TIMING_MODE_3		BIT(3)
++#define ONFI_TIMING_MODE_4		BIT(4)
++#define ONFI_TIMING_MODE_5		BIT(5)
++#define ONFI_TIMING_MODE_UNKNOWN	BIT(6)
++#define ONFI_TIMING_MODE_PARAM(x)	FIELD_GET(GENMASK(3, 0), (x))
+ 
+ /* ONFI feature number/address */
+ #define ONFI_FEATURE_NUMBER		256
+@@ -49,7 +55,7 @@
+ #define ONFI_SUBFEATURE_PARAM_LEN	4
+ 
+ /* ONFI optional commands SET/GET FEATURES supported? */
+-#define ONFI_OPT_CMD_SET_GET_FEATURES	(1 << 2)
++#define ONFI_OPT_CMD_SET_GET_FEATURES	BIT(2)
+ 
+ struct nand_onfi_params {
+ 	/* rev info and features block */
+@@ -93,14 +99,15 @@ struct nand_onfi_params {
+ 
+ 	/* electrical parameter block */
+ 	u8 io_pin_capacitance_max;
+-	__le16 async_timing_mode;
++	__le16 sdr_timing_modes;
+ 	__le16 program_cache_timing_mode;
+ 	__le16 t_prog;
+ 	__le16 t_bers;
+ 	__le16 t_r;
+ 	__le16 t_ccs;
+-	__le16 src_sync_timing_mode;
+-	u8 src_ssync_features;
++	u8 nvddr_timing_modes;
++	u8 nvddr2_timing_modes;
++	u8 nvddr_nvddr2_features;
+ 	__le16 clk_pin_capacitance_typ;
+ 	__le16 io_pin_capacitance_typ;
+ 	__le16 input_pin_capacitance_typ;
+@@ -160,9 +167,12 @@ struct onfi_ext_param_page {
+  * @tBERS: Block erase time
+  * @tR: Page read time
+  * @tCCS: Change column setup time
+- * @async_timing_mode: Supported asynchronous timing mode
++ * @fast_tCAD: Command/Address/Data slow or fast delay (NV-DDR only)
++ * @sdr_timing_modes: Supported asynchronous/SDR timing modes
++ * @nvddr_timing_modes: Supported source synchronous/NV-DDR timing modes
+  * @vendor_revision: Vendor specific revision number
+  * @vendor: Vendor specific data
++ * @jedec_id: jedec id of the flash
+  */
+ struct onfi_params {
+ 	int version;
+@@ -170,9 +180,13 @@ struct onfi_params {
+ 	u16 tBERS;
+ 	u16 tR;
+ 	u16 tCCS;
+-	u16 async_timing_mode;
++	bool fast_tCAD;
++	u16 sdr_timing_modes;
++	u16 nvddr_timing_modes;
++	u16 src_sync_timing_mode;
+ 	u16 vendor_revision;
+ 	u8 vendor[88];
++	u8 jedec_id;
+ };
+ 
+ #endif /* __LINUX_MTD_ONFI_H */
+diff --git a/include/linux/mtd/rawnand.h b/include/linux/mtd/rawnand.h
+index db2eaff77..d97f21c79 100644
+--- a/include/linux/mtd/rawnand.h
++++ b/include/linux/mtd/rawnand.h
+@@ -388,8 +388,8 @@ struct nand_ecc_ctrl {
+  * This struct defines the timing requirements of a SDR NAND chip.
+  * These information can be found in every NAND datasheets and the timings
+  * meaning are described in the ONFI specifications:
+- * www.onfi.org/~/media/ONFI/specs/onfi_3_1_spec.pdf (chapter 4.15 Timing
+- * Parameters)
++ * https://media-www.micron.com/-/media/client/onfi/specs/onfi_3_1_spec.pdf
++ * (chapter 4.15 Timing Parameters)
+  *
+  * All these timings are expressed in picoseconds.
+  *
+@@ -474,12 +474,128 @@ struct nand_sdr_timings {
+ 	u32 tWW_min;
+ };
+ 
++/**
++ * struct nand_nvddr_timings - NV-DDR NAND chip timings
++ *
++ * This struct defines the timing requirements of a NV-DDR NAND data interface.
++ * These information can be found in every NAND datasheets and the timings
++ * meaning are described in the ONFI specifications:
++ * https://media-www.micron.com/-/media/client/onfi/specs/onfi_4_1_gold.pdf
++ * (chapter 4.18.2 NV-DDR)
++ *
++ * All these timings are expressed in picoseconds.
++ *
++ * @tBERS_max: Block erase time
++ * @tCCS_min: Change column setup time
++ * @tPROG_max: Page program time
++ * @tR_max: Page read time
++ * @tAC_min: Access window of DQ[7:0] from CLK
++ * @tAC_max: Access window of DQ[7:0] from CLK
++ * @tADL_min: ALE to data loading time
++ * @tCAD_min: Command, Address, Data delay
++ * @tCAH_min: Command/Address DQ hold time
++ * @tCALH_min: W/R_n, CLE and ALE hold time
++ * @tCALS_min: W/R_n, CLE and ALE setup time
++ * @tCAS_min: Command/address DQ setup time
++ * @tCEH_min: CE# high hold time
++ * @tCH_min:  CE# hold time
++ * @tCK_min: Average clock cycle time
++ * @tCS_min: CE# setup time
++ * @tDH_min: Data hold time
++ * @tDQSCK_min: Start of the access window of DQS from CLK
++ * @tDQSCK_max: End of the access window of DQS from CLK
++ * @tDQSD_min: Min W/R_n low to DQS/DQ driven by device
++ * @tDQSD_max: Max W/R_n low to DQS/DQ driven by device
++ * @tDQSHZ_max: W/R_n high to DQS/DQ tri-state by device
++ * @tDQSQ_max: DQS-DQ skew, DQS to last DQ valid, per access
++ * @tDS_min: Data setup time
++ * @tDSC_min: DQS cycle time
++ * @tFEAT_max: Busy time for Set Features and Get Features
++ * @tITC_max: Interface and Timing Mode Change time
++ * @tQHS_max: Data hold skew factor
++ * @tRHW_min: Data output cycle to command, address, or data input cycle
++ * @tRR_min: Ready to RE# low (data only)
++ * @tRST_max: Device reset time, measured from the falling edge of R/B# to the
++ *	      rising edge of R/B#.
++ * @tWB_max: WE# high to SR[6] low
++ * @tWHR_min: WE# high to RE# low
++ * @tWRCK_min: W/R_n low to data output cycle
++ * @tWW_min: WP# transition to WE# low
++ */
++struct nand_nvddr_timings {
++	u64 tBERS_max;
++	u32 tCCS_min;
++	u64 tPROG_max;
++	u64 tR_max;
++	u32 tAC_min;
++	u32 tAC_max;
++	u32 tADL_min;
++	u32 tCAD_min;
++	u32 tCAH_min;
++	u32 tCALH_min;
++	u32 tCALS_min;
++	u32 tCAS_min;
++	u32 tCEH_min;
++	u32 tCH_min;
++	u32 tCK_min;
++	u32 tCS_min;
++	u32 tDH_min;
++	u32 tDQSCK_min;
++	u32 tDQSCK_max;
++	u32 tDQSD_min;
++	u32 tDQSD_max;
++	u32 tDQSHZ_max;
++	u32 tDQSQ_max;
++	u32 tDS_min;
++	u32 tDSC_min;
++	u32 tFEAT_max;
++	u32 tITC_max;
++	u32 tQHS_max;
++	u32 tRHW_min;
++	u32 tRR_min;
++	u32 tRST_max;
++	u32 tWB_max;
++	u32 tWHR_min;
++	u32 tWRCK_min;
++	u32 tWW_min;
++};
++
++/*
++ * While timings related to the data interface itself are mostly different
++ * between SDR and NV-DDR, timings related to the internal chip behavior are
++ * common. IOW, the following entries which describe the internal delays have
++ * the same definition and are shared in both SDR and NV-DDR timing structures:
++ * - tADL_min
++ * - tBERS_max
++ * - tCCS_min
++ * - tFEAT_max
++ * - tPROG_max
++ * - tR_max
++ * - tRR_min
++ * - tRST_max
++ * - tWB_max
++ *
++ * The below macros return the value of a given timing, no matter the interface.
++ */
++#define NAND_COMMON_TIMING_PS(conf, timing_name)	\
++	(nand_interface_is_sdr(conf) ?			\
++	 nand_get_sdr_timings(conf)->timing_name :	\
++	 nand_get_nvddr_timings(conf)->timing_name)
++
++#define NAND_COMMON_TIMING_MS(conf, timing_name) \
++	PSEC_TO_MSEC(NAND_COMMON_TIMING_PS((conf), timing_name))
++
++#define NAND_COMMON_TIMING_NS(conf, timing_name) \
++	PSEC_TO_NSEC(NAND_COMMON_TIMING_PS((conf), timing_name))
++
+ /**
+  * enum nand_interface_type - NAND interface type
+  * @NAND_SDR_IFACE:	Single Data Rate interface
++ * @NAND_NVDDR_IFACE:	Double Data Rate interface
+  */
+ enum nand_interface_type {
+ 	NAND_SDR_IFACE,
++	NAND_NVDDR_IFACE,
+ };
+ 
+ /**
+@@ -488,6 +604,7 @@ enum nand_interface_type {
+  * @timings:	 The timing information
+  * @timings.mode: Timing mode as defined in the specification
+  * @timings.sdr: Use it when @type is %NAND_SDR_IFACE.
++ * @timings.nvddr: Use it when @type is %NAND_NVDDR_IFACE.
+  */
+ struct nand_interface_config {
+ 	enum nand_interface_type type;
+@@ -495,10 +612,29 @@ struct nand_interface_config {
+ 		unsigned int mode;
+ 		union {
+ 			struct nand_sdr_timings sdr;
++			struct nand_nvddr_timings nvddr;
+ 		};
+ 	} timings;
+ };
+ 
++/**
++ * nand_interface_is_sdr - get the interface type
++ * @conf:	The data interface
++ */
++static bool nand_interface_is_sdr(const struct nand_interface_config *conf)
++{
++	return conf->type == NAND_SDR_IFACE;
++}
++
++/**
++ * nand_interface_is_nvddr - get the interface type
++ * @conf:	The data interface
++ */
++static bool nand_interface_is_nvddr(const struct nand_interface_config *conf)
++{
++	return conf->type == NAND_NVDDR_IFACE;
++}
++
+ /**
+  * nand_get_sdr_timings - get SDR timing from data interface
+  * @conf:	The data interface
+@@ -506,12 +642,25 @@ struct nand_interface_config {
+ static inline const struct nand_sdr_timings *
+ nand_get_sdr_timings(const struct nand_interface_config *conf)
+ {
+-	if (conf->type != NAND_SDR_IFACE)
++	if (!nand_interface_is_sdr(conf))
+ 		return ERR_PTR(-EINVAL);
+ 
+ 	return &conf->timings.sdr;
+ }
+ 
++/**
++ * nand_get_nvddr_timings - get NV-DDR timing from data interface
++ * @conf:	The data interface
++ */
++static inline const struct nand_nvddr_timings *
++nand_get_nvddr_timings(const struct nand_interface_config *conf)
++{
++	if (!nand_interface_is_nvddr(conf))
++		return ERR_PTR(-EINVAL);
++
++	return &conf->timings.nvddr;
++}
++
+ /**
+  * struct nand_op_cmd_instr - Definition of a command instruction
+  * @opcode: the command to issue in one cycle
+@@ -1287,6 +1436,15 @@ static inline bool nand_is_slc(struct nand_chip *chip)
+ 	return nanddev_bits_per_cell(&chip->base) == 1;
+ }
+ 
++/* return the supported synchronous timing mode. */
++static inline int onfi_get_sync_timing_mode(struct nand_chip *chip)
++{
++	if (!chip->parameters.onfi)
++		return ONFI_TIMING_MODE_UNKNOWN;
++
++	return le16_to_cpu(chip->parameters.onfi->src_sync_timing_mode);
++}
++
+ /**
+  * Check if the opcode's address should be sent only on the lower 8 bits
+  * @command: opcode to check
+@@ -1349,6 +1507,10 @@ int nand_read_page_op(struct nand_chip *chip, unsigned int page,
+ int nand_change_read_column_op(struct nand_chip *chip,
+ 			       unsigned int offset_in_page, void *buf,
+ 			       unsigned int len, bool force_8bit);
++int nand_check_change_read_column_op(struct nand_chip *chip,
++				     unsigned int offset_in_page, void *buf,
++				     unsigned int len, bool force_8bit,
++				     bool check_only);
+ int nand_read_oob_op(struct nand_chip *chip, unsigned int page,
+ 		     unsigned int offset_in_page, void *buf, unsigned int len);
+ int nand_prog_page_begin_op(struct nand_chip *chip, unsigned int page,
+diff --git a/include/linux/mtd/spi-nor.h b/include/linux/mtd/spi-nor.h
+index 60bac2c0e..ff9aa6df0 100644
+--- a/include/linux/mtd/spi-nor.h
++++ b/include/linux/mtd/spi-nor.h
+@@ -51,6 +51,7 @@
+ #define SPINOR_OP_CLFSR		0x50	/* Clear flag status register */
+ #define SPINOR_OP_RDEAR		0xc8	/* Read Extended Address Register */
+ #define SPINOR_OP_WREAR		0xc5	/* Write Extended Address Register */
++#define SPINOR_OP_WRCR		0x81	/* Write Configuration register */
+ 
+ /* 4-byte address opcodes - used on Spansion and some Macronix flashes. */
+ #define SPINOR_OP_READ_4B	0x13	/* Read data bytes (low frequency) */
+@@ -83,6 +84,7 @@
+ #define SPINOR_OP_BP		0x02	/* Byte program */
+ #define SPINOR_OP_AAI_WP	0xad	/* Auto address increment word program */
+ 
++#define GLOBAL_BLKPROT_UNLK	0x98	/* Clear global write protection bits */
+ /* Used for S3AN flashes only */
+ #define SPINOR_OP_XSE		0x50	/* Sector erase */
+ #define SPINOR_OP_XPP		0x82	/* Page program */
+@@ -98,12 +100,22 @@
+ 
+ /* Used for Spansion flashes only. */
+ #define SPINOR_OP_BRWR		0x17	/* Bank register write */
++#define	SPINOR_OP_BRRD		0x16	/* Bank register read */
+ #define SPINOR_OP_CLSR		0x30	/* Clear status register 1 */
+ 
+ /* Used for Micron flashes only. */
+ #define SPINOR_OP_RD_EVCR      0x65    /* Read EVCR register */
+ #define SPINOR_OP_WD_EVCR      0x61    /* Write EVCR register */
+ 
++/* For Octal SPI Macronix flashes only */
++#define SPINOR_OP_WR_CFG_REG2	0x72	 /* Write Config register2 */
++
++/* For Octal SPI Macronix flashes only */
++#define SPINOR_MACRONIX_CFG2_OCTAL_DDR		0x2
++
++/* For Micron flashes only */
++#define SPINOR_VCR_OCTAL_DDR	0xE7	/* VCR BYTE0 value for Octal DDR mode */
++
+ /* Status Register bits. */
+ #define SR_WIP			BIT(0)	/* Write in progress */
+ #define SR_WEL			BIT(1)	/* Write enable latch */
+@@ -111,11 +123,18 @@
+ #define SR_BP0			BIT(2)	/* Block protect 0 */
+ #define SR_BP1			BIT(3)	/* Block protect 1 */
+ #define SR_BP2			BIT(4)	/* Block protect 2 */
+-#define SR_BP3			BIT(5)	/* Block protect 3 */
++#define	SR_BP_BIT_OFFSET	2	/* Offset to Block protect 0 */
++#define	SR_BP_BIT_MASK		(SR_BP2 | SR_BP1 | SR_BP0)
++#define SR_BP3                 BIT(6)  /* Block protect 3 */
+ #define SR_TB_BIT5		BIT(5)	/* Top/Bottom protect */
+ #define SR_BP3_BIT6		BIT(6)	/* Block protect 3 */
++#define SR_BP3_BIT5		BIT(5)	/* Block protect 3 */
+ #define SR_TB_BIT6		BIT(6)	/* Top/Bottom protect */
+ #define SR_SRWD			BIT(7)	/* SR write protect */
++/* Bit to determine whether protection starts from top or bottom */
++#define SR_BP_TB		0x20
++#define BP_BITS_FROM_SR(sr)	(((sr) & SR_BP_BIT_MASK) >> SR_BP_BIT_OFFSET)
++#define M25P_MAX_LOCKABLE_SECTORS	64
+ /* Spansion/Cypress specific status bits */
+ #define SR_E_ERR		BIT(5)
+ #define SR_P_ERR		BIT(6)
+@@ -133,6 +152,15 @@
+ #define FSR_P_ERR		BIT(4)	/* Program operation status */
+ #define FSR_PT_ERR		BIT(1)	/* Protection error bit */
+ 
++/* Extended/Bank Address Register bits */
++#define EAR_SEGMENT_MASK	0x7 /* 128 Mb segment mask */
++
++enum read_mode {
++	SPI_NOR_NORMAL = 0,
++	SPI_NOR_FAST,
++	SPI_NOR_DUAL,
++	SPI_NOR_QUAD,
++};
+ /* Status Register 2 bits. */
+ #define SR2_QUAD_EN_BIT1	BIT(1)
+ #define SR2_QUAD_EN_BIT7	BIT(7)
+@@ -363,6 +391,7 @@ struct spi_nor {
+ 	struct spi_mem		*spimem;
+ 	u8			*bouncebuf;
+ 	size_t			bouncebuf_size;
++	struct spi_device       *spi;
+ 	const struct flash_info	*info;
+ 	const struct spi_nor_manufacturer *manufacturer;
+ 	u32			page_size;
+@@ -371,11 +400,20 @@ struct spi_nor {
+ 	u8			read_opcode;
+ 	u8			read_dummy;
+ 	u8			program_opcode;
++	enum read_mode		flash_read;
++	u32			jedec_id;
++	u16			curbank;
++	u16			n_sectors;
++	u32			sector_size;
+ 	enum spi_nor_protocol	read_proto;
+ 	enum spi_nor_protocol	write_proto;
+ 	enum spi_nor_protocol	reg_proto;
+ 	bool			sst_write_second;
+ 	u32			flags;
++	bool			shift;
++	bool			isparallel;
++	bool                    isstacked;
++	bool			is_lock;
+ 
+ 	const struct spi_nor_controller_ops *controller_ops;
+ 

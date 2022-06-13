@@ -1,0 +1,3606 @@
+diff --git a/drivers/staging/apf/Kconfig b/drivers/staging/apf/Kconfig
+new file mode 100644
+index 000000000..33cf32d43
+--- /dev/null
++++ b/drivers/staging/apf/Kconfig
+@@ -0,0 +1,20 @@
++#
++# APF driver configuration
++#
++
++menuconfig XILINX_APF
++	bool "Xilinx APF Accelerator driver"
++	depends on ARCH_ZYNQ || ARCH_ZYNQMP
++	default n
++	select UIO
++	select DMA_SHARED_BUFFER
++	help
++	  Select if you want to include APF accelerator driver
++
++config XILINX_DMA_APF
++	bool "Xilinx APF DMA engines support"
++	depends on XILINX_APF
++	select DMA_ENGINE
++	select DMADEVICES
++	help
++	  Enable support for the Xilinx APF DMA controllers.
+diff --git a/drivers/staging/apf/Makefile b/drivers/staging/apf/Makefile
+new file mode 100644
+index 000000000..bf281a2c1
+--- /dev/null
++++ b/drivers/staging/apf/Makefile
+@@ -0,0 +1,9 @@
++# gpio support: dedicated expander chips, etc
++
++ccflags-$(CONFIG_DEBUG_XILINX_APF) += -DDEBUG
++ccflags-$(CONFIG_XILINX_APF) += -Idrivers/dma
++
++obj-$(CONFIG_XILINX_APF) += xlnk.o
++obj-$(CONFIG_XILINX_APF) += xlnk-eng.o
++obj-$(CONFIG_XILINX_DMA_APF) += xilinx-dma-apf.o
++
+diff --git a/drivers/staging/apf/dt-binding.txt b/drivers/staging/apf/dt-binding.txt
+new file mode 100644
+index 000000000..fd73725fa
+--- /dev/null
++++ b/drivers/staging/apf/dt-binding.txt
+@@ -0,0 +1,17 @@
++* Xilinx APF xlnk driver
++
++Required properties:
++- compatible: Should be "xlnx,xlnk"
++- clock-names: List of clock names
++- clocks: List of clock sources corresponding to the clock names
++
++The number of elements on the clock-names and clocks lists should be the same.
++If there are no controllable clocks, the xlnk node should be omitted from the
++devicetree.
++
++Example:
++	xlnk {
++		compatible = "xlnx,xlnk-1.0";
++		clock-names = "clk166", "clk150", "clk100", "clk200";
++		clocks = <&clkc 15>, <&clkc 16>, <&clkc 17>, <&clkc 18>;
++	};
+diff --git a/drivers/staging/apf/xilinx-dma-apf.c b/drivers/staging/apf/xilinx-dma-apf.c
+new file mode 100644
+index 000000000..9f55c997e
+--- /dev/null
++++ b/drivers/staging/apf/xilinx-dma-apf.c
+@@ -0,0 +1,1220 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Xilinx AXI DMA Engine support
++ *
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ *
++ * Description:
++ * This driver supports Xilinx AXI DMA engine:
++ *  . Axi DMA engine, it does transfers between memory and device. It can be
++ *    configured to have one channel or two channels. If configured as two
++ *    channels, one is for transmit to device and another is for receive from
++ *    device.
++ */
++
++#include <asm/cacheflush.h>
++#include <linux/device.h>
++#include <linux/dma-buf.h>
++#include <linux/dma-map-ops.h>
++#include <linux/dma-mapping.h>
++#include <linux/dmapool.h>
++#include <linux/fs.h>
++#include <linux/gfp.h>
++#include <linux/init.h>
++#include <linux/interrupt.h>
++#include <linux/irq.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_irq.h>
++#include <linux/pagemap.h>
++#include <linux/platform_device.h>
++#include <linux/pm.h>
++#include <linux/sched.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/types.h>
++#include <linux/uaccess.h>
++
++#include "xilinx-dma-apf.h"
++#include "xlnk.h"
++
++static DEFINE_MUTEX(dma_list_mutex);
++static LIST_HEAD(dma_device_list);
++/* IO accessors */
++#define DMA_OUT_64(addr, val)   (writeq(val, addr))
++#define DMA_OUT(addr, val)      (iowrite32(val, addr))
++#define DMA_IN(addr)            (ioread32(addr))
++
++#define GET_LOW(x) ((u32)((x) & 0xFFFFFFFF))
++#define GET_HI(x) ((u32)((x) / 0x100000000))
++
++/* Driver functions */
++static void xdma_clean_bd(struct xdma_desc_hw *bd)
++{
++	bd->src_addr = 0x0;
++	bd->control = 0x0;
++	bd->status = 0x0;
++	bd->app[0] = 0x0;
++	bd->app[1] = 0x0;
++	bd->app[2] = 0x0;
++	bd->app[3] = 0x0;
++	bd->app[4] = 0x0;
++	bd->dmahead = 0x0;
++	bd->sw_flag = 0x0;
++}
++
++static int dma_is_running(struct xdma_chan *chan)
++{
++	return !(DMA_IN(&chan->regs->sr) & XDMA_SR_HALTED_MASK) &&
++		(DMA_IN(&chan->regs->cr) & XDMA_CR_RUNSTOP_MASK);
++}
++
++static int dma_is_idle(struct xdma_chan *chan)
++{
++	return DMA_IN(&chan->regs->sr) & XDMA_SR_IDLE_MASK;
++}
++
++static void dma_halt(struct xdma_chan *chan)
++{
++	DMA_OUT(&chan->regs->cr,
++		(DMA_IN(&chan->regs->cr)  & ~XDMA_CR_RUNSTOP_MASK));
++}
++
++static void dma_start(struct xdma_chan *chan)
++{
++	DMA_OUT(&chan->regs->cr,
++		(DMA_IN(&chan->regs->cr) | XDMA_CR_RUNSTOP_MASK));
++}
++
++static int dma_init(struct xdma_chan *chan)
++{
++	int loop = XDMA_RESET_LOOP;
++
++	DMA_OUT(&chan->regs->cr,
++		(DMA_IN(&chan->regs->cr) | XDMA_CR_RESET_MASK));
++
++	/* Wait for the hardware to finish reset
++	 */
++	while (loop) {
++		if (!(DMA_IN(&chan->regs->cr) & XDMA_CR_RESET_MASK))
++			break;
++
++		loop -= 1;
++	}
++
++	if (!loop)
++		return 1;
++
++	return 0;
++}
++
++static int xdma_alloc_chan_descriptors(struct xdma_chan *chan)
++{
++	int i;
++	u8 *ptr;
++
++	/*
++	 * We need the descriptor to be aligned to 64bytes
++	 * for meeting Xilinx DMA specification requirement.
++	 */
++	ptr = (u8 *)dma_alloc_coherent(chan->dev,
++				(sizeof(struct xdma_desc_hw) * XDMA_MAX_BD_CNT),
++				&chan->bd_phys_addr,
++				GFP_KERNEL);
++
++	if (!ptr) {
++		dev_err(chan->dev,
++			"unable to allocate channel %d descriptor pool\n",
++			chan->id);
++		return -ENOMEM;
++	}
++
++	memset(ptr, 0, (sizeof(struct xdma_desc_hw) * XDMA_MAX_BD_CNT));
++	chan->bd_cur = 0;
++	chan->bd_tail = 0;
++	chan->bd_used = 0;
++	chan->bd_chain_size = sizeof(struct xdma_desc_hw) * XDMA_MAX_BD_CNT;
++
++	/*
++	 * Pre allocate all the channels.
++	 */
++	for (i = 0; i < XDMA_MAX_BD_CNT; i++) {
++		chan->bds[i] = (struct xdma_desc_hw *)
++				(ptr + (sizeof(struct xdma_desc_hw) * i));
++		chan->bds[i]->next_desc = chan->bd_phys_addr +
++					(sizeof(struct xdma_desc_hw) *
++						((i + 1) % XDMA_MAX_BD_CNT));
++	}
++
++	/* there is at least one descriptor free to be allocated */
++	return 0;
++}
++
++static void xdma_free_chan_resources(struct xdma_chan *chan)
++{
++	dev_dbg(chan->dev, "Free all channel resources.\n");
++	dma_free_coherent(chan->dev, (sizeof(struct xdma_desc_hw) *
++			XDMA_MAX_BD_CNT), chan->bds[0], chan->bd_phys_addr);
++}
++
++static void xilinx_chan_desc_reinit(struct xdma_chan *chan)
++{
++	struct xdma_desc_hw *desc;
++	unsigned int start, end;
++	unsigned long flags;
++
++	spin_lock_irqsave(&chan->lock, flags);
++	start = 0;
++	end = XDMA_MAX_BD_CNT;
++
++	while (start < end) {
++		desc = chan->bds[start];
++		xdma_clean_bd(desc);
++		start++;
++	}
++	/* Re-initialize bd_cur and bd_tail values */
++	chan->bd_cur = 0;
++	chan->bd_tail = 0;
++	chan->bd_used = 0;
++	spin_unlock_irqrestore(&chan->lock, flags);
++}
++
++static void xilinx_chan_desc_cleanup(struct xdma_chan *chan)
++{
++	struct xdma_head *dmahead;
++	struct xdma_desc_hw *desc;
++	struct completion *cmp;
++	unsigned long flags;
++
++	spin_lock_irqsave(&chan->lock, flags);
++#define XDMA_BD_STS_RXEOF_MASK 0x04000000
++	desc = chan->bds[chan->bd_cur];
++	while (desc->status & XDMA_BD_STS_ALL_MASK) {
++		if ((desc->status & XDMA_BD_STS_RXEOF_MASK) &&
++		    !(desc->dmahead)) {
++			pr_info("ERROR: premature EOF on DMA\n");
++			dma_init(chan); /* reset the dma HW */
++			while (!(desc->dmahead)) {
++				xdma_clean_bd(desc);
++				chan->bd_used--;
++				chan->bd_cur++;
++				if (chan->bd_cur >= XDMA_MAX_BD_CNT)
++					chan->bd_cur = 0;
++				desc = chan->bds[chan->bd_cur];
++			}
++		}
++		if (desc->dmahead) {
++			if ((desc->sw_flag & XDMA_BD_SF_POLL_MODE_MASK))
++				if (!(desc->sw_flag & XDMA_BD_SF_SW_DONE_MASK))
++					break;
++
++			dmahead = (struct xdma_head *)desc->dmahead;
++			cmp = (struct completion *)&dmahead->cmp;
++			if (dmahead->nappwords_o)
++				memcpy(dmahead->appwords_o, desc->app,
++				       dmahead->nappwords_o * sizeof(u32));
++
++			if (chan->poll_mode)
++				cmp->done = 1;
++			else
++				complete(cmp);
++		}
++		xdma_clean_bd(desc);
++		chan->bd_used--;
++		chan->bd_cur++;
++		if (chan->bd_cur >= XDMA_MAX_BD_CNT)
++			chan->bd_cur = 0;
++		desc = chan->bds[chan->bd_cur];
++	}
++	spin_unlock_irqrestore(&chan->lock, flags);
++}
++
++static void xdma_err_tasklet(unsigned long data)
++{
++	struct xdma_chan *chan = (struct xdma_chan *)data;
++
++	if (chan->err) {
++		/* If reset failed, need to hard reset
++		 * Channel is no longer functional
++		 */
++		if (!dma_init(chan))
++			chan->err = 0;
++		else
++			dev_err(chan->dev, "DMA channel reset failed, please reset system\n");
++	}
++
++	/* Barrier to assert descriptor init is reaches memory */
++	rmb();
++	xilinx_chan_desc_cleanup(chan);
++
++	xilinx_chan_desc_reinit(chan);
++}
++
++static void xdma_tasklet(unsigned long data)
++{
++	struct xdma_chan *chan = (struct xdma_chan *)data;
++
++	xilinx_chan_desc_cleanup(chan);
++}
++
++static void dump_cur_bd(struct xdma_chan *chan)
++{
++	u32 index;
++
++	index = (((u32)DMA_IN(&chan->regs->cdr)) - chan->bd_phys_addr) /
++			sizeof(struct xdma_desc_hw);
++
++	dev_err(chan->dev, "cur bd @ %08x\n",   (u32)DMA_IN(&chan->regs->cdr));
++	dev_err(chan->dev, "  buf  = %p\n",
++		(void *)chan->bds[index]->src_addr);
++	dev_err(chan->dev, "  ctrl = 0x%08x\n", chan->bds[index]->control);
++	dev_err(chan->dev, "  sts  = 0x%08x\n", chan->bds[index]->status);
++	dev_err(chan->dev, "  next = %p\n",
++		(void *)chan->bds[index]->next_desc);
++}
++
++static irqreturn_t xdma_rx_intr_handler(int irq, void *data)
++{
++	struct xdma_chan *chan = data;
++	u32 stat;
++
++	stat = DMA_IN(&chan->regs->sr);
++
++	if (!(stat & XDMA_XR_IRQ_ALL_MASK))
++		return IRQ_NONE;
++
++	/* Ack the interrupts */
++	DMA_OUT(&chan->regs->sr, (stat & XDMA_XR_IRQ_ALL_MASK));
++
++	if (stat & XDMA_XR_IRQ_ERROR_MASK) {
++		dev_err(chan->dev, "Channel %s has errors %x, cdr %x tdr %x\n",
++			chan->name, (unsigned int)stat,
++			(unsigned int)DMA_IN(&chan->regs->cdr),
++			(unsigned int)DMA_IN(&chan->regs->tdr));
++
++		dump_cur_bd(chan);
++
++		chan->err = 1;
++		tasklet_schedule(&chan->dma_err_tasklet);
++	}
++
++	if (!(chan->poll_mode) && ((stat & XDMA_XR_IRQ_DELAY_MASK) ||
++				   (stat & XDMA_XR_IRQ_IOC_MASK)))
++		tasklet_schedule(&chan->tasklet);
++
++	return IRQ_HANDLED;
++}
++
++static irqreturn_t xdma_tx_intr_handler(int irq, void *data)
++{
++	struct xdma_chan *chan = data;
++	u32 stat;
++
++	stat = DMA_IN(&chan->regs->sr);
++
++	if (!(stat & XDMA_XR_IRQ_ALL_MASK))
++		return IRQ_NONE;
++
++	/* Ack the interrupts */
++	DMA_OUT(&chan->regs->sr, (stat & XDMA_XR_IRQ_ALL_MASK));
++
++	if (stat & XDMA_XR_IRQ_ERROR_MASK) {
++		dev_err(chan->dev, "Channel %s has errors %x, cdr %x tdr %x\n",
++			chan->name, (unsigned int)stat,
++			(unsigned int)DMA_IN(&chan->regs->cdr),
++			(unsigned int)DMA_IN(&chan->regs->tdr));
++
++		dump_cur_bd(chan);
++
++		chan->err = 1;
++		tasklet_schedule(&chan->dma_err_tasklet);
++	}
++
++	if (!(chan->poll_mode) && ((stat & XDMA_XR_IRQ_DELAY_MASK) ||
++				   (stat & XDMA_XR_IRQ_IOC_MASK)))
++		tasklet_schedule(&chan->tasklet);
++
++	return IRQ_HANDLED;
++}
++
++static void xdma_start_transfer(struct xdma_chan *chan,
++				int start_index,
++				int end_index)
++{
++	xlnk_intptr_type cur_phys;
++	xlnk_intptr_type tail_phys;
++	u32 regval;
++
++	if (chan->err)
++		return;
++
++	cur_phys = chan->bd_phys_addr + (start_index *
++					sizeof(struct xdma_desc_hw));
++	tail_phys = chan->bd_phys_addr + (end_index *
++					sizeof(struct xdma_desc_hw));
++	/* If hardware is busy, move the tail & return */
++	if (dma_is_running(chan) || dma_is_idle(chan)) {
++#if XLNK_SYS_BIT_WIDTH == 32
++		DMA_OUT(&chan->regs->tdr, tail_phys);
++#else
++		DMA_OUT_64(&chan->regs->tdr, tail_phys);
++#endif
++		return;
++	}
++
++#if XLNK_SYS_BIT_WIDTH == 32
++	DMA_OUT(&chan->regs->cdr, cur_phys);
++#else
++	DMA_OUT_64(&chan->regs->cdr, cur_phys);
++#endif
++
++	dma_start(chan);
++
++	/* Enable interrupts */
++	regval = DMA_IN(&chan->regs->cr);
++	regval |= (chan->poll_mode ? XDMA_XR_IRQ_ERROR_MASK
++					: XDMA_XR_IRQ_ALL_MASK);
++	DMA_OUT(&chan->regs->cr, regval);
++
++	/* Update tail ptr register and start the transfer */
++#if XLNK_SYS_BIT_WIDTH == 32
++	DMA_OUT(&chan->regs->tdr, tail_phys);
++#else
++	DMA_OUT_64(&chan->regs->tdr, tail_phys);
++#endif
++}
++
++static int xdma_setup_hw_desc(struct xdma_chan *chan,
++			      struct xdma_head *dmahead,
++			      struct scatterlist *sgl,
++			      unsigned int sg_len,
++			      enum dma_data_direction direction,
++			      unsigned int nappwords_i,
++			      u32 *appwords_i)
++{
++	struct xdma_desc_hw *bd = NULL;
++	size_t copy;
++	struct scatterlist *sg;
++	size_t sg_used;
++	dma_addr_t dma_src;
++	int i, start_index = -1, end_index1 = 0, end_index2 = -1;
++	int status;
++	unsigned long flags;
++	unsigned int bd_used_saved;
++
++	if (!chan) {
++		pr_err("Requested transfer on invalid channel\n");
++		return -ENODEV;
++	}
++
++	/* if we almost run out of bd, try to recycle some */
++	if ((chan->poll_mode) && (chan->bd_used >= XDMA_BD_CLEANUP_THRESHOLD))
++		xilinx_chan_desc_cleanup(chan);
++
++	spin_lock_irqsave(&chan->lock, flags);
++
++	bd_used_saved = chan->bd_used;
++	/*
++	 * Build transactions using information in the scatter gather list
++	 */
++	for_each_sg(sgl, sg, sg_len, i) {
++		sg_used = 0;
++
++		/* Loop until the entire scatterlist entry is used */
++		while (sg_used < sg_dma_len(sg)) {
++			/* Allocate the link descriptor from DMA pool */
++			bd = chan->bds[chan->bd_tail];
++			if ((bd->control) & (XDMA_BD_STS_ACTUAL_LEN_MASK)) {
++				end_index2 = chan->bd_tail;
++				status = -ENOMEM;
++				/* If first was not set, then we failed to
++				 * allocate the very first descriptor,
++				 * and we're done
++				 */
++				if (start_index == -1)
++					goto out_unlock;
++				else
++					goto out_clean;
++			}
++			/*
++			 * Calculate the maximum number of bytes to transfer,
++			 * making sure it is less than the DMA controller limit
++			 */
++			copy = min((size_t)(sg_dma_len(sg) - sg_used),
++				   (size_t)chan->max_len);
++			/*
++			 * Only the src address for DMA
++			 */
++			dma_src = sg_dma_address(sg) + sg_used;
++			bd->src_addr = dma_src;
++
++			/* Fill in the descriptor */
++			bd->control = copy;
++
++			/*
++			 * If this is not the first descriptor, chain the
++			 * current descriptor after the previous descriptor
++			 *
++			 * For the first DMA_TO_DEVICE transfer, set SOP
++			 */
++			if (start_index == -1) {
++				start_index = chan->bd_tail;
++
++				if (nappwords_i)
++					memcpy(bd->app, appwords_i,
++					       nappwords_i * sizeof(u32));
++
++				if (direction == DMA_TO_DEVICE)
++					bd->control |= XDMA_BD_SOP;
++			}
++
++			sg_used += copy;
++			end_index2 = chan->bd_tail;
++			chan->bd_tail++;
++			chan->bd_used++;
++			if (chan->bd_tail >= XDMA_MAX_BD_CNT) {
++				end_index1 = XDMA_MAX_BD_CNT;
++				chan->bd_tail = 0;
++			}
++		}
++	}
++
++	if (start_index == -1) {
++		status = -EINVAL;
++		goto out_unlock;
++	}
++
++	bd->dmahead = (xlnk_intptr_type)dmahead;
++	bd->sw_flag = chan->poll_mode ? XDMA_BD_SF_POLL_MODE_MASK : 0;
++	dmahead->last_bd_index = end_index2;
++
++	if (direction == DMA_TO_DEVICE)
++		bd->control |= XDMA_BD_EOP;
++
++	/* Barrier to assert control word write commits */
++	wmb();
++
++	xdma_start_transfer(chan, start_index, end_index2);
++
++	spin_unlock_irqrestore(&chan->lock, flags);
++	return 0;
++
++out_clean:
++	if (!end_index1) {
++		for (i = start_index; i < end_index2; i++)
++			xdma_clean_bd(chan->bds[i]);
++	} else {
++		/* clean till the end of bd list first, and then 2nd end */
++		for (i = start_index; i < end_index1; i++)
++			xdma_clean_bd(chan->bds[i]);
++
++		end_index1 = 0;
++		for (i = end_index1; i < end_index2; i++)
++			xdma_clean_bd(chan->bds[i]);
++	}
++	/* Move the bd_tail back */
++	chan->bd_tail = start_index;
++	chan->bd_used = bd_used_saved;
++
++out_unlock:
++	spin_unlock_irqrestore(&chan->lock, flags);
++
++	return status;
++}
++
++/*
++ *  create minimal length scatter gather list for physically contiguous buffer
++ *  that starts at phy_buf and has length phy_buf_len bytes
++ */
++static unsigned int phy_buf_to_sgl(xlnk_intptr_type phy_buf,
++				   unsigned int phy_buf_len,
++				   struct scatterlist *sgl)
++{
++	unsigned int sgl_cnt = 0;
++	struct scatterlist *sgl_head;
++	unsigned int dma_len;
++	unsigned int num_bd;
++
++	if (!phy_buf || !phy_buf_len) {
++		pr_err("phy_buf is NULL or phy_buf_len = 0\n");
++		return sgl_cnt;
++	}
++
++	num_bd = (phy_buf_len + (XDMA_MAX_TRANS_LEN - 1))
++		/ XDMA_MAX_TRANS_LEN;
++	sgl_head = sgl;
++	sg_init_table(sgl, num_bd);
++
++	while (phy_buf_len > 0) {
++		xlnk_intptr_type page_id = phy_buf >> PAGE_SHIFT;
++		unsigned int offset = phy_buf - (page_id << PAGE_SHIFT);
++
++		sgl_cnt++;
++		if (sgl_cnt > XDMA_MAX_BD_CNT)
++			return 0;
++
++		dma_len = (phy_buf_len > XDMA_MAX_TRANS_LEN) ?
++				XDMA_MAX_TRANS_LEN : phy_buf_len;
++
++		sg_set_page(sgl_head, pfn_to_page(page_id), dma_len, offset);
++		sg_dma_address(sgl_head) = (dma_addr_t)phy_buf;
++		sg_dma_len(sgl_head) = dma_len;
++		sgl_head = sg_next(sgl_head);
++
++		phy_buf += dma_len;
++		phy_buf_len -= dma_len;
++	}
++
++	return sgl_cnt;
++}
++
++/*  merge sg list, sgl, with length sgl_len, to sgl_merged, to save dma bds */
++static unsigned int sgl_merge(struct scatterlist *sgl,
++			      unsigned int sgl_len,
++			      struct scatterlist *sgl_merged)
++{
++	struct scatterlist *sghead, *sgend, *sgnext, *sg_merged_head;
++	unsigned int sg_visited_cnt = 0, sg_merged_num = 0;
++	unsigned int dma_len = 0;
++
++	sg_init_table(sgl_merged, sgl_len);
++	sg_merged_head = sgl_merged;
++	sghead = sgl;
++
++	while (sghead && (sg_visited_cnt < sgl_len)) {
++		dma_len = sg_dma_len(sghead);
++		sgend = sghead;
++		sg_visited_cnt++;
++		sgnext = sg_next(sgend);
++
++		while (sgnext && (sg_visited_cnt < sgl_len)) {
++			if ((sg_dma_address(sgend) + sg_dma_len(sgend)) !=
++				sg_dma_address(sgnext))
++				break;
++
++			if (dma_len + sg_dma_len(sgnext) >= XDMA_MAX_TRANS_LEN)
++				break;
++
++			sgend = sgnext;
++			dma_len += sg_dma_len(sgend);
++			sg_visited_cnt++;
++			sgnext = sg_next(sgnext);
++		}
++
++		sg_merged_num++;
++		if (sg_merged_num > XDMA_MAX_BD_CNT)
++			return 0;
++
++		memcpy(sg_merged_head, sghead, sizeof(struct scatterlist));
++
++		sg_dma_len(sg_merged_head) = dma_len;
++
++		sg_merged_head = sg_next(sg_merged_head);
++		sghead = sg_next(sgend);
++	}
++
++	return sg_merged_num;
++}
++
++static int xdma_pin_user_pages(xlnk_intptr_type uaddr, unsigned int ulen,
++			       int write, struct scatterlist **scatterpp,
++			       unsigned int *cntp, unsigned int user_flags)
++{
++	int status;
++	struct mm_struct *mm = current->mm;
++	unsigned int first_page;
++	unsigned int last_page;
++	unsigned int num_pages;
++	struct scatterlist *sglist;
++	struct page **mapped_pages;
++
++	unsigned int pgidx;
++	unsigned int pglen;
++	unsigned int pgoff;
++	unsigned int sublen;
++
++	first_page = uaddr / PAGE_SIZE;
++	last_page = (uaddr + ulen - 1) / PAGE_SIZE;
++	num_pages = last_page - first_page + 1;
++	mapped_pages = vmalloc(sizeof(*mapped_pages) * num_pages);
++	if (!mapped_pages)
++		return -ENOMEM;
++
++	down_read(&mm->mmap_lock);
++	status = get_user_pages(uaddr, num_pages,
++				(write ? FOLL_WRITE : 0) | FOLL_FORCE,
++				mapped_pages, NULL);
++	up_read(&mm->mmap_lock);
++
++	if (status == num_pages) {
++		sglist = kcalloc(num_pages,
++				 sizeof(struct scatterlist),
++				 GFP_KERNEL);
++		if (!sglist) {
++			pr_err("%s: kcalloc failed to create sg list\n",
++			       __func__);
++			vfree(mapped_pages);
++			return -ENOMEM;
++		}
++		sg_init_table(sglist, num_pages);
++		sublen = 0;
++		for (pgidx = 0; pgidx < status; pgidx++) {
++			if (pgidx == 0 && num_pages != 1) {
++				pgoff = uaddr & (~PAGE_MASK);
++				pglen = PAGE_SIZE - pgoff;
++			} else if (pgidx == 0 && num_pages == 1) {
++				pgoff = uaddr & (~PAGE_MASK);
++				pglen = ulen;
++			} else if (pgidx == num_pages - 1) {
++				pgoff = 0;
++				pglen = ulen - sublen;
++			} else {
++				pgoff = 0;
++				pglen = PAGE_SIZE;
++			}
++
++			sublen += pglen;
++
++			sg_set_page(&sglist[pgidx],
++				    mapped_pages[pgidx],
++				    pglen, pgoff);
++
++			sg_dma_len(&sglist[pgidx]) = pglen;
++		}
++
++		*scatterpp = sglist;
++		*cntp = num_pages;
++
++		vfree(mapped_pages);
++		return 0;
++	}
++	pr_err("Failed to pin user pages\n");
++	for (pgidx = 0; pgidx < status; pgidx++)
++		put_page(mapped_pages[pgidx]);
++	vfree(mapped_pages);
++	return -ENOMEM;
++}
++
++static int xdma_unpin_user_pages(struct scatterlist *sglist, unsigned int cnt)
++{
++	struct page *pg;
++	unsigned int i;
++
++	if (!sglist)
++		return 0;
++
++	for (i = 0; i < cnt; i++) {
++		pg = sg_page(sglist + i);
++		if (pg)
++			put_page(pg);
++	}
++
++	kfree(sglist);
++	return 0;
++}
++
++struct xdma_chan *xdma_request_channel(char *name)
++{
++	int i;
++	struct xdma_device *device, *tmp;
++
++	list_for_each_entry_safe(device, tmp, &dma_device_list, node) {
++		for (i = 0; i < device->channel_count; i++) {
++			if (!strcmp(device->chan[i]->name, name))
++				return device->chan[i];
++		}
++	}
++	return NULL;
++}
++EXPORT_SYMBOL(xdma_request_channel);
++
++void xdma_release_channel(struct xdma_chan *chan)
++{ }
++EXPORT_SYMBOL(xdma_release_channel);
++
++void xdma_release_all_channels(void)
++{
++	int i;
++	struct xdma_device *device, *tmp;
++
++	list_for_each_entry_safe(device, tmp, &dma_device_list, node) {
++		for (i = 0; i < device->channel_count; i++) {
++			if (device->chan[i]->client_count) {
++				dma_halt(device->chan[i]);
++				xilinx_chan_desc_reinit(device->chan[i]);
++				pr_info("%s: chan %s freed\n",
++					__func__,
++					device->chan[i]->name);
++			}
++		}
++	}
++}
++EXPORT_SYMBOL(xdma_release_all_channels);
++
++static void xdma_release(struct device *dev)
++{
++}
++
++int xdma_submit(struct xdma_chan *chan,
++		xlnk_intptr_type userbuf,
++		void *kaddr,
++		unsigned int size,
++		unsigned int nappwords_i,
++		u32 *appwords_i,
++		unsigned int nappwords_o,
++		unsigned int user_flags,
++		struct xdma_head **dmaheadpp,
++		struct xlnk_dmabuf_reg *dp)
++{
++	struct xdma_head *dmahead;
++	struct scatterlist *pagelist = NULL;
++	struct scatterlist *sglist = NULL;
++	unsigned int pagecnt = 0;
++	unsigned int sgcnt = 0;
++	enum dma_data_direction dmadir;
++	int status;
++	unsigned long attrs = 0;
++
++	dmahead = kzalloc(sizeof(*dmahead), GFP_KERNEL);
++	if (!dmahead)
++		return -ENOMEM;
++
++	dmahead->chan = chan;
++	dmahead->userbuf = userbuf;
++	dmahead->size = size;
++	dmahead->dmadir = chan->direction;
++	dmahead->userflag = user_flags;
++	dmahead->dmabuf = dp;
++	dmadir = chan->direction;
++
++	if (!(user_flags & CF_FLAG_CACHE_FLUSH_INVALIDATE))
++		attrs |= DMA_ATTR_SKIP_CPU_SYNC;
++
++	if (dp) {
++		int i;
++		struct scatterlist *sg;
++		unsigned int remaining_size = size;
++
++		if (IS_ERR_OR_NULL(dp->dbuf_sg_table)) {
++			pr_err("%s dmabuf not mapped: %p\n",
++			       __func__, dp->dbuf_sg_table);
++			return -EINVAL;
++		}
++		if (dp->dbuf_sg_table->nents == 0) {
++			pr_err("%s: cannot map a scatterlist with 0 entries\n",
++			       __func__);
++			return -EINVAL;
++		}
++		sglist = kmalloc_array(dp->dbuf_sg_table->nents,
++				       sizeof(*sglist),
++				       GFP_KERNEL);
++		if (!sglist)
++			return -ENOMEM;
++
++		sg_init_table(sglist, dp->dbuf_sg_table->nents);
++		sgcnt = 0;
++		for_each_sg(dp->dbuf_sg_table->sgl,
++			    sg,
++			    dp->dbuf_sg_table->nents,
++			    i) {
++			sg_set_page(sglist + i,
++				    sg_page(sg),
++				    sg_dma_len(sg),
++				    sg->offset);
++			sg_dma_address(sglist + i) = sg_dma_address(sg);
++			if (remaining_size == 0) {
++				sg_dma_len(sglist + i) = 0;
++			} else if (sg_dma_len(sg) > remaining_size) {
++				sg_dma_len(sglist + i) = remaining_size;
++				sgcnt++;
++			} else {
++				sg_dma_len(sglist + i) = sg_dma_len(sg);
++				remaining_size -= sg_dma_len(sg);
++				sgcnt++;
++			}
++		}
++		dmahead->userbuf = (xlnk_intptr_type)sglist->dma_address;
++		pagelist = NULL;
++		pagecnt = 0;
++	} else if (user_flags & CF_FLAG_PHYSICALLY_CONTIGUOUS) {
++		size_t elem_cnt;
++
++		elem_cnt = DIV_ROUND_UP(size, XDMA_MAX_TRANS_LEN);
++		sglist = kmalloc_array(elem_cnt, sizeof(*sglist), GFP_KERNEL);
++		sgcnt = phy_buf_to_sgl(userbuf, size, sglist);
++		if (!sgcnt)
++			return -ENOMEM;
++
++		status = get_dma_ops(chan->dev)->map_sg(chan->dev,
++							sglist,
++							sgcnt,
++							dmadir,
++							attrs);
++
++		if (!status) {
++			pr_err("sg contiguous mapping failed\n");
++			return -ENOMEM;
++		}
++		pagelist = NULL;
++		pagecnt = 0;
++	} else {
++		status = xdma_pin_user_pages(userbuf, size,
++					     dmadir != DMA_TO_DEVICE, &pagelist,
++					     &pagecnt, user_flags);
++		if (status < 0) {
++			pr_err("xdma_pin_user_pages failed\n");
++			return status;
++		}
++
++		status = get_dma_ops(chan->dev)->map_sg(chan->dev,
++							pagelist,
++							pagecnt,
++							dmadir,
++							attrs);
++		if (!status) {
++			pr_err("dma_map_sg failed\n");
++			xdma_unpin_user_pages(pagelist, pagecnt);
++			return -ENOMEM;
++		}
++
++		sglist = kmalloc_array(pagecnt, sizeof(*sglist), GFP_KERNEL);
++		if (sglist)
++			sgcnt = sgl_merge(pagelist, pagecnt, sglist);
++		if (!sgcnt) {
++			get_dma_ops(chan->dev)->unmap_sg(chan->dev,
++							 pagelist,
++							 pagecnt,
++							 dmadir,
++							 attrs);
++			xdma_unpin_user_pages(pagelist, pagecnt);
++			kfree(sglist);
++			return -ENOMEM;
++		}
++	}
++	dmahead->sglist = sglist;
++	dmahead->sgcnt = sgcnt;
++	dmahead->pagelist = pagelist;
++	dmahead->pagecnt = pagecnt;
++
++	/* skipping config */
++	init_completion(&dmahead->cmp);
++
++	if (nappwords_i > XDMA_MAX_APPWORDS)
++		nappwords_i = XDMA_MAX_APPWORDS;
++
++	if (nappwords_o > XDMA_MAX_APPWORDS)
++		nappwords_o = XDMA_MAX_APPWORDS;
++
++	dmahead->nappwords_o = nappwords_o;
++
++	status = xdma_setup_hw_desc(chan, dmahead, sglist, sgcnt,
++				    dmadir, nappwords_i, appwords_i);
++	if (status) {
++		pr_err("setup hw desc failed\n");
++		if (dmahead->pagelist) {
++			get_dma_ops(chan->dev)->unmap_sg(chan->dev,
++							 pagelist,
++							 pagecnt,
++							 dmadir,
++							 attrs);
++			xdma_unpin_user_pages(pagelist, pagecnt);
++		} else if (!dp) {
++			get_dma_ops(chan->dev)->unmap_sg(chan->dev,
++							 sglist,
++							 sgcnt,
++							 dmadir,
++							 attrs);
++		}
++		kfree(dmahead->sglist);
++		return -ENOMEM;
++	}
++
++	*dmaheadpp = dmahead;
++	return 0;
++}
++EXPORT_SYMBOL(xdma_submit);
++
++int xdma_wait(struct xdma_head *dmahead,
++	      unsigned int user_flags,
++	      unsigned int *operating_flags)
++{
++	struct xdma_chan *chan = dmahead->chan;
++	unsigned long attrs = 0;
++
++	if (chan->poll_mode) {
++		xilinx_chan_desc_cleanup(chan);
++		*operating_flags |= XDMA_FLAGS_WAIT_COMPLETE;
++	} else {
++		if (*operating_flags & XDMA_FLAGS_TRYWAIT) {
++			if (!try_wait_for_completion(&dmahead->cmp))
++				return 0;
++			*operating_flags |= XDMA_FLAGS_WAIT_COMPLETE;
++		} else {
++			wait_for_completion(&dmahead->cmp);
++			*operating_flags |= XDMA_FLAGS_WAIT_COMPLETE;
++		}
++	}
++
++	if (!dmahead->dmabuf) {
++		if (!(user_flags & CF_FLAG_CACHE_FLUSH_INVALIDATE))
++			attrs |= DMA_ATTR_SKIP_CPU_SYNC;
++
++		if (user_flags & CF_FLAG_PHYSICALLY_CONTIGUOUS) {
++			get_dma_ops(chan->dev)->unmap_sg(chan->dev,
++							 dmahead->sglist,
++							 dmahead->sgcnt,
++							 dmahead->dmadir,
++							 attrs);
++		} else {
++			get_dma_ops(chan->dev)->unmap_sg(chan->dev,
++							 dmahead->pagelist,
++							 dmahead->pagecnt,
++							 dmahead->dmadir,
++							 attrs);
++			xdma_unpin_user_pages(dmahead->pagelist,
++					      dmahead->pagecnt);
++		}
++	}
++	kfree(dmahead->sglist);
++
++	return 0;
++}
++EXPORT_SYMBOL(xdma_wait);
++
++int xdma_getconfig(struct xdma_chan *chan,
++		   unsigned char *irq_thresh,
++		   unsigned char *irq_delay)
++{
++	*irq_thresh = (DMA_IN(&chan->regs->cr) >> XDMA_COALESCE_SHIFT) & 0xff;
++	*irq_delay = (DMA_IN(&chan->regs->cr) >> XDMA_DELAY_SHIFT) & 0xff;
++	return 0;
++}
++EXPORT_SYMBOL(xdma_getconfig);
++
++int xdma_setconfig(struct xdma_chan *chan,
++		   unsigned char irq_thresh,
++		   unsigned char irq_delay)
++{
++	unsigned long val;
++
++	if (dma_is_running(chan))
++		return -EBUSY;
++
++	val = DMA_IN(&chan->regs->cr);
++	val &= ~((0xff << XDMA_COALESCE_SHIFT) |
++				(0xff << XDMA_DELAY_SHIFT));
++	val |= ((irq_thresh << XDMA_COALESCE_SHIFT) |
++				(irq_delay << XDMA_DELAY_SHIFT));
++
++	DMA_OUT(&chan->regs->cr, val);
++	return 0;
++}
++EXPORT_SYMBOL(xdma_setconfig);
++
++static const struct of_device_id gic_match[] = {
++	{ .compatible = "arm,cortex-a9-gic", },
++	{ .compatible = "arm,cortex-a15-gic", },
++	{ },
++};
++
++static struct device_node *gic_node;
++
++unsigned int xlate_irq(unsigned int hwirq)
++{
++	struct of_phandle_args irq_data;
++	unsigned int irq;
++
++	if (!gic_node)
++		gic_node = of_find_matching_node(NULL, gic_match);
++
++	if (WARN_ON(!gic_node))
++		return hwirq;
++
++	irq_data.np = gic_node;
++	irq_data.args_count = 3;
++	irq_data.args[0] = 0;
++#if XLNK_SYS_BIT_WIDTH == 32
++	irq_data.args[1] = hwirq - 32; /* GIC SPI offset */
++#else
++	irq_data.args[1] = hwirq;
++#endif
++	irq_data.args[2] = IRQ_TYPE_LEVEL_HIGH;
++
++	irq = irq_create_of_mapping(&irq_data);
++	if (WARN_ON(!irq))
++		irq = hwirq;
++
++	pr_info("%s: hwirq %d, irq %d\n", __func__, hwirq, irq);
++
++	return irq;
++}
++
++/* Brute-force probing for xilinx DMA
++ */
++static int xdma_probe(struct platform_device *pdev)
++{
++	struct xdma_device *xdev;
++	struct resource *res;
++	int err, i, j;
++	struct xdma_chan *chan;
++	struct xdma_device_config *dma_config;
++	int dma_chan_dir;
++	int dma_chan_reg_offset;
++
++	pr_info("%s: probe dma %p, nres %d, id %d\n", __func__,
++		&pdev->dev, pdev->num_resources, pdev->id);
++
++	xdev = devm_kzalloc(&pdev->dev, sizeof(struct xdma_device), GFP_KERNEL);
++	if (!xdev)
++		return -ENOMEM;
++	xdev->dev = &pdev->dev;
++
++	/* Set this as configurable once HPC works */
++	arch_setup_dma_ops(&pdev->dev, 0, 0, NULL, false);
++	dma_set_mask(&pdev->dev, 0xFFFFFFFFFFFFFFFFull);
++
++	dma_config = (struct xdma_device_config *)xdev->dev->platform_data;
++	if (dma_config->channel_count < 1 || dma_config->channel_count > 2)
++		return -EFAULT;
++
++	/* Get the memory resource */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	xdev->regs = devm_ioremap_resource(&pdev->dev, res);
++	if (!xdev->regs) {
++		dev_err(&pdev->dev, "unable to iomap registers\n");
++		return -EFAULT;
++	}
++
++	dev_info(&pdev->dev, "AXIDMA device %d physical base address=%pa\n",
++		 pdev->id, &res->start);
++	dev_info(&pdev->dev, "AXIDMA device %d remapped to %pa\n",
++		 pdev->id, &xdev->regs);
++
++	/* Allocate the channels */
++
++	dev_info(&pdev->dev, "has %d channel(s)\n", dma_config->channel_count);
++	for (i = 0; i < dma_config->channel_count; i++) {
++		chan = devm_kzalloc(&pdev->dev, sizeof(*chan), GFP_KERNEL);
++		if (!chan)
++			return -ENOMEM;
++
++		dma_chan_dir = strcmp(dma_config->channel_config[i].type,
++				      "axi-dma-mm2s-channel") ?
++					DMA_FROM_DEVICE :
++					DMA_TO_DEVICE;
++		dma_chan_reg_offset = (dma_chan_dir == DMA_TO_DEVICE) ?
++					0 :
++					0x30;
++
++		/* Initialize channel parameters */
++		chan->id = i;
++		chan->regs = xdev->regs + dma_chan_reg_offset;
++		/* chan->regs = xdev->regs; */
++		chan->dev = xdev->dev;
++		chan->max_len = XDMA_MAX_TRANS_LEN;
++		chan->direction = dma_chan_dir;
++		sprintf(chan->name, "%s:%d", dma_config->name, chan->id);
++		pr_info("  chan %d name: %s\n", chan->id, chan->name);
++		pr_info("  chan %d direction: %s\n", chan->id,
++			dma_chan_dir == DMA_FROM_DEVICE ?
++				"FROM_DEVICE" : "TO_DEVICE");
++
++		spin_lock_init(&chan->lock);
++		tasklet_init(&chan->tasklet,
++			     xdma_tasklet,
++			     (unsigned long)chan);
++		tasklet_init(&chan->dma_err_tasklet,
++			     xdma_err_tasklet,
++			     (unsigned long)chan);
++
++		xdev->chan[chan->id] = chan;
++
++		/* The IRQ resource */
++		chan->irq = xlate_irq(dma_config->channel_config[i].irq);
++		if (chan->irq <= 0) {
++			pr_err("get_resource for IRQ for dev %d failed\n",
++			       pdev->id);
++			return -ENODEV;
++		}
++
++		err = devm_request_irq(&pdev->dev,
++				       chan->irq,
++				       dma_chan_dir == DMA_TO_DEVICE ?
++					xdma_tx_intr_handler :
++					xdma_rx_intr_handler,
++				       IRQF_SHARED,
++				       pdev->name,
++				       chan);
++		if (err) {
++			dev_err(&pdev->dev, "unable to request IRQ\n");
++			return err;
++		}
++		pr_info("  chan%d irq: %d\n", chan->id, chan->irq);
++
++		chan->poll_mode = dma_config->channel_config[i].poll_mode;
++		pr_info("  chan%d poll mode: %s\n",
++			chan->id,
++			chan->poll_mode ? "on" : "off");
++
++		/* Allocate channel BD's */
++		err = xdma_alloc_chan_descriptors(xdev->chan[chan->id]);
++		if (err) {
++			dev_err(&pdev->dev, "unable to allocate BD's\n");
++			return -ENOMEM;
++		}
++		pr_info("  chan%d bd ring @ 0x%p (size: 0x%x bytes)\n",
++			chan->id,
++			(void *)chan->bd_phys_addr,
++			chan->bd_chain_size);
++
++		err = dma_init(xdev->chan[chan->id]);
++		if (err) {
++			dev_err(&pdev->dev, "DMA init failed\n");
++			/* FIXME Check this - unregister all chan resources */
++			for (j = 0; j <= i; j++)
++				xdma_free_chan_resources(xdev->chan[j]);
++			return -EIO;
++		}
++	}
++	xdev->channel_count = dma_config->channel_count;
++	pdev->dev.release = xdma_release;
++	/* Add the DMA device to the global list */
++	mutex_lock(&dma_list_mutex);
++	list_add_tail(&xdev->node, &dma_device_list);
++	mutex_unlock(&dma_list_mutex);
++
++	platform_set_drvdata(pdev, xdev);
++
++	return 0;
++}
++
++static int xdma_remove(struct platform_device *pdev)
++{
++	int i;
++	struct xdma_device *xdev = platform_get_drvdata(pdev);
++
++	/* Remove the DMA device from the global list */
++	mutex_lock(&dma_list_mutex);
++	list_del(&xdev->node);
++	mutex_unlock(&dma_list_mutex);
++
++	for (i = 0; i < XDMA_MAX_CHANS_PER_DEVICE; i++) {
++		if (xdev->chan[i])
++			xdma_free_chan_resources(xdev->chan[i]);
++	}
++
++	return 0;
++}
++
++static struct platform_driver xdma_driver = {
++	.probe = xdma_probe,
++	.remove = xdma_remove,
++	.driver = {
++		.name = "xilinx-axidma",
++	},
++};
++
++module_platform_driver(xdma_driver);
++
++MODULE_DESCRIPTION("Xilinx DMA driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/staging/apf/xilinx-dma-apf.h b/drivers/staging/apf/xilinx-dma-apf.h
+new file mode 100644
+index 000000000..ddccf5f3f
+--- /dev/null
++++ b/drivers/staging/apf/xilinx-dma-apf.h
+@@ -0,0 +1,229 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++/*
++ * Xilinx AXI DMA Engine support
++ *
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#ifndef __XILINX_DMA_APF_H
++#define __XILINX_DMA_APF_H
++
++/* ioctls */
++#include <linux/ioctl.h>
++
++/* tasklet */
++#include <linux/interrupt.h>
++
++/* dma stuff */
++#include <linux/dma-mapping.h>
++
++/* xlnk structures */
++#include "xlnk.h"
++#include "xlnk-sysdef.h"
++
++#define XDMA_IOC_MAGIC 'X'
++#define XDMA_IOCRESET		_IO(XDMA_IOC_MAGIC, 0)
++#define XDMA_IOCREQUEST		_IOWR(XDMA_IOC_MAGIC, 1, unsigned long)
++#define XDMA_IOCRELEASE		_IOWR(XDMA_IOC_MAGIC, 2, unsigned long)
++#define XDMA_IOCSUBMIT		_IOWR(XDMA_IOC_MAGIC, 3, unsigned long)
++#define XDMA_IOCWAIT		_IOWR(XDMA_IOC_MAGIC, 4, unsigned long)
++#define XDMA_IOCGETCONFIG	_IOWR(XDMA_IOC_MAGIC, 5, unsigned long)
++#define XDMA_IOCSETCONFIG	_IOWR(XDMA_IOC_MAGIC, 6, unsigned long)
++#define XDMA_IOC_MAXNR		6
++
++/* Specific hardware configuration-related constants
++ */
++#define XDMA_RESET_LOOP            1000000
++#define XDMA_HALT_LOOP             1000000
++#define XDMA_NO_CHANGE             0xFFFF
++
++/* General register bits definitions
++ */
++#define XDMA_CR_RESET_MASK    0x00000004  /* Reset DMA engine */
++#define XDMA_CR_RUNSTOP_MASK  0x00000001  /* Start/stop DMA engine */
++
++#define XDMA_SR_HALTED_MASK   0x00000001  /* DMA channel halted */
++#define XDMA_SR_IDLE_MASK     0x00000002  /* DMA channel idle */
++
++#define XDMA_SR_ERR_INTERNAL_MASK 0x00000010/* Datamover internal err */
++#define XDMA_SR_ERR_SLAVE_MASK    0x00000020 /* Datamover slave err */
++#define XDMA_SR_ERR_DECODE_MASK   0x00000040 /* Datamover decode err */
++#define XDMA_SR_ERR_SG_INT_MASK   0x00000100 /* SG internal err */
++#define XDMA_SR_ERR_SG_SLV_MASK   0x00000200 /* SG slave err */
++#define XDMA_SR_ERR_SG_DEC_MASK   0x00000400 /* SG decode err */
++#define XDMA_SR_ERR_ALL_MASK      0x00000770 /* All errors */
++
++#define XDMA_XR_IRQ_IOC_MASK	0x00001000 /* Completion interrupt */
++#define XDMA_XR_IRQ_DELAY_MASK	0x00002000 /* Delay interrupt */
++#define XDMA_XR_IRQ_ERROR_MASK	0x00004000 /* Error interrupt */
++#define XDMA_XR_IRQ_ALL_MASK	    0x00007000 /* All interrupts */
++
++#define XDMA_XR_DELAY_MASK    0xFF000000 /* Delay timeout counter */
++#define XDMA_XR_COALESCE_MASK 0x00FF0000 /* Coalesce counter */
++
++#define XDMA_DELAY_SHIFT    24
++#define XDMA_COALESCE_SHIFT 16
++
++#define XDMA_DELAY_MAX     0xFF /**< Maximum delay counter value */
++#define XDMA_COALESCE_MAX  0xFF /**< Maximum coalescing counter value */
++
++/* BD definitions for Axi DMA
++ */
++#define XDMA_BD_STS_ACTUAL_LEN_MASK	0x007FFFFF
++#define XDMA_BD_STS_COMPL_MASK 0x80000000
++#define XDMA_BD_STS_ERR_MASK   0x70000000
++#define XDMA_BD_STS_ALL_MASK   0xF0000000
++
++/* DMA BD special bits definitions
++ */
++#define XDMA_BD_SOP       0x08000000    /* Start of packet bit */
++#define XDMA_BD_EOP       0x04000000    /* End of packet bit */
++
++/* BD Software Flag definitions for Axi DMA
++ */
++#define XDMA_BD_SF_POLL_MODE_MASK	0x00000002
++#define XDMA_BD_SF_SW_DONE_MASK		0x00000001
++
++/* driver defines */
++#define XDMA_MAX_BD_CNT			16384
++#define XDMA_MAX_CHANS_PER_DEVICE	2
++#define XDMA_MAX_TRANS_LEN		0x7FF000
++#define XDMA_MAX_APPWORDS		5
++#define XDMA_BD_CLEANUP_THRESHOLD	((XDMA_MAX_BD_CNT * 8) / 10)
++
++#define XDMA_FLAGS_WAIT_COMPLETE 1
++#define XDMA_FLAGS_TRYWAIT 2
++
++/* Platform data definition until ARM supports device tree */
++struct xdma_channel_config {
++	char *type;
++	unsigned int include_dre;
++	unsigned int datawidth;
++	unsigned int max_burst_len;
++	unsigned int irq;
++	unsigned int poll_mode;
++	unsigned int lite_mode;
++};
++
++struct xdma_device_config {
++	char *type;
++	char *name;
++	unsigned int include_sg;
++	unsigned int sg_include_stscntrl_strm;  /* dma only */
++	unsigned int channel_count;
++	struct xdma_channel_config *channel_config;
++};
++
++struct xdma_desc_hw {
++	xlnk_intptr_type next_desc;	/* 0x00 */
++#if XLNK_SYS_BIT_WIDTH == 32
++	u32 pad1;       /* 0x04 */
++#endif
++	xlnk_intptr_type src_addr;   /* 0x08 */
++#if XLNK_SYS_BIT_WIDTH == 32
++	u32 pad2;       /* 0x0c */
++#endif
++	u32 addr_vsize; /* 0x10 */
++	u32 hsize;       /* 0x14 */
++	u32 control;    /* 0x18 */
++	u32 status;     /* 0x1c */
++	u32 app[5];      /* 0x20 */
++	xlnk_intptr_type dmahead;
++#if XLNK_SYS_BIT_WIDTH == 32
++	u32 Reserved0;
++#endif
++	u32 sw_flag;	/* 0x3C */
++} __aligned(64);
++
++/* shared by all Xilinx DMA engines */
++struct xdma_regs {
++	u32 cr;        /* 0x00 Control Register */
++	u32 sr;        /* 0x04 Status Register */
++	u32 cdr;       /* 0x08 Current Descriptor Register */
++	u32 cdr_hi;
++	u32 tdr;       /* 0x10 Tail Descriptor Register */
++	u32 tdr_hi;
++	u32 src;       /* 0x18 Source Address Register (cdma) */
++	u32 src_hi;
++	u32 dst;       /* 0x20 Destination Address Register (cdma) */
++	u32 dst_hi;
++	u32 btt_ref;   /* 0x28 Bytes To Transfer (cdma) or
++			*		park_ref (vdma)
++			*/
++	u32 version;   /* 0x2c version (vdma) */
++};
++
++/* Per DMA specific operations should be embedded in the channel structure */
++struct xdma_chan {
++	char name[64];
++	struct xdma_regs __iomem *regs;
++	struct device *dev;			/* The dma device */
++	struct xdma_desc_hw *bds[XDMA_MAX_BD_CNT];
++	dma_addr_t bd_phys_addr;
++	u32 bd_chain_size;
++	int bd_cur;
++	int bd_tail;
++	unsigned int bd_used;			/* # of BDs passed to hw chan */
++	enum dma_data_direction direction;	/* Transfer direction */
++	int id;					/* Channel ID */
++	int irq;				/* Channel IRQ */
++	int poll_mode;				/* Poll mode turned on? */
++	spinlock_t lock;			/* Descriptor operation lock */
++	struct tasklet_struct tasklet;		/* Cleanup work after irq */
++	struct tasklet_struct dma_err_tasklet;	/* Cleanup work after irq */
++	int    max_len;				/* Maximum len per transfer */
++	int    err;				/* Channel has errors */
++	int    client_count;
++};
++
++struct xdma_device {
++	void __iomem *regs;
++	struct device *dev;
++	struct list_head node;
++	struct xdma_chan *chan[XDMA_MAX_CHANS_PER_DEVICE];
++	u8 channel_count;
++};
++
++struct xdma_head {
++	xlnk_intptr_type userbuf;
++	unsigned int size;
++	unsigned int dmaflag;
++	enum dma_data_direction dmadir;
++	struct scatterlist *sglist;
++	unsigned int sgcnt;
++	struct scatterlist *pagelist;
++	unsigned int pagecnt;
++	struct completion cmp;
++	struct xdma_chan *chan;
++	unsigned int nappwords_o;
++	u32 appwords_o[XDMA_MAX_APPWORDS];
++	unsigned int userflag;
++	u32 last_bd_index;
++	struct xlnk_dmabuf_reg *dmabuf;
++};
++
++struct xdma_chan *xdma_request_channel(char *name);
++void xdma_release_channel(struct xdma_chan *chan);
++void xdma_release_all_channels(void);
++int xdma_submit(struct xdma_chan *chan,
++		xlnk_intptr_type userbuf,
++		void *kaddr,
++		unsigned int size,
++		unsigned int nappwords_i,
++		u32 *appwords_i,
++		unsigned int nappwords_o,
++		unsigned int user_flags,
++		struct xdma_head **dmaheadpp,
++		struct xlnk_dmabuf_reg *dp);
++int xdma_wait(struct xdma_head *dmahead,
++	      unsigned int user_flags,
++	      unsigned int *operating_flags);
++int xdma_getconfig(struct xdma_chan *chan,
++		   unsigned char *irq_thresh,
++		   unsigned char *irq_delay);
++int xdma_setconfig(struct xdma_chan *chan,
++		   unsigned char irq_thresh,
++		   unsigned char irq_delay);
++unsigned int xlate_irq(unsigned int hwirq);
++
++#endif
+diff --git a/drivers/staging/apf/xlnk-eng.c b/drivers/staging/apf/xlnk-eng.c
+new file mode 100644
+index 000000000..399838300
+--- /dev/null
++++ b/drivers/staging/apf/xlnk-eng.c
+@@ -0,0 +1,241 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx XLNK Engine Driver
++ *
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/io.h>
++#include <linux/spinlock_types.h>
++#include <linux/slab.h>
++#include <linux/platform_device.h>
++#include <linux/interrupt.h>
++#include <linux/mutex.h>
++#include <linux/string.h>
++#include <linux/uio_driver.h>
++
++
++#include "xlnk-eng.h"
++
++static DEFINE_MUTEX(xlnk_eng_list_mutex);
++static LIST_HEAD(xlnk_eng_list);
++
++int xlnk_eng_register_device(struct xlnk_eng_device *xlnk_dev)
++{
++	mutex_lock(&xlnk_eng_list_mutex);
++	/* todo: need to add more error checking */
++
++	list_add_tail(&xlnk_dev->global_node, &xlnk_eng_list);
++
++	mutex_unlock(&xlnk_eng_list_mutex);
++
++	return 0;
++}
++EXPORT_SYMBOL(xlnk_eng_register_device);
++
++
++void xlnk_eng_unregister_device(struct xlnk_eng_device *xlnk_dev)
++{
++	mutex_lock(&xlnk_eng_list_mutex);
++	/* todo: need to add more error checking */
++
++	list_del(&xlnk_dev->global_node);
++
++	mutex_unlock(&xlnk_eng_list_mutex);
++}
++EXPORT_SYMBOL(xlnk_eng_unregister_device);
++
++struct xlnk_eng_device *xlnk_eng_request_by_name(char *name)
++{
++	struct xlnk_eng_device *device, *_d;
++	int found = 0;
++
++	mutex_lock(&xlnk_eng_list_mutex);
++
++	list_for_each_entry_safe(device, _d, &xlnk_eng_list, global_node) {
++		if (!strcmp(dev_name(device->dev), name)) {
++			found = 1;
++			break;
++		}
++	}
++	if (found)
++		device = device->alloc(device);
++	else
++		device = NULL;
++
++	mutex_unlock(&xlnk_eng_list_mutex);
++
++	return device;
++}
++EXPORT_SYMBOL(xlnk_eng_request_by_name);
++
++/**
++ * struct xilinx_xlnk_eng_device - device structure for xilinx_xlnk_eng
++ * @common:	common device info
++ * @base:	base address for device
++ * @lock:	lock used by device
++ * @cnt:	usage count
++ * @info:	info for registering and unregistering uio device
++ */
++struct xilinx_xlnk_eng_device {
++	struct xlnk_eng_device common;
++	void __iomem *base;
++	spinlock_t lock;
++	int cnt;
++	struct uio_info *info;
++};
++
++static void xlnk_eng_release(struct device *dev)
++{
++	struct xilinx_xlnk_eng_device *xdev;
++	struct xlnk_eng_device *xlnk_dev;
++
++	xdev = dev_get_drvdata(dev);
++	xlnk_dev = &xdev->common;
++	if (!xlnk_dev)
++		return;
++
++	xlnk_dev->free(xlnk_dev);
++}
++
++#define DRIVER_NAME "xilinx-xlnk-eng"
++
++#define to_xilinx_xlnk(dev)	container_of(dev, \
++					struct xilinx_xlnk_eng_device, common)
++
++static struct xlnk_eng_device *xilinx_xlnk_alloc(
++					struct xlnk_eng_device *xlnkdev)
++{
++	struct xilinx_xlnk_eng_device *xdev;
++	struct xlnk_eng_device *retdev;
++
++	xdev = to_xilinx_xlnk(xlnkdev);
++
++	if (xdev->cnt == 0) {
++		xdev->cnt++;
++		retdev = xlnkdev;
++	} else
++		retdev = NULL;
++
++	return retdev;
++}
++
++static void xilinx_xlnk_free(struct xlnk_eng_device *xlnkdev)
++{
++	struct xilinx_xlnk_eng_device *xdev;
++
++	xdev = to_xilinx_xlnk(xlnkdev);
++
++	xdev->cnt = 0;
++}
++
++static int xlnk_eng_probe(struct platform_device *pdev)
++{
++	struct resource *res;
++	struct xilinx_xlnk_eng_device *xdev;
++	struct uio_info *info;
++	char *devname;
++
++	pr_info("xlnk_eng_probe ...\n");
++	xdev = devm_kzalloc(&pdev->dev, sizeof(*xdev), GFP_KERNEL);
++	if (!xdev) {
++		dev_err(&pdev->dev, "Not enough memory for device\n");
++		return -ENOMEM;
++	}
++
++	/* more error handling */
++	info = devm_kzalloc(&pdev->dev, sizeof(*info), GFP_KERNEL);
++	if (!info) {
++		dev_err(&pdev->dev, "Not enough memory for device\n");
++		return -ENOMEM;
++	}
++	xdev->info = info;
++	devname = devm_kzalloc(&pdev->dev, 64, GFP_KERNEL);
++	if (!devname) {
++		dev_err(&pdev->dev, "Not enough memory for device\n");
++		return -ENOMEM;
++	}
++	sprintf(devname, "%s.%d", DRIVER_NAME, pdev->id);
++	pr_info("uio name %s\n", devname);
++	/* iomap registers */
++
++	/* Get the data from the platform device */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	xdev->base = devm_ioremap_resource(&pdev->dev, res);
++
++	/* %pa types should be used here */
++	dev_info(&pdev->dev, "physical base : 0x%lx\n",
++		(unsigned long)res->start);
++	dev_info(&pdev->dev, "register range : 0x%lx\n",
++		(unsigned long)resource_size(res));
++	dev_info(&pdev->dev, "base remapped to: 0x%lx\n",
++		(unsigned long)xdev->base);
++	if (!xdev->base) {
++		dev_err(&pdev->dev, "unable to iomap registers\n");
++		return -ENOMEM;
++	}
++
++	info->mem[0].addr = res->start;
++	info->mem[0].size = resource_size(res);
++	info->mem[0].memtype = UIO_MEM_PHYS;
++	info->mem[0].internal_addr = xdev->base;
++
++	/* info->name = DRIVER_NAME; */
++	info->name = devname;
++	info->version = "0.0.1";
++
++	info->irq = -1;
++
++	xdev->common.dev = &pdev->dev;
++
++	xdev->common.alloc = xilinx_xlnk_alloc;
++	xdev->common.free = xilinx_xlnk_free;
++	xdev->common.dev->release = xlnk_eng_release;
++
++	dev_set_drvdata(&pdev->dev, xdev);
++
++	spin_lock_init(&xdev->lock);
++
++	xdev->cnt = 0;
++
++	xlnk_eng_register_device(&xdev->common);
++
++	if (uio_register_device(&pdev->dev, info)) {
++		dev_err(&pdev->dev, "uio_register_device failed\n");
++		return -ENODEV;
++	}
++	dev_info(&pdev->dev, "xilinx-xlnk-eng uio registered\n");
++
++	return 0;
++}
++
++static int xlnk_eng_remove(struct platform_device *pdev)
++{
++	struct uio_info *info;
++	struct xilinx_xlnk_eng_device *xdev;
++
++	xdev = dev_get_drvdata(&pdev->dev);
++	info = xdev->info;
++
++	uio_unregister_device(info);
++	dev_info(&pdev->dev, "xilinx-xlnk-eng uio unregistered\n");
++	xlnk_eng_unregister_device(&xdev->common);
++
++	return 0;
++}
++
++static struct platform_driver xlnk_eng_driver = {
++	.probe = xlnk_eng_probe,
++	.remove = xlnk_eng_remove,
++	.driver = {
++		.owner = THIS_MODULE,
++		.name = DRIVER_NAME,
++	},
++};
++
++module_platform_driver(xlnk_eng_driver);
++
++MODULE_DESCRIPTION("Xilinx xlnk engine generic driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/staging/apf/xlnk-eng.h b/drivers/staging/apf/xlnk-eng.h
+new file mode 100644
+index 000000000..3961e7b85
+--- /dev/null
++++ b/drivers/staging/apf/xlnk-eng.h
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Xilinx XLNK Engine Driver
++ *
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#ifndef XLNK_ENG_H
++#define XLNK_ENG_H
++
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/io.h>
++#include <linux/spinlock_types.h>
++#include <linux/slab.h>
++#include <linux/platform_device.h>
++#include <linux/interrupt.h>
++#include <linux/mutex.h>
++#include <linux/string.h>
++
++struct xlnk_eng_device {
++	struct list_head global_node;
++	struct xlnk_eng_device * (*alloc)(struct xlnk_eng_device *xdev);
++	void (*free)(struct xlnk_eng_device *xdev);
++	struct device *dev;
++};
++extern int xlnk_eng_register_device(struct xlnk_eng_device *xlnk_dev);
++extern void xlnk_eng_unregister_device(struct xlnk_eng_device *xlnk_dev);
++extern struct xlnk_eng_device *xlnk_eng_request_by_name(char *name);
++
++#endif
++
+diff --git a/drivers/staging/apf/xlnk-ioctl.h b/drivers/staging/apf/xlnk-ioctl.h
+new file mode 100644
+index 000000000..d29d557f9
+--- /dev/null
++++ b/drivers/staging/apf/xlnk-ioctl.h
+@@ -0,0 +1,42 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#ifndef _XLNK_IOCTL_H
++#define _XLNK_IOCTL_H
++
++#include <linux/ioctl.h>
++
++#define XLNK_IOC_MAGIC 'X'
++
++#define XLNK_IOCRESET		_IO(XLNK_IOC_MAGIC, 0)
++
++#define XLNK_IOCALLOCBUF	_IOWR(XLNK_IOC_MAGIC, 2, unsigned long)
++#define XLNK_IOCFREEBUF		_IOWR(XLNK_IOC_MAGIC, 3, unsigned long)
++#define XLNK_IOCADDDMABUF	_IOWR(XLNK_IOC_MAGIC, 4, unsigned long)
++#define XLNK_IOCCLEARDMABUF	_IOWR(XLNK_IOC_MAGIC, 5, unsigned long)
++
++#define XLNK_IOCDMAREQUEST	_IOWR(XLNK_IOC_MAGIC, 7, unsigned long)
++#define XLNK_IOCDMASUBMIT	_IOWR(XLNK_IOC_MAGIC, 8, unsigned long)
++#define XLNK_IOCDMAWAIT		_IOWR(XLNK_IOC_MAGIC, 9, unsigned long)
++#define XLNK_IOCDMARELEASE	_IOWR(XLNK_IOC_MAGIC, 10, unsigned long)
++
++#define XLNK_IOCMEMOP		_IOWR(XLNK_IOC_MAGIC, 25, unsigned long)
++#define XLNK_IOCDEVREGISTER	_IOWR(XLNK_IOC_MAGIC, 16, unsigned long)
++#define XLNK_IOCDMAREGISTER	_IOWR(XLNK_IOC_MAGIC, 17, unsigned long)
++#define XLNK_IOCDEVUNREGISTER	_IOWR(XLNK_IOC_MAGIC, 18, unsigned long)
++#define XLNK_IOCCDMAREQUEST	_IOWR(XLNK_IOC_MAGIC, 19, unsigned long)
++#define XLNK_IOCCDMASUBMIT	_IOWR(XLNK_IOC_MAGIC, 20, unsigned long)
++#define XLNK_IOCMCDMAREGISTER	_IOWR(XLNK_IOC_MAGIC, 23, unsigned long)
++#define XLNK_IOCCACHECTRL	_IOWR(XLNK_IOC_MAGIC, 24, unsigned long)
++
++#define XLNK_IOCIRQREGISTER	_IOWR(XLNK_IOC_MAGIC, 35, unsigned long)
++#define XLNK_IOCIRQUNREGISTER	_IOWR(XLNK_IOC_MAGIC, 36, unsigned long)
++#define XLNK_IOCIRQWAIT		_IOWR(XLNK_IOC_MAGIC, 37, unsigned long)
++
++#define XLNK_IOCSHUTDOWN	_IOWR(XLNK_IOC_MAGIC, 100, unsigned long)
++#define XLNK_IOCRECRES		_IOWR(XLNK_IOC_MAGIC, 101, unsigned long)
++#define XLNK_IOC_MAXNR		101
++
++#endif
+diff --git a/drivers/staging/apf/xlnk-sysdef.h b/drivers/staging/apf/xlnk-sysdef.h
+new file mode 100644
+index 000000000..d6304b44d
+--- /dev/null
++++ b/drivers/staging/apf/xlnk-sysdef.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#ifndef XLNK_SYSDEF_H
++#define XLNK_SYSDEF_H
++
++#if __SIZEOF_POINTER__  == 4
++	#define XLNK_SYS_BIT_WIDTH 32
++#elif __SIZEOF_POINTER__  == 8
++	#define XLNK_SYS_BIT_WIDTH 64
++#endif
++
++#include <linux/types.h>
++
++#if XLNK_SYS_BIT_WIDTH == 32
++
++	typedef u32 xlnk_intptr_type;
++	typedef s32 xlnk_int_type;
++	typedef u32 xlnk_uint_type;
++	typedef u8 xlnk_byte_type;
++	typedef s8 xlnk_char_type;
++	#define xlnk_enum_type s32
++
++#elif XLNK_SYS_BIT_WIDTH == 64
++
++	typedef u64 xlnk_intptr_type;
++	typedef s32 xlnk_int_type;
++	typedef u32 xlnk_uint_type;
++	typedef u8 xlnk_byte_type;
++	typedef s8 xlnk_char_type;
++	#define xlnk_enum_type s32
++
++#else
++	#error "Please define application bit width and system bit width"
++#endif
++
++#endif
+diff --git a/drivers/staging/apf/xlnk.c b/drivers/staging/apf/xlnk.c
+new file mode 100644
+index 000000000..9f847057e
+--- /dev/null
++++ b/drivers/staging/apf/xlnk.c
+@@ -0,0 +1,1511 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx Accelerator driver support.
++ *
++ * Copyright (C) 2010 Xilinx Inc.
++ */
++
++/*  ----------------------------------- Host OS */
++
++#include <asm/cacheflush.h>
++
++#include <linux/cdev.h>
++#include <linux/completion.h>
++#include <linux/device.h>
++#include <linux/dma-buf.h>
++#include <linux/dma-map-ops.h>
++#include <linux/dma-mapping.h>
++#include <linux/errno.h>
++#include <linux/fs.h>
++#include <linux/gfp.h>
++#include <linux/io.h>
++#include <linux/list.h>
++#include <linux/mm.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/pagemap.h>
++#include <linux/platform_device.h>
++#include <linux/pm.h>
++#include <linux/sched.h>
++#include <linux/semaphore.h>
++#include <linux/slab.h>
++#include <linux/types.h>
++#include <linux/uaccess.h>
++#include <linux/wait.h>
++
++#include "xlnk-ioctl.h"
++#include "xlnk-sysdef.h"
++#include "xlnk.h"
++
++#ifdef CONFIG_XILINX_DMA_APF
++#include "xilinx-dma-apf.h"
++#endif
++
++#define DRIVER_NAME  "xlnk"
++
++static struct platform_device *xlnk_pdev;
++static struct device *xlnk_dev;
++
++static struct cdev xlnk_cdev;
++
++static struct class *xlnk_class;
++
++static s32 driver_major;
++
++static void *xlnk_dev_buf;
++static ssize_t xlnk_dev_size;
++
++#define XLNK_BUF_POOL_SIZE	4096
++static void *xlnk_bufpool[XLNK_BUF_POOL_SIZE];
++static void *xlnk_bufpool_alloc_point[XLNK_BUF_POOL_SIZE];
++static xlnk_intptr_type xlnk_userbuf[XLNK_BUF_POOL_SIZE];
++static int xlnk_buf_process[XLNK_BUF_POOL_SIZE];
++static dma_addr_t xlnk_phyaddr[XLNK_BUF_POOL_SIZE];
++static size_t xlnk_buflen[XLNK_BUF_POOL_SIZE];
++static unsigned int xlnk_bufcacheable[XLNK_BUF_POOL_SIZE];
++static struct file *xlnk_buf_filp[XLNK_BUF_POOL_SIZE];
++static spinlock_t xlnk_buf_lock;
++
++#define XLNK_IRQ_POOL_SIZE 256
++static struct xlnk_irq_control *xlnk_irq_set[XLNK_IRQ_POOL_SIZE];
++static spinlock_t xlnk_irq_lock;
++
++LIST_HEAD(xlnk_dmabuf_list);
++
++#define MAX_XLNK_DMAS 128
++
++struct xlnk_device_pack {
++	char name[64];
++	struct platform_device pdev;
++	struct resource res[8];
++	int refs;
++
++#ifdef CONFIG_XILINX_DMA_APF
++	struct xdma_channel_config dma_chan_cfg[4];  /* for xidane dma only */
++	struct xdma_device_config dma_dev_cfg;	   /* for xidane dma only */
++#endif
++};
++
++static struct semaphore xlnk_devpack_sem;
++static struct xlnk_device_pack *xlnk_devpacks[MAX_XLNK_DMAS];
++static void xlnk_devpacks_init(void)
++{
++	unsigned int i;
++
++	sema_init(&xlnk_devpack_sem, 1);
++	for (i = 0; i < MAX_XLNK_DMAS; i++)
++		xlnk_devpacks[i] = NULL;
++}
++
++static struct xlnk_device_pack *xlnk_devpacks_alloc(void)
++{
++	unsigned int i;
++
++	for (i = 0; i < MAX_XLNK_DMAS; i++) {
++		if (!xlnk_devpacks[i]) {
++			struct xlnk_device_pack *ret;
++
++			ret = kzalloc(sizeof(*ret), GFP_KERNEL);
++			ret->pdev.id = i;
++			xlnk_devpacks[i] = ret;
++
++			return ret;
++		}
++	}
++
++	return NULL;
++}
++
++static void xlnk_devpacks_delete(struct xlnk_device_pack *devpack)
++{
++	unsigned int i;
++
++	for (i = 0; i < MAX_XLNK_DMAS; i++)
++		if (xlnk_devpacks[i] == devpack)
++			xlnk_devpacks[i] = NULL;
++	kfree(devpack);
++}
++
++static struct xlnk_device_pack *xlnk_devpacks_find(xlnk_intptr_type base)
++{
++	unsigned int i;
++
++	for (i = 0; i < MAX_XLNK_DMAS; i++) {
++		if (xlnk_devpacks[i] &&
++		    xlnk_devpacks[i]->res[0].start == base)
++			return xlnk_devpacks[i];
++	}
++	return NULL;
++}
++
++static void xlnk_devpacks_free(xlnk_intptr_type base)
++{
++	struct xlnk_device_pack *devpack;
++
++	down(&xlnk_devpack_sem);
++	devpack = xlnk_devpacks_find(base);
++	if (!devpack) {
++		up(&xlnk_devpack_sem);
++		return;
++	}
++	devpack->refs--;
++	if (devpack->refs) {
++		up(&xlnk_devpack_sem);
++		return;
++	}
++	platform_device_unregister(&devpack->pdev);
++	xlnk_devpacks_delete(devpack);
++	kfree(devpack);
++	up(&xlnk_devpack_sem);
++}
++
++static void xlnk_devpacks_free_all(void)
++{
++	struct xlnk_device_pack *devpack;
++	unsigned int i;
++
++	for (i = 0; i < MAX_XLNK_DMAS; i++) {
++		devpack = xlnk_devpacks[i];
++		if (devpack) {
++			platform_device_unregister(&devpack->pdev);
++			xlnk_devpacks_delete(devpack);
++			kfree(devpack);
++		}
++	}
++}
++
++static int xlnk_buf_findnull(void)
++{
++	int i;
++
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++) {
++		if (!xlnk_bufpool[i])
++			return i;
++	}
++
++	return 0;
++}
++
++static int xlnk_buf_find_by_phys_addr(xlnk_intptr_type addr)
++{
++	int i;
++
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++) {
++		if (xlnk_bufpool[i] &&
++		    xlnk_phyaddr[i] <= addr &&
++		    xlnk_phyaddr[i] + xlnk_buflen[i] > addr)
++			return i;
++	}
++
++	return 0;
++}
++
++static int xlnk_buf_find_by_user_addr(xlnk_intptr_type addr, int pid)
++{
++	int i;
++
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++) {
++		if (xlnk_bufpool[i] &&
++		    xlnk_buf_process[i] == pid &&
++		    xlnk_userbuf[i] <= addr &&
++		    xlnk_userbuf[i] + xlnk_buflen[i] > addr)
++			return i;
++	}
++
++	return 0;
++}
++
++/*
++ * allocate and return an id
++ * id must be a positve number
++ */
++static int xlnk_allocbuf(struct file *filp, unsigned int len,
++			 unsigned int cacheable)
++{
++	int id;
++	void *kaddr;
++	dma_addr_t phys_addr_anchor;
++
++	kaddr = dma_alloc_attrs(xlnk_dev,
++				len,
++				&phys_addr_anchor,
++				GFP_KERNEL | GFP_DMA,
++				0);
++	if (!kaddr)
++		return -ENOMEM;
++
++	spin_lock(&xlnk_buf_lock);
++	id = xlnk_buf_findnull();
++	if (id > 0 && id < XLNK_BUF_POOL_SIZE) {
++		xlnk_bufpool_alloc_point[id] = kaddr;
++		xlnk_bufpool[id] = kaddr;
++		xlnk_buflen[id] = len;
++		xlnk_bufcacheable[id] = cacheable;
++		xlnk_phyaddr[id] = phys_addr_anchor;
++		xlnk_buf_filp[id] = filp;
++	}
++	spin_unlock(&xlnk_buf_lock);
++
++	if (id <= 0 || id >= XLNK_BUF_POOL_SIZE)
++		return -ENOMEM;
++
++	return id;
++}
++
++static u64 dma_mask = 0xFFFFFFFFFFFFFFFFull;
++
++static int xlnk_devregister(char *name,
++			    unsigned int id,
++			    xlnk_intptr_type base,
++			    unsigned int size,
++			    unsigned int *irqs,
++			    xlnk_intptr_type *handle)
++{
++	unsigned int nres;
++	unsigned int nirq;
++	unsigned int *irqptr;
++	struct xlnk_device_pack *devpack;
++	unsigned int i;
++	int status;
++
++	down(&xlnk_devpack_sem);
++	devpack = xlnk_devpacks_find(base);
++	if (devpack) {
++		*handle = (xlnk_intptr_type)devpack;
++		devpack->refs++;
++		status = 0;
++	} else {
++		nirq = 0;
++		irqptr = irqs;
++
++		while (*irqptr) {
++			nirq++;
++			irqptr++;
++		}
++
++		if (nirq > 7) {
++			up(&xlnk_devpack_sem);
++			return -ENOMEM;
++		}
++
++		nres = nirq + 1;
++
++		devpack = xlnk_devpacks_alloc();
++		if (!devpack) {
++			up(&xlnk_devpack_sem);
++			pr_err("Failed to allocate device %s\n", name);
++			return -ENOMEM;
++		}
++		strcpy(devpack->name, name);
++		devpack->pdev.name = devpack->name;
++
++		devpack->pdev.dev.dma_mask = &dma_mask;
++		devpack->pdev.dev.coherent_dma_mask = dma_mask;
++
++		devpack->res[0].start = base;
++		devpack->res[0].end = base + size - 1;
++		devpack->res[0].flags = IORESOURCE_MEM;
++
++		for (i = 0; i < nirq; i++) {
++			devpack->res[i + 1].start = irqs[i];
++			devpack->res[i + 1].end = irqs[i];
++			devpack->res[i + 1].flags = IORESOURCE_IRQ;
++		}
++
++		devpack->pdev.resource = devpack->res;
++		devpack->pdev.num_resources = nres;
++
++		status = platform_device_register(&devpack->pdev);
++		if (status) {
++			xlnk_devpacks_delete(devpack);
++			*handle = 0;
++		} else {
++			*handle = (xlnk_intptr_type)devpack;
++		}
++	}
++	up(&xlnk_devpack_sem);
++
++	return status;
++}
++
++static int xlnk_dmaregister(char *name,
++			    unsigned int id,
++			    xlnk_intptr_type base,
++			    unsigned int size,
++			    unsigned int chan_num,
++			    unsigned int chan0_dir,
++			    unsigned int chan0_irq,
++			    unsigned int chan0_poll_mode,
++			    unsigned int chan0_include_dre,
++			    unsigned int chan0_data_width,
++			    unsigned int chan1_dir,
++			    unsigned int chan1_irq,
++			    unsigned int chan1_poll_mode,
++			    unsigned int chan1_include_dre,
++			    unsigned int chan1_data_width,
++			    xlnk_intptr_type *handle)
++{
++	int status = 0;
++
++#ifdef CONFIG_XILINX_DMA_APF
++
++	struct xlnk_device_pack *devpack;
++
++	if (chan_num < 1 || chan_num > 2) {
++		pr_err("%s: Expected either 1 or 2 channels, got %d\n",
++		       __func__, chan_num);
++		return -EINVAL;
++	}
++
++	down(&xlnk_devpack_sem);
++	devpack = xlnk_devpacks_find(base);
++	if (devpack) {
++		*handle = (xlnk_intptr_type)devpack;
++		devpack->refs++;
++		status = 0;
++	} else {
++		devpack = xlnk_devpacks_alloc();
++		if (!devpack) {
++			up(&xlnk_devpack_sem);
++			return -ENOMEM;
++		}
++		strcpy(devpack->name, name);
++		devpack->pdev.name = "xilinx-axidma";
++
++		devpack->dma_chan_cfg[0].include_dre = chan0_include_dre;
++		devpack->dma_chan_cfg[0].datawidth = chan0_data_width;
++		devpack->dma_chan_cfg[0].irq = chan0_irq;
++		devpack->dma_chan_cfg[0].poll_mode = chan0_poll_mode;
++		devpack->dma_chan_cfg[0].type =
++			(chan0_dir == XLNK_DMA_FROM_DEVICE) ?
++				"axi-dma-s2mm-channel" :
++				"axi-dma-mm2s-channel";
++
++		if (chan_num > 1) {
++			devpack->dma_chan_cfg[1].include_dre =
++				chan1_include_dre;
++			devpack->dma_chan_cfg[1].datawidth = chan1_data_width;
++			devpack->dma_chan_cfg[1].irq = chan1_irq;
++			devpack->dma_chan_cfg[1].poll_mode = chan1_poll_mode;
++			devpack->dma_chan_cfg[1].type =
++				(chan1_dir == XLNK_DMA_FROM_DEVICE) ?
++					"axi-dma-s2mm-channel" :
++					"axi-dma-mm2s-channel";
++		}
++
++		devpack->dma_dev_cfg.name = devpack->name;
++		devpack->dma_dev_cfg.type = "axi-dma";
++		devpack->dma_dev_cfg.include_sg = 1;
++		devpack->dma_dev_cfg.sg_include_stscntrl_strm = 1;
++		devpack->dma_dev_cfg.channel_count = chan_num;
++		devpack->dma_dev_cfg.channel_config = &devpack->dma_chan_cfg[0];
++
++		devpack->pdev.dev.platform_data = &devpack->dma_dev_cfg;
++
++		devpack->pdev.dev.dma_mask = &dma_mask;
++		devpack->pdev.dev.coherent_dma_mask = dma_mask;
++
++		devpack->res[0].start = base;
++		devpack->res[0].end = base + size - 1;
++		devpack->res[0].flags = IORESOURCE_MEM;
++
++		devpack->pdev.resource = devpack->res;
++		devpack->pdev.num_resources = 1;
++		status = platform_device_register(&devpack->pdev);
++		if (status) {
++			xlnk_devpacks_delete(devpack);
++			*handle = 0;
++		} else {
++			*handle = (xlnk_intptr_type)devpack;
++		}
++	}
++	up(&xlnk_devpack_sem);
++
++#endif
++	return status;
++}
++
++static int xlnk_allocbuf_ioctl(struct file *filp,
++			       unsigned int code,
++			       unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	xlnk_int_type id;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	id = xlnk_allocbuf(filp, temp_args.allocbuf.len,
++			   temp_args.allocbuf.cacheable);
++
++	if (id <= 0)
++		return -ENOMEM;
++
++	temp_args.allocbuf.id = id;
++	temp_args.allocbuf.phyaddr = (xlnk_intptr_type)(xlnk_phyaddr[id]);
++	status = copy_to_user((void __user *)args,
++			      &temp_args,
++			      sizeof(union xlnk_args));
++
++	return status;
++}
++
++static int xlnk_freebuf(int id)
++{
++	void *alloc_point;
++	dma_addr_t p_addr;
++	size_t buf_len;
++
++	if (id <= 0 || id >= XLNK_BUF_POOL_SIZE)
++		return -ENOMEM;
++
++	if (!xlnk_bufpool[id])
++		return -ENOMEM;
++
++	spin_lock(&xlnk_buf_lock);
++	alloc_point = xlnk_bufpool_alloc_point[id];
++	p_addr = xlnk_phyaddr[id];
++	buf_len = xlnk_buflen[id];
++	xlnk_bufpool[id] = NULL;
++	xlnk_phyaddr[id] = (dma_addr_t)NULL;
++	xlnk_buflen[id] = 0;
++	xlnk_buf_filp[id] = NULL;
++	xlnk_bufcacheable[id] = 0;
++	spin_unlock(&xlnk_buf_lock);
++
++	dma_free_attrs(xlnk_dev,
++		       buf_len,
++		       alloc_point,
++		       p_addr,
++		       0);
++
++	return 0;
++}
++
++static void xlnk_free_all_buf(void)
++{
++	int i;
++
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++)
++		xlnk_freebuf(i);
++}
++
++static int xlnk_freebuf_ioctl(struct file *filp,
++			      unsigned int code,
++			      unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	int id;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	id = temp_args.freebuf.id;
++	return xlnk_freebuf(id);
++}
++
++static int xlnk_adddmabuf_ioctl(struct file *filp,
++				unsigned int code,
++				unsigned long args)
++{
++	union xlnk_args temp_args;
++	struct xlnk_dmabuf_reg *db;
++	int status;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	spin_lock(&xlnk_buf_lock);
++	list_for_each_entry(db, &xlnk_dmabuf_list, list) {
++		if (db->user_vaddr == temp_args.dmasubmit.buf) {
++			pr_err("Attempting to register DMA-BUF for addr %llx that is already registered\n",
++			       (unsigned long long)temp_args.dmabuf.user_addr);
++			spin_unlock(&xlnk_buf_lock);
++			return -EINVAL;
++		}
++	}
++	spin_unlock(&xlnk_buf_lock);
++
++	db = kzalloc(sizeof(*db), GFP_KERNEL);
++	if (!db)
++		return -ENOMEM;
++
++	db->dmabuf_fd = temp_args.dmabuf.dmabuf_fd;
++	db->user_vaddr = temp_args.dmabuf.user_addr;
++	db->dbuf = dma_buf_get(db->dmabuf_fd);
++	db->dbuf_attach = dma_buf_attach(db->dbuf, xlnk_dev);
++	if (IS_ERR(db->dbuf_attach)) {
++		dma_buf_put(db->dbuf);
++		pr_err("Failed DMA-BUF attach\n");
++		return -EINVAL;
++	}
++
++	db->dbuf_sg_table = dma_buf_map_attachment(db->dbuf_attach,
++						   DMA_BIDIRECTIONAL);
++
++	if (!db->dbuf_sg_table) {
++		pr_err("Failed DMA-BUF map_attachment\n");
++		dma_buf_detach(db->dbuf, db->dbuf_attach);
++		dma_buf_put(db->dbuf);
++		return -EINVAL;
++	}
++
++	spin_lock(&xlnk_buf_lock);
++	INIT_LIST_HEAD(&db->list);
++	list_add_tail(&db->list, &xlnk_dmabuf_list);
++	spin_unlock(&xlnk_buf_lock);
++
++	return 0;
++}
++
++static int xlnk_cleardmabuf_ioctl(struct file *filp,
++				  unsigned int code,
++				  unsigned long args)
++{
++	union xlnk_args temp_args;
++	struct xlnk_dmabuf_reg *dp, *dp_temp;
++	int status;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	spin_lock(&xlnk_buf_lock);
++	list_for_each_entry_safe(dp, dp_temp, &xlnk_dmabuf_list, list) {
++		if (dp->user_vaddr == temp_args.dmabuf.user_addr) {
++			dma_buf_unmap_attachment(dp->dbuf_attach,
++						 dp->dbuf_sg_table,
++						 DMA_BIDIRECTIONAL);
++			dma_buf_detach(dp->dbuf, dp->dbuf_attach);
++			dma_buf_put(dp->dbuf);
++			list_del(&dp->list);
++			spin_unlock(&xlnk_buf_lock);
++			kfree(dp);
++			return 0;
++		}
++	}
++	spin_unlock(&xlnk_buf_lock);
++	pr_err("Attempting to unregister a DMA-BUF that was not registered at addr %llx\n",
++	       (unsigned long long)temp_args.dmabuf.user_addr);
++
++	return 1;
++}
++
++static int xlnk_dmarequest_ioctl(struct file *filp, unsigned int code,
++				 unsigned long args)
++{
++#ifdef CONFIG_XILINX_DMA_APF
++	union xlnk_args temp_args;
++	int status;
++	struct xdma_chan *chan;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	if (!temp_args.dmarequest.name[0])
++		return 0;
++
++	down(&xlnk_devpack_sem);
++	chan = xdma_request_channel(temp_args.dmarequest.name);
++	up(&xlnk_devpack_sem);
++	if (!chan)
++		return -ENOMEM;
++	temp_args.dmarequest.dmachan = (xlnk_intptr_type)chan;
++	temp_args.dmarequest.bd_space_phys_addr = chan->bd_phys_addr;
++	temp_args.dmarequest.bd_space_size = chan->bd_chain_size;
++
++	if (copy_to_user((void __user *)args,
++			 &temp_args,
++			 sizeof(union xlnk_args)))
++		return -EFAULT;
++
++	return 0;
++#else
++	return -1;
++#endif
++}
++
++static int xlnk_dmasubmit_ioctl(struct file *filp, unsigned int code,
++				unsigned long args)
++{
++#ifdef CONFIG_XILINX_DMA_APF
++	union xlnk_args temp_args;
++	struct xdma_head *dmahead;
++	struct xlnk_dmabuf_reg *dp, *cp = NULL;
++	int buf_id;
++	void *kaddr = NULL;
++	int status = -1;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	if (!temp_args.dmasubmit.dmachan)
++		return -ENODEV;
++
++	spin_lock(&xlnk_buf_lock);
++	buf_id = xlnk_buf_find_by_phys_addr(temp_args.dmasubmit.buf);
++	if (buf_id) {
++		xlnk_intptr_type addr_delta =
++			temp_args.dmasubmit.buf -
++			xlnk_phyaddr[buf_id];
++		kaddr = (u8 *)(xlnk_bufpool[buf_id]) + addr_delta;
++	} else {
++		list_for_each_entry(dp, &xlnk_dmabuf_list, list) {
++			if (dp->user_vaddr == temp_args.dmasubmit.buf) {
++				cp = dp;
++				break;
++			}
++		}
++	}
++	spin_unlock(&xlnk_buf_lock);
++
++	status = xdma_submit((struct xdma_chan *)
++					(temp_args.dmasubmit.dmachan),
++					temp_args.dmasubmit.buf,
++					kaddr,
++					temp_args.dmasubmit.len,
++					temp_args.dmasubmit.nappwords_i,
++					temp_args.dmasubmit.appwords_i,
++					temp_args.dmasubmit.nappwords_o,
++					temp_args.dmasubmit.flag,
++					&dmahead,
++					cp);
++
++	temp_args.dmasubmit.dmahandle = (xlnk_intptr_type)dmahead;
++	temp_args.dmasubmit.last_bd_index =
++		(xlnk_intptr_type)dmahead->last_bd_index;
++
++	if (!status) {
++		if (copy_to_user((void __user *)args,
++				 &temp_args,
++				 sizeof(union xlnk_args)))
++			return -EFAULT;
++	}
++	return status;
++#else
++	return -ENOMEM;
++#endif
++}
++
++static int xlnk_dmawait_ioctl(struct file *filp,
++			      unsigned int code,
++			      unsigned long args)
++{
++	int status = -1;
++#ifdef CONFIG_XILINX_DMA_APF
++	union xlnk_args temp_args;
++	struct xdma_head *dmahead;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	dmahead = (struct xdma_head *)temp_args.dmawait.dmahandle;
++	status = xdma_wait(dmahead,
++			   dmahead->userflag,
++			   &temp_args.dmawait.flags);
++	if (temp_args.dmawait.flags & XDMA_FLAGS_WAIT_COMPLETE) {
++		if (temp_args.dmawait.nappwords) {
++			memcpy(temp_args.dmawait.appwords,
++			       dmahead->appwords_o,
++			       dmahead->nappwords_o * sizeof(u32));
++		}
++		kfree(dmahead);
++	}
++	if (copy_to_user((void __user *)args,
++			 &temp_args,
++			 sizeof(union xlnk_args)))
++		return -EFAULT;
++#endif
++
++	return status;
++}
++
++static int xlnk_dmarelease_ioctl(struct file *filp, unsigned int code,
++				 unsigned long args)
++{
++	int status = -1;
++#ifdef CONFIG_XILINX_DMA_APF
++	union xlnk_args temp_args;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++	down(&xlnk_devpack_sem);
++	xdma_release_channel((struct xdma_chan *)
++			     (temp_args.dmarelease.dmachan));
++	up(&xlnk_devpack_sem);
++#endif
++
++	return status;
++}
++
++static int xlnk_devregister_ioctl(struct file *filp, unsigned int code,
++				  unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	xlnk_intptr_type handle;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	status = xlnk_devregister(temp_args.devregister.name,
++				  temp_args.devregister.id,
++				  temp_args.devregister.base,
++				  temp_args.devregister.size,
++				  temp_args.devregister.irqs,
++				  &handle);
++
++	return status;
++}
++
++static int xlnk_dmaregister_ioctl(struct file *filp, unsigned int code,
++				  unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	xlnk_intptr_type handle;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	status = xlnk_dmaregister(temp_args.dmaregister.name,
++				  temp_args.dmaregister.id,
++				  temp_args.dmaregister.base,
++				  temp_args.dmaregister.size,
++				  temp_args.dmaregister.chan_num,
++				  temp_args.dmaregister.chan0_dir,
++				  temp_args.dmaregister.chan0_irq,
++				  temp_args.dmaregister.chan0_poll_mode,
++				  temp_args.dmaregister.chan0_include_dre,
++				  temp_args.dmaregister.chan0_data_width,
++				  temp_args.dmaregister.chan1_dir,
++				  temp_args.dmaregister.chan1_irq,
++				  temp_args.dmaregister.chan1_poll_mode,
++				  temp_args.dmaregister.chan1_include_dre,
++				  temp_args.dmaregister.chan1_data_width,
++				  &handle);
++
++	return status;
++}
++
++static int xlnk_devunregister_ioctl(struct file *filp,
++				    unsigned int code,
++				    unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++
++	status = copy_from_user(&temp_args, (void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status)
++		return -ENOMEM;
++
++	xlnk_devpacks_free(temp_args.devunregister.base);
++
++	return 0;
++}
++
++static irqreturn_t xlnk_accel_isr(int irq, void *arg)
++{
++	struct xlnk_irq_control *irq_control = (struct xlnk_irq_control *)arg;
++
++	disable_irq_nosync(irq);
++	complete(&irq_control->cmp);
++
++	return IRQ_HANDLED;
++}
++
++static int xlnk_irq_register_ioctl(struct file *filp, unsigned int code,
++				   unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	int i;
++	struct xlnk_irq_control *ctrl;
++	int irq_id = -1;
++	int irq_entry_new = 0;
++
++	status = copy_from_user(&temp_args,
++				(void __user *)args,
++				sizeof(temp_args.irqregister));
++	if (status)
++		return -ENOMEM;
++
++	if (temp_args.irqregister.type !=
++	    (XLNK_IRQ_LEVEL | XLNK_IRQ_ACTIVE_HIGH)) {
++		dev_err(xlnk_dev, "Unsupported interrupt type %x\n",
++			temp_args.irqregister.type);
++		return -EINVAL;
++	}
++
++	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
++	if (!ctrl)
++		return -ENOMEM;
++
++	ctrl->irq = xlate_irq(temp_args.irqregister.irq);
++	ctrl->enabled = 0;
++	init_completion(&ctrl->cmp);
++
++	spin_lock(&xlnk_irq_lock);
++	for (i = 0; i < XLNK_IRQ_POOL_SIZE; i++) {
++		if (!xlnk_irq_set[i] && irq_id == -1) {
++			irq_entry_new = 1;
++			irq_id = i;
++			xlnk_irq_set[i] = ctrl;
++		} else if (xlnk_irq_set[i] &&
++			   xlnk_irq_set[i]->irq == ctrl->irq) {
++			irq_id = i;
++			break;
++		}
++	}
++	spin_unlock(&xlnk_irq_lock);
++
++	if (irq_id == -1) {
++		kfree(ctrl);
++		return -ENOMEM;
++	}
++
++	if (!irq_entry_new) {
++		kfree(ctrl);
++	} else {
++		status = request_irq(ctrl->irq,
++				     xlnk_accel_isr,
++				     IRQF_SHARED,
++				     "xlnk",
++				     ctrl);
++		if (status) {
++			enable_irq(ctrl->irq);
++			xlnk_irq_set[irq_id] = NULL;
++			kfree(ctrl);
++			return -EINVAL;
++		}
++		disable_irq_nosync(ctrl->irq);
++	}
++
++	temp_args.irqregister.irq_id = irq_id;
++
++	status = copy_to_user((void __user *)args,
++			      &temp_args,
++			      sizeof(temp_args.irqregister));
++
++	return status;
++}
++
++static int xlnk_irq_unregister_ioctl(struct file *filp, unsigned int code,
++				     unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	int irq_id;
++	struct xlnk_irq_control *ctrl;
++
++	status = copy_from_user(&temp_args,
++				(void __user *)args,
++				sizeof(union xlnk_args));
++	if (status)
++		return -ENOMEM;
++
++	irq_id = temp_args.irqunregister.irq_id;
++	if (irq_id < 0 || irq_id >= XLNK_IRQ_POOL_SIZE)
++		return -EINVAL;
++
++	ctrl = xlnk_irq_set[irq_id];
++	if (!ctrl)
++		return -EINVAL;
++
++	xlnk_irq_set[irq_id] = NULL;
++
++	if (ctrl->enabled) {
++		disable_irq_nosync(ctrl->irq);
++		complete(&ctrl->cmp);
++	}
++	free_irq(ctrl->irq, ctrl);
++	kfree(ctrl);
++
++	return 0;
++}
++
++static int xlnk_irq_wait_ioctl(struct file *filp, unsigned int code,
++			       unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status;
++	int irq_id;
++	struct xlnk_irq_control *ctrl;
++
++	status = copy_from_user(&temp_args,
++				(void __user *)args,
++				sizeof(temp_args.irqwait));
++	if (status)
++		return -ENOMEM;
++
++	irq_id = temp_args.irqwait.irq_id;
++	if (irq_id < 0 || irq_id >= XLNK_IRQ_POOL_SIZE)
++		return -EINVAL;
++
++	ctrl = xlnk_irq_set[irq_id];
++	if (!ctrl)
++		return -EINVAL;
++
++	if (!ctrl->enabled) {
++		ctrl->enabled = 1;
++		enable_irq(ctrl->irq);
++	}
++
++	if (temp_args.irqwait.polling) {
++		if (!try_wait_for_completion(&ctrl->cmp))
++			temp_args.irqwait.success = 0;
++		else
++			temp_args.irqwait.success = 1;
++	} else {
++		wait_for_completion(&ctrl->cmp);
++		temp_args.irqwait.success = 1;
++	}
++
++	if (temp_args.irqwait.success) {
++		reinit_completion(&ctrl->cmp);
++		ctrl->enabled = 0;
++	}
++
++	status = copy_to_user((void __user *)args,
++			      &temp_args,
++			      sizeof(temp_args.irqwait));
++
++	return status;
++}
++
++static int xlnk_cachecontrol_ioctl(struct file *filp, unsigned int code,
++				   unsigned long args)
++{
++	union xlnk_args temp_args;
++	int status, size;
++	void *kaddr;
++	xlnk_intptr_type paddr;
++	int buf_id;
++
++	status = copy_from_user(&temp_args,
++				(void __user *)args,
++				sizeof(union xlnk_args));
++
++	if (status) {
++		dev_err(xlnk_dev, "Error in copy_from_user. status = %d\n",
++			status);
++		return -ENOMEM;
++	}
++
++	if (!(temp_args.cachecontrol.action == 0 ||
++	      temp_args.cachecontrol.action == 1)) {
++		dev_err(xlnk_dev, "Illegal action specified to cachecontrol_ioctl: %d\n",
++			temp_args.cachecontrol.action);
++		return -EINVAL;
++	}
++
++	size = temp_args.cachecontrol.size;
++	paddr = temp_args.cachecontrol.phys_addr;
++
++	spin_lock(&xlnk_buf_lock);
++	buf_id = xlnk_buf_find_by_phys_addr(paddr);
++	kaddr = xlnk_bufpool[buf_id];
++	spin_unlock(&xlnk_buf_lock);
++
++	if (buf_id == 0) {
++		pr_err("Illegal cachecontrol on non-sds_alloc memory");
++		return -EINVAL;
++	}
++
++#if XLNK_SYS_BIT_WIDTH == 32
++	__cpuc_flush_dcache_area(kaddr, size);
++	outer_flush_range(paddr, paddr + size);
++	if (temp_args.cachecontrol.action == 1)
++		outer_inv_range(paddr, paddr + size);
++#else
++	if (temp_args.cachecontrol.action == 1)
++		__dma_map_area(kaddr, size, DMA_FROM_DEVICE);
++	else
++		__dma_map_area(kaddr, size, DMA_TO_DEVICE);
++#endif
++	return 0;
++}
++
++static int xlnk_memop_ioctl(struct file *filp, unsigned long arg_addr)
++{
++	union xlnk_args args;
++	xlnk_intptr_type p_addr = 0;
++	int status = 0;
++	int buf_id;
++	struct xlnk_dmabuf_reg *cp = NULL;
++	int cacheable = 1;
++	enum dma_data_direction dmadir;
++	xlnk_intptr_type page_id;
++	unsigned int page_offset;
++	struct scatterlist sg;
++	unsigned long attrs = 0;
++
++	status = copy_from_user(&args,
++				(void __user *)arg_addr,
++				sizeof(union xlnk_args));
++
++	if (status) {
++		pr_err("Error in copy_from_user.  status = %d\n", status);
++		return status;
++	}
++
++	if (!(args.memop.flags & XLNK_FLAG_MEM_ACQUIRE) &&
++	    !(args.memop.flags & XLNK_FLAG_MEM_RELEASE)) {
++		pr_err("memop lacks acquire or release flag\n");
++		return -EINVAL;
++	}
++
++	if (args.memop.flags & XLNK_FLAG_MEM_ACQUIRE &&
++	    args.memop.flags & XLNK_FLAG_MEM_RELEASE) {
++		pr_err("memop has both acquire and release defined\n");
++		return -EINVAL;
++	}
++
++	spin_lock(&xlnk_buf_lock);
++	buf_id = xlnk_buf_find_by_user_addr(args.memop.virt_addr,
++					    current->pid);
++	if (buf_id > 0) {
++		cacheable = xlnk_bufcacheable[buf_id];
++		p_addr = xlnk_phyaddr[buf_id] +
++			(args.memop.virt_addr - xlnk_userbuf[buf_id]);
++	} else {
++		struct xlnk_dmabuf_reg *dp;
++
++		list_for_each_entry(dp, &xlnk_dmabuf_list, list) {
++			if (dp->user_vaddr == args.memop.virt_addr) {
++				cp = dp;
++				break;
++			}
++		}
++	}
++	spin_unlock(&xlnk_buf_lock);
++
++	if (buf_id <= 0 && !cp) {
++		pr_err("Error, buffer not found\n");
++		return -EINVAL;
++	}
++
++	dmadir = (enum dma_data_direction)args.memop.dir;
++
++	if (args.memop.flags & XLNK_FLAG_COHERENT || !cacheable)
++		attrs |= DMA_ATTR_SKIP_CPU_SYNC;
++
++	if (buf_id > 0) {
++		page_id = p_addr >> PAGE_SHIFT;
++		page_offset = p_addr - (page_id << PAGE_SHIFT);
++		sg_init_table(&sg, 1);
++		sg_set_page(&sg,
++			    pfn_to_page(page_id),
++			    args.memop.size,
++			    page_offset);
++		sg_dma_len(&sg) = args.memop.size;
++	}
++
++	if (args.memop.flags & XLNK_FLAG_MEM_ACQUIRE) {
++		if (buf_id > 0) {
++			status = get_dma_ops(xlnk_dev)->map_sg(xlnk_dev,
++							       &sg,
++							       1,
++							       dmadir,
++							       attrs);
++			if (!status) {
++				pr_err("Failed to map address\n");
++				return -EINVAL;
++			}
++			args.memop.phys_addr = (xlnk_intptr_type)
++				sg_dma_address(&sg);
++			args.memop.token = (xlnk_intptr_type)
++				sg_dma_address(&sg);
++			status = copy_to_user((void __user *)arg_addr,
++					      &args,
++					      sizeof(union xlnk_args));
++			if (status)
++				pr_err("Error in copy_to_user.  status = %d\n",
++				       status);
++		} else {
++			if (cp->dbuf_sg_table->nents != 1) {
++				pr_err("Non-SG-DMA datamovers require physically contiguous DMABUFs.  DMABUF is not physically contiguous\n");
++				return -EINVAL;
++			}
++			args.memop.phys_addr = (xlnk_intptr_type)
++				sg_dma_address(cp->dbuf_sg_table->sgl);
++			args.memop.token = 0;
++			status = copy_to_user((void __user *)arg_addr,
++					      &args,
++					      sizeof(union xlnk_args));
++			if (status)
++				pr_err("Error in copy_to_user.  status = %d\n",
++				       status);
++		}
++	} else {
++		if (buf_id > 0) {
++			sg_dma_address(&sg) = (dma_addr_t)args.memop.token;
++			get_dma_ops(xlnk_dev)->unmap_sg(xlnk_dev,
++							&sg,
++							1,
++							dmadir,
++							attrs);
++		}
++	}
++
++	return status;
++}
++
++static int xlnk_shutdown(unsigned long buf)
++{
++	return 0;
++}
++
++static int xlnk_recover_resource(unsigned long buf)
++{
++	xlnk_free_all_buf();
++#ifdef CONFIG_XILINX_DMA_APF
++	xdma_release_all_channels();
++#endif
++	return 0;
++}
++
++/* This function provides IO interface to the bridge driver. */
++static long xlnk_ioctl(struct file *filp,
++		       unsigned int code,
++		       unsigned long args)
++{
++	if (_IOC_TYPE(code) != XLNK_IOC_MAGIC)
++		return -ENOTTY;
++	if (_IOC_NR(code) > XLNK_IOC_MAXNR)
++		return -ENOTTY;
++
++	/* some sanity check */
++	switch (code) {
++	case XLNK_IOCALLOCBUF:
++		return xlnk_allocbuf_ioctl(filp, code, args);
++	case XLNK_IOCFREEBUF:
++		return xlnk_freebuf_ioctl(filp, code, args);
++	case XLNK_IOCADDDMABUF:
++		return xlnk_adddmabuf_ioctl(filp, code, args);
++	case XLNK_IOCCLEARDMABUF:
++		return xlnk_cleardmabuf_ioctl(filp, code, args);
++	case XLNK_IOCDMAREQUEST:
++		return xlnk_dmarequest_ioctl(filp, code, args);
++	case XLNK_IOCDMASUBMIT:
++		return xlnk_dmasubmit_ioctl(filp, code, args);
++	case XLNK_IOCDMAWAIT:
++		return xlnk_dmawait_ioctl(filp, code, args);
++	case XLNK_IOCDMARELEASE:
++		return xlnk_dmarelease_ioctl(filp, code, args);
++	case XLNK_IOCDEVREGISTER:
++		return xlnk_devregister_ioctl(filp, code, args);
++	case XLNK_IOCDMAREGISTER:
++		return xlnk_dmaregister_ioctl(filp, code, args);
++	case XLNK_IOCDEVUNREGISTER:
++		return xlnk_devunregister_ioctl(filp, code, args);
++	case XLNK_IOCCACHECTRL:
++		return xlnk_cachecontrol_ioctl(filp, code, args);
++	case XLNK_IOCIRQREGISTER:
++		return xlnk_irq_register_ioctl(filp, code, args);
++	case XLNK_IOCIRQUNREGISTER:
++		return xlnk_irq_unregister_ioctl(filp, code, args);
++	case XLNK_IOCIRQWAIT:
++		return xlnk_irq_wait_ioctl(filp, code, args);
++	case XLNK_IOCSHUTDOWN:
++		return xlnk_shutdown(args);
++	case XLNK_IOCRECRES:
++		return xlnk_recover_resource(args);
++	case XLNK_IOCMEMOP:
++		return xlnk_memop_ioctl(filp, args);
++	default:
++		return -EINVAL;
++	}
++}
++
++/* This function maps kernel space memory to user space memory. */
++static int xlnk_mmap(struct file *filp, struct vm_area_struct *vma)
++{
++	int bufid;
++	int status;
++
++	bufid = vma->vm_pgoff >> (16 - PAGE_SHIFT);
++
++	if (bufid == 0) {
++		unsigned long paddr = virt_to_phys(xlnk_dev_buf);
++
++		status = remap_pfn_range(vma,
++					 vma->vm_start,
++					 paddr >> PAGE_SHIFT,
++					 vma->vm_end - vma->vm_start,
++					 vma->vm_page_prot);
++	} else {
++		if (xlnk_bufcacheable[bufid] == 0)
++			vma->vm_page_prot =
++				pgprot_noncached(vma->vm_page_prot);
++		status = remap_pfn_range(vma, vma->vm_start,
++					 xlnk_phyaddr[bufid]
++					 >> PAGE_SHIFT,
++					 vma->vm_end - vma->vm_start,
++					 vma->vm_page_prot);
++		xlnk_userbuf[bufid] = vma->vm_start;
++		xlnk_buf_process[bufid] = current->pid;
++	}
++	if (status) {
++		pr_err("%s failed with code %d\n", __func__, status);
++		return status;
++	}
++
++	vma->vm_private_data = xlnk_bufpool[bufid];
++
++	return 0;
++}
++
++static ssize_t xlnk_write(struct file *filp, const char __user *buf,
++			  size_t count, loff_t *offp)
++{
++	ssize_t retval = 0;
++
++	if (copy_from_user(xlnk_dev_buf + *offp, buf, count)) {
++		retval = -EFAULT;
++		goto out;
++	}
++	*offp += count;
++	retval = count;
++
++	if (xlnk_dev_size < *offp)
++		xlnk_dev_size = *offp;
++
++ out:
++	return retval;
++}
++
++static ssize_t xlnk_read(struct file *filp,
++			 char __user *buf,
++			 size_t count,
++			 loff_t *offp)
++{
++	ssize_t retval = 0;
++
++	if (*offp >= xlnk_dev_size)
++		goto out;
++
++	if (*offp + count > xlnk_dev_size)
++		count = xlnk_dev_size - *offp;
++
++	if (copy_to_user(buf, xlnk_dev_buf + *offp, count)) {
++		retval = -EFAULT;
++		goto out;
++	}
++	*offp += count;
++	retval = count;
++
++ out:
++	return retval;
++}
++
++/*
++ * This function is called when an application closes handle to the bridge
++ * driver.
++ */
++static int xlnk_release(struct inode *ip, struct file *filp)
++{
++	unsigned int i;
++
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++) {
++		if (xlnk_buf_filp[i] == filp)
++			xlnk_freebuf(i);
++	}
++
++	return 0;
++}
++
++/*
++ * This function is called when an application opens handle to the
++ * bridge driver.
++ */
++static int xlnk_open(struct inode *ip, struct file *filp)
++{
++	if ((filp->f_flags & O_ACCMODE) == O_WRONLY)
++		xlnk_dev_size = 0;
++
++	return 0;
++}
++
++static const struct file_operations xlnk_fops = {
++	.open = xlnk_open,
++	.release = xlnk_release,
++	.read = xlnk_read,
++	.write = xlnk_write,
++	.unlocked_ioctl = xlnk_ioctl,
++	.mmap = xlnk_mmap,
++};
++
++static int xlnk_remove(struct platform_device *pdev)
++{
++	dev_t devno;
++
++	kfree(xlnk_dev_buf);
++	xlnk_dev_buf = NULL;
++
++	devno = MKDEV(driver_major, 0);
++	cdev_del(&xlnk_cdev);
++	unregister_chrdev_region(devno, 1);
++	if (xlnk_class) {
++		/* remove the device from sysfs */
++		device_destroy(xlnk_class, MKDEV(driver_major, 0));
++		class_destroy(xlnk_class);
++	}
++
++	xlnk_devpacks_free_all();
++
++	return 0;
++}
++
++static int xlnk_init_bufpool(void)
++{
++	unsigned int i;
++
++	spin_lock_init(&xlnk_buf_lock);
++	xlnk_dev_buf = kmalloc(8192, GFP_KERNEL | GFP_DMA);
++	*((char *)xlnk_dev_buf) = '\0';
++
++	if (!xlnk_dev_buf) {
++		dev_err(xlnk_dev, "%s: malloc failed\n", __func__);
++		return -ENOMEM;
++	}
++
++	xlnk_bufpool[0] = xlnk_dev_buf;
++	for (i = 1; i < XLNK_BUF_POOL_SIZE; i++)
++		xlnk_bufpool[i] = NULL;
++
++	return 0;
++}
++
++static void xlnk_init_irqpool(void)
++{
++	int i;
++
++	spin_lock_init(&xlnk_irq_lock);
++	for (i = 0; i < XLNK_IRQ_POOL_SIZE; i++)
++		xlnk_irq_set[i] = NULL;
++}
++
++static int xlnk_probe(struct platform_device *pdev)
++{
++	int err;
++	dev_t dev = 0;
++
++	xlnk_dev_buf = NULL;
++	xlnk_dev_size = 0;
++
++	/* use 2.6 device model */
++	err = alloc_chrdev_region(&dev, 0, 1, DRIVER_NAME);
++	if (err) {
++		dev_err(&pdev->dev, "%s: Can't get major %d\n",
++			__func__, driver_major);
++		goto err1;
++	}
++
++	cdev_init(&xlnk_cdev, &xlnk_fops);
++
++	xlnk_cdev.owner = THIS_MODULE;
++
++	err = cdev_add(&xlnk_cdev, dev, 1);
++
++	if (err) {
++		dev_err(&pdev->dev, "%s: Failed to add XLNK device\n",
++			__func__);
++		goto err3;
++	}
++
++	/* udev support */
++	xlnk_class = class_create(THIS_MODULE, "xlnk");
++	if (IS_ERR(xlnk_class)) {
++		dev_err(xlnk_dev, "%s: Error creating xlnk class\n", __func__);
++		goto err3;
++	}
++
++	driver_major = MAJOR(dev);
++
++	dev_info(&pdev->dev, "Major %d\n", driver_major);
++
++	device_create(xlnk_class, NULL, MKDEV(driver_major, 0),
++		      NULL, "xlnk");
++
++	err = xlnk_init_bufpool();
++	if (err) {
++		dev_err(&pdev->dev, "%s: Failed to allocate buffer pool\n",
++			__func__);
++		goto err3;
++	}
++
++	xlnk_init_irqpool();
++
++	dev_info(&pdev->dev, "%s driver loaded\n", DRIVER_NAME);
++
++	xlnk_pdev = pdev;
++	xlnk_dev = &pdev->dev;
++
++	if (xlnk_pdev)
++		dev_info(&pdev->dev, "xlnk_pdev is not null\n");
++	else
++		dev_info(&pdev->dev, "xlnk_pdev is null\n");
++
++	xlnk_devpacks_init();
++
++	return 0;
++err3:
++	cdev_del(&xlnk_cdev);
++	unregister_chrdev_region(dev, 1);
++err1:
++	return err;
++}
++
++static const struct of_device_id xlnk_match[] = {
++	{ .compatible = "xlnx,xlnk-1.0", },
++	{}
++};
++MODULE_DEVICE_TABLE(of, xlnk_match);
++
++static struct platform_driver xlnk_driver = {
++	.driver = {
++		.name = DRIVER_NAME,
++		.of_match_table = xlnk_match,
++	},
++	.probe = xlnk_probe,
++	.remove = xlnk_remove,
++};
++
++module_platform_driver(xlnk_driver);
++
++MODULE_DESCRIPTION("Xilinx APF driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/staging/apf/xlnk.h b/drivers/staging/apf/xlnk.h
+new file mode 100644
+index 000000000..089626882
+--- /dev/null
++++ b/drivers/staging/apf/xlnk.h
+@@ -0,0 +1,180 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
++ */
++
++#ifndef _XLNK_OS_H
++#define _XLNK_OS_H
++
++#include <linux/stddef.h>
++#include <linux/dmaengine.h>
++#include "xilinx-dma-apf.h"
++#include "xlnk-sysdef.h"
++
++#define XLNK_FLAG_COHERENT		0x00000001
++#define XLNK_FLAG_KERNEL_BUFFER		0x00000002
++#define XLNK_FLAG_DMAPOLLING		0x00000004
++#define XLNK_FLAG_IOMMU_VALID		0x00000008
++#define XLNK_FLAG_PHYSICAL_ADDR		0x00000100
++#define XLNK_FLAG_VIRTUAL_ADDR		0x00000200
++#define XLNK_FLAG_MEM_ACQUIRE		0x00001000
++#define XLNK_FLAG_MEM_RELEASE		0x00002000
++#define CF_FLAG_CACHE_FLUSH_INVALIDATE	0x00000001
++#define CF_FLAG_PHYSICALLY_CONTIGUOUS	0x00000002
++#define CF_FLAG_DMAPOLLING		0x00000004
++#define XLNK_IRQ_LEVEL			0x00000001
++#define XLNK_IRQ_EDGE			0x00000002
++#define XLNK_IRQ_ACTIVE_HIGH		0x00000004
++#define XLNK_IRQ_ACTIVE_LOW		0x00000008
++#define XLNK_IRQ_RESET_REG_VALID	0x00000010
++
++enum xlnk_dma_direction {
++	XLNK_DMA_BI = 0,
++	XLNK_DMA_TO_DEVICE = 1,
++	XLNK_DMA_FROM_DEVICE = 2,
++	XLNK_DMA_NONE = 3,
++};
++
++struct xlnk_dma_transfer_handle {
++	dma_addr_t dma_addr;
++	unsigned long transfer_length;
++	void *kern_addr;
++	unsigned long user_addr;
++	enum dma_data_direction transfer_direction;
++	int sg_effective_length;
++	int flags;
++	struct dma_chan *channel;
++	dma_cookie_t dma_cookie;
++	struct dma_async_tx_descriptor *async_desc;
++	struct completion completion_handle;
++};
++
++struct xlnk_dmabuf_reg {
++	xlnk_int_type dmabuf_fd;
++	xlnk_intptr_type user_vaddr;
++	struct dma_buf *dbuf;
++	struct dma_buf_attachment *dbuf_attach;
++	struct sg_table *dbuf_sg_table;
++	int is_mapped;
++	int dma_direction;
++	struct list_head list;
++};
++
++struct xlnk_irq_control {
++	int irq;
++	int enabled;
++	struct completion cmp;
++};
++
++/* CROSSES KERNEL-USER BOUNDARY */
++union xlnk_args {
++	struct __attribute__ ((__packed__)) {
++		xlnk_uint_type len;
++		xlnk_int_type id;
++		xlnk_intptr_type phyaddr;
++		xlnk_byte_type cacheable;
++	} allocbuf;
++	struct __attribute__ ((__packed__)) {
++		xlnk_uint_type id;
++		xlnk_intptr_type buf;
++	} freebuf;
++	struct __attribute__ ((__packed__)) {
++		xlnk_int_type dmabuf_fd;
++		xlnk_intptr_type user_addr;
++	} dmabuf;
++	struct __attribute__ ((__packed__)) {
++		xlnk_char_type name[64];
++		xlnk_intptr_type dmachan;
++		xlnk_uint_type bd_space_phys_addr;
++		xlnk_uint_type bd_space_size;
++	} dmarequest;
++#define XLNK_MAX_APPWORDS 5
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type dmachan;
++		xlnk_intptr_type buf;
++		xlnk_intptr_type buf2;
++		xlnk_uint_type buf_offset;
++		xlnk_uint_type len;
++		xlnk_uint_type bufflag;
++		xlnk_intptr_type sglist;
++		xlnk_uint_type sgcnt;
++		xlnk_enum_type dmadir;
++		xlnk_uint_type nappwords_i;
++		xlnk_uint_type appwords_i[XLNK_MAX_APPWORDS];
++		xlnk_uint_type nappwords_o;
++		xlnk_uint_type flag;
++		xlnk_intptr_type dmahandle; /* return value */
++		xlnk_uint_type last_bd_index;
++	} dmasubmit;
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type dmahandle;
++		xlnk_uint_type nappwords;
++		xlnk_uint_type appwords[XLNK_MAX_APPWORDS];
++		/* appwords array we only accept 5 max */
++		xlnk_uint_type flags;
++	} dmawait;
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type dmachan;
++	} dmarelease;
++	struct __attribute__ ((__packed__))  {
++		xlnk_intptr_type base;
++		xlnk_uint_type size;
++		xlnk_uint_type irqs[8];
++		xlnk_char_type name[32];
++		xlnk_uint_type id;
++	} devregister;
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type base;
++	} devunregister;
++	struct __attribute__ ((__packed__)) {
++		xlnk_char_type name[32];
++		xlnk_uint_type id;
++		xlnk_intptr_type base;
++		xlnk_uint_type size;
++		xlnk_uint_type chan_num;
++		xlnk_uint_type chan0_dir;
++		xlnk_uint_type chan0_irq;
++		xlnk_uint_type chan0_poll_mode;
++		xlnk_uint_type chan0_include_dre;
++		xlnk_uint_type chan0_data_width;
++		xlnk_uint_type chan1_dir;
++		xlnk_uint_type chan1_irq;
++		xlnk_uint_type chan1_poll_mode;
++		xlnk_uint_type chan1_include_dre;
++		xlnk_uint_type chan1_data_width;
++	} dmaregister;
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type phys_addr;
++		xlnk_uint_type size;
++		xlnk_int_type action;
++	} cachecontrol;
++	struct __attribute__ ((__packed__)) {
++		xlnk_intptr_type virt_addr;
++		xlnk_int_type size;
++		xlnk_enum_type dir;
++		xlnk_int_type flags;
++		xlnk_intptr_type phys_addr;
++		xlnk_intptr_type token;
++	} memop;
++	struct __attribute__ ((__packed__)) {
++		xlnk_int_type irq;
++		xlnk_int_type subirq;
++		xlnk_uint_type type;
++		xlnk_intptr_type control_base;
++		xlnk_intptr_type reset_reg_base;
++		xlnk_uint_type reset_offset;
++		xlnk_uint_type reset_valid_high;
++		xlnk_uint_type reset_valid_low;
++		xlnk_int_type irq_id;
++	} irqregister;
++	struct __attribute__ ((__packed__)) {
++		xlnk_int_type irq_id;
++	} irqunregister;
++	struct __attribute__ ((__packed__)) {
++		xlnk_int_type irq_id;
++		xlnk_int_type polling;
++		xlnk_int_type success;
++	} irqwait;
++};
++
++#endif

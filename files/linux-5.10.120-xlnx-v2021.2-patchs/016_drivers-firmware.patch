@@ -1,0 +1,4211 @@
+diff --git a/Documentation/ABI/stable/sysfs-driver-firmware-zynqmp b/Documentation/ABI/stable/sysfs-driver-firmware-zynqmp
+index f5724bb5b..b3d907388 100644
+--- a/Documentation/ABI/stable/sysfs-driver-firmware-zynqmp
++++ b/Documentation/ABI/stable/sysfs-driver-firmware-zynqmp
+@@ -113,3 +113,100 @@ Description:
+ 		    # echo 0 > /sys/devices/platform/firmware\:zynqmp-firmware/health_status
+ 
+ Users:		Xilinx
++
++What:		/sys/devices/platform/firmware\:zynqmp-firmware/last_reset_reason
++Date:		Feb 2021
++KernelVersion:	5.10.0
++Contact:	"Tejas Patel" <tejasp@xilinx.com>
++Description:
++		This sysfs interface allows to get last reset reason.
++
++		Usage:
++		Get last reset reason
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/last_reset_reason
++
++Users:		Xilinx
++
++What:		/sys/devices/platform/firmware\:zynqmp-firmware/feature_config_*
++Date:		Jul 2021
++KernelVersion:	TBD
++Contact:	"Ronak Jain" <ronak.jain@xilinx.com>
++Description:
++		This sysfs interface allows to configure features at runtime.
++		The user can enable or disable features running at firmware.
++		Also, the user can configure the parameters of the features
++		at runtime. The supported features are over temperature and
++		external watchdog. Here, the external watchdog is completely
++		different than the /dev/watchdog as the external watchdog is
++		running on the firmware and it is used to monitor the health
++		of firmware not APU(Linux). Also, the external watchdog is
++		interfaced outside of the zynqmp soc.
++
++		By default the features are disabled in the firmware. The user
++		can enable features by querying appropriate config id of the
++		features.
++
++		The default limit for the over temperature is 90 Degree Celsius.
++		The default timer interval for the external watchdog is 570ms.
++
++		The supported config ids are for the feature configuration is,
++		1. PM_FEATURE_OVERTEMP_STATUS = 1, the user can enable or
++		disable the over temperature feature.
++		2. PM_FEATURE_OVERTEMP_VALUE = 2, the user can configure the
++		over temperature limit in Degree Celsius.
++		3. PM_FEATURE_EXTWDT_STATUS = 3, the user can enable or disable
++		the external watchdog feature.
++		4. PM_FEATURE_EXTWDT_VALUE = 4, the user can configure the
++		external watchdog feature.
++
++		Usage:
++
++		Enable over temperature feature
++		# echo 1 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 1 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the over temperature feature is enabled or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 1.
++
++		Disable over temperature feature
++		# echo 1 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 0 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the over temperature feature is disabled or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 0.
++
++		Configure over temperature limit to 50 Degree Celsius
++		# echo 2 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 50 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the over temperature limit is configured or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 50.
++
++		Enable external watchdog feature
++		# echo 3 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 1 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the external watchdog feature is enabled or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 1.
++
++		Disable external watchdog feature
++		# echo 3 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 0 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the external watchdog feature is disabled or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 0.
++
++		Configure external watchdog timer interval to 500ms
++		# echo 4 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_id
++		# echo 500 > /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++
++		Check whether the external watchdog timer interval is configured or not
++		# cat /sys/devices/platform/firmware\:zynqmp-firmware/feature_config_value
++		The expected result is 500.
++
++Users:		Xilinx
+diff --git a/drivers/firmware/xilinx/Kconfig b/drivers/firmware/xilinx/Kconfig
+index 9a9bd1908..37d712adb 100644
+--- a/drivers/firmware/xilinx/Kconfig
++++ b/drivers/firmware/xilinx/Kconfig
+@@ -23,4 +23,12 @@ config ZYNQMP_FIRMWARE_DEBUG
+ 	  Say yes to enable ZynqMP firmware interface debug APIs.
+ 	  If in doubt, say N.
+ 
++config ZYNQMP_FIRMWARE_SECURE
++	bool "Enable Xilinx Zynq MPSoC secure firmware loading APIs"
++	help
++	  Firmware secure driver is used as an interface to load
++	  Authenticated and/or Encrypted firmware with single loadable
++	  partition. Say yes to enable ZynqMP secure firmware loading
++	  APIs.If in doubt, say N
++
+ endmenu
+diff --git a/drivers/firmware/xilinx/Makefile b/drivers/firmware/xilinx/Makefile
+index 875a53703..6b1fa9d37 100644
+--- a/drivers/firmware/xilinx/Makefile
++++ b/drivers/firmware/xilinx/Makefile
+@@ -3,3 +3,4 @@
+ 
+ obj-$(CONFIG_ZYNQMP_FIRMWARE) += zynqmp.o
+ obj-$(CONFIG_ZYNQMP_FIRMWARE_DEBUG) += zynqmp-debug.o
++obj-$(CONFIG_ZYNQMP_FIRMWARE_SECURE) += zynqmp-secure.o
+diff --git a/drivers/firmware/xilinx/zynqmp-debug.c b/drivers/firmware/xilinx/zynqmp-debug.c
+index 99606b349..4493e98a9 100644
+--- a/drivers/firmware/xilinx/zynqmp-debug.c
++++ b/drivers/firmware/xilinx/zynqmp-debug.c
+@@ -2,7 +2,7 @@
+ /*
+  * Xilinx Zynq MPSoC Firmware layer for debugfs APIs
+  *
+- *  Copyright (C) 2014-2018 Xilinx, Inc.
++ *  Copyright (C) 2014-2021 Xilinx, Inc.
+  *
+  *  Michal Simek <michal.simek@xilinx.com>
+  *  Davorin Mista <davorin.mista@aggios.com>
+@@ -31,12 +31,89 @@ static char debugfs_buf[PAGE_SIZE];
+ 
+ #define PM_API(id)		 {id, #id, strlen(#id)}
+ static struct pm_api_info pm_api_list[] = {
++	PM_API(PM_REQUEST_SUSPEND),
++	PM_API(PM_SELF_SUSPEND),
++	PM_API(PM_FORCE_POWERDOWN),
++	PM_API(PM_ABORT_SUSPEND),
++	PM_API(PM_REQUEST_WAKEUP),
++	PM_API(PM_SET_WAKEUP_SOURCE),
++	PM_API(PM_SYSTEM_SHUTDOWN),
++	PM_API(PM_REQUEST_NODE),
++	PM_API(PM_RELEASE_NODE),
++	PM_API(PM_SET_REQUIREMENT),
++	PM_API(PM_SET_MAX_LATENCY),
+ 	PM_API(PM_GET_API_VERSION),
++	PM_API(PM_SET_CONFIGURATION),
++	PM_API(PM_GET_NODE_STATUS),
++	PM_API(PM_GET_OPERATING_CHARACTERISTIC),
++	PM_API(PM_REGISTER_NOTIFIER),
++	PM_API(PM_RESET_ASSERT),
++	PM_API(PM_RESET_GET_STATUS),
++	PM_API(PM_GET_CHIPID),
++	PM_API(PM_PINCTRL_GET_FUNCTION),
++	PM_API(PM_PINCTRL_SET_FUNCTION),
++	PM_API(PM_PINCTRL_CONFIG_PARAM_GET),
++	PM_API(PM_PINCTRL_CONFIG_PARAM_SET),
++	PM_API(PM_IOCTL),
++	PM_API(PM_CLOCK_ENABLE),
++	PM_API(PM_CLOCK_DISABLE),
++	PM_API(PM_CLOCK_GETSTATE),
++	PM_API(PM_CLOCK_SETDIVIDER),
++	PM_API(PM_CLOCK_GETDIVIDER),
++	PM_API(PM_CLOCK_SETRATE),
++	PM_API(PM_CLOCK_GETRATE),
++	PM_API(PM_CLOCK_SETPARENT),
++	PM_API(PM_CLOCK_GETPARENT),
+ 	PM_API(PM_QUERY_DATA),
++	PM_API(PM_MMIO_WRITE),
++	PM_API(PM_MMIO_READ),
+ };
+ 
+ static struct dentry *firmware_debugfs_root;
+ 
++/**
++ * zynqmp_pm_self_suspend - PM call for master to suspend itself
++ * @node:	Node ID of the master or subsystem
++ * @latency:	Requested maximum wakeup latency (not supported)
++ * @state:	Requested state (not supported)
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++static int zynqmp_pm_self_suspend(const u32 node, const u32 latency,
++				  const u32 state)
++{
++	return zynqmp_pm_invoke_fn(PM_SELF_SUSPEND, node, latency,
++				   state, 0, NULL);
++}
++
++/**
++ * zynqmp_pm_abort_suspend - PM call to announce that a prior suspend request
++ *				is to be aborted.
++ * @reason:	Reason for the abort
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++static int zynqmp_pm_abort_suspend(const enum zynqmp_pm_abort_reason reason)
++{
++	return zynqmp_pm_invoke_fn(PM_ABORT_SUSPEND, reason, 0, 0, 0, NULL);
++}
++
++/**
++ * zynqmp_pm_ioctl - PM IOCTL for device control and configs
++ * @node:	Node ID of the device
++ * @ioctl:	ID of the requested IOCTL
++ * @arg1:	Argument 1 of requested IOCTL call
++ * @arg2:	Argument 2 of requested IOCTL call
++ * @out:	Returned output value
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++static int zynqmp_pm_ioctl(const u32 node, const u32 ioctl, const u32 arg1,
++			   const u32 arg2, u32 *out)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, node, ioctl, arg1, arg2, out);
++}
++
+ /**
+  * zynqmp_pm_argument_value() - Extract argument value from a PM-API request
+  * @arg:	Entered PM-API argument in string format
+@@ -86,6 +163,7 @@ static int get_pm_api_id(char *pm_api_req, u32 *pm_id)
+ static int process_api_request(u32 pm_id, u64 *pm_api_arg, u32 *pm_api_ret)
+ {
+ 	u32 pm_api_version;
++	u64 rate;
+ 	int ret;
+ 	struct zynqmp_pm_query_data qdata = {0};
+ 
+@@ -95,6 +173,191 @@ static int process_api_request(u32 pm_id, u64 *pm_api_arg, u32 *pm_api_ret)
+ 		sprintf(debugfs_buf, "PM-API Version = %d.%d\n",
+ 			pm_api_version >> 16, pm_api_version & 0xffff);
+ 		break;
++	case PM_REQUEST_SUSPEND:
++		ret = zynqmp_pm_request_suspend(pm_api_arg[0],
++						pm_api_arg[1] ? pm_api_arg[1] :
++						ZYNQMP_PM_REQUEST_ACK_NO,
++						pm_api_arg[2] ? pm_api_arg[2] :
++						ZYNQMP_PM_MAX_LATENCY, 0);
++		break;
++	case PM_SELF_SUSPEND:
++		ret = zynqmp_pm_self_suspend(pm_api_arg[0],
++					     pm_api_arg[1] ? pm_api_arg[1] :
++					     ZYNQMP_PM_MAX_LATENCY, 0);
++		break;
++	case PM_FORCE_POWERDOWN:
++		ret = zynqmp_pm_force_powerdown(pm_api_arg[0],
++						pm_api_arg[1] ? pm_api_arg[1] :
++						ZYNQMP_PM_REQUEST_ACK_NO);
++		break;
++	case PM_ABORT_SUSPEND:
++		ret = zynqmp_pm_abort_suspend(pm_api_arg[0] ? pm_api_arg[0] :
++					      ZYNQMP_PM_ABORT_REASON_UNKNOWN);
++		break;
++	case PM_REQUEST_WAKEUP:
++		ret = zynqmp_pm_request_wakeup(pm_api_arg[0],
++					       pm_api_arg[1], pm_api_arg[2],
++					       pm_api_arg[3] ? pm_api_arg[3] :
++					       ZYNQMP_PM_REQUEST_ACK_NO);
++		break;
++	case PM_SET_WAKEUP_SOURCE:
++		ret = zynqmp_pm_set_wakeup_source(pm_api_arg[0], pm_api_arg[1],
++						  pm_api_arg[2]);
++		break;
++	case PM_SYSTEM_SHUTDOWN:
++		ret = zynqmp_pm_system_shutdown(pm_api_arg[0], pm_api_arg[1]);
++		break;
++	case PM_REQUEST_NODE:
++		ret = zynqmp_pm_request_node(pm_api_arg[0],
++					     pm_api_arg[1] ? pm_api_arg[1] :
++					     ZYNQMP_PM_CAPABILITY_ACCESS,
++					     pm_api_arg[2] ? pm_api_arg[2] : 0,
++					     pm_api_arg[3] ? pm_api_arg[3] :
++					     ZYNQMP_PM_REQUEST_ACK_BLOCKING);
++		break;
++	case PM_RELEASE_NODE:
++		ret = zynqmp_pm_release_node(pm_api_arg[0]);
++		break;
++	case PM_SET_REQUIREMENT:
++		ret = zynqmp_pm_set_requirement(pm_api_arg[0],
++						pm_api_arg[1] ? pm_api_arg[1] :
++						ZYNQMP_PM_CAPABILITY_CONTEXT,
++						pm_api_arg[2] ?
++						pm_api_arg[2] : 0,
++						pm_api_arg[3] ? pm_api_arg[3] :
++						ZYNQMP_PM_REQUEST_ACK_BLOCKING);
++		break;
++	case PM_SET_MAX_LATENCY:
++		ret = zynqmp_pm_set_max_latency(pm_api_arg[0],
++						pm_api_arg[1] ? pm_api_arg[1] :
++						ZYNQMP_PM_MAX_LATENCY);
++		break;
++	case PM_SET_CONFIGURATION:
++		ret = zynqmp_pm_set_configuration(pm_api_arg[0]);
++		break;
++	case PM_GET_NODE_STATUS:
++		ret = zynqmp_pm_get_node_status(pm_api_arg[0],
++						&pm_api_ret[0],
++						&pm_api_ret[1],
++						&pm_api_ret[2]);
++		if (!ret)
++			sprintf(debugfs_buf,
++				"GET_NODE_STATUS:\n\tNodeId: %llu\n\tStatus: %u\n\tRequirements: %u\n\tUsage: %u\n",
++				pm_api_arg[0], pm_api_ret[0],
++				pm_api_ret[1], pm_api_ret[2]);
++		break;
++	case PM_GET_OPERATING_CHARACTERISTIC:
++		ret = zynqmp_pm_get_operating_characteristic(pm_api_arg[0],
++				pm_api_arg[1] ? pm_api_arg[1] :
++				ZYNQMP_PM_OPERATING_CHARACTERISTIC_POWER,
++				&pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf,
++				"GET_OPERATING_CHARACTERISTIC:\n\tNodeId: %llu\n\tType: %llu\n\tResult: %u\n",
++				pm_api_arg[0], pm_api_arg[1],
++				pm_api_ret[0]);
++		break;
++	case PM_REGISTER_NOTIFIER:
++		ret = zynqmp_pm_register_notifier(pm_api_arg[0],
++						  pm_api_arg[1] ?
++						  pm_api_arg[1] : 0,
++						  pm_api_arg[2] ?
++						  pm_api_arg[2] : 0,
++						  pm_api_arg[3] ?
++						  pm_api_arg[3] : 0);
++		break;
++	case PM_RESET_ASSERT:
++		ret = zynqmp_pm_reset_assert(pm_api_arg[0], pm_api_arg[1]);
++		break;
++	case PM_RESET_GET_STATUS:
++		ret = zynqmp_pm_reset_get_status(pm_api_arg[0], &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf, "Reset status: %u\n",
++				pm_api_ret[0]);
++		break;
++	case PM_GET_CHIPID:
++		ret = zynqmp_pm_get_chipid(&pm_api_ret[0], &pm_api_ret[1]);
++		if (!ret)
++			sprintf(debugfs_buf, "Idcode: %#x, Version:%#x\n",
++				pm_api_ret[0], pm_api_ret[1]);
++		break;
++	case PM_PINCTRL_GET_FUNCTION:
++		ret = zynqmp_pm_pinctrl_get_function(pm_api_arg[0],
++						     &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf,
++				"Current set function for the pin: %u\n",
++				pm_api_ret[0]);
++		break;
++	case PM_PINCTRL_SET_FUNCTION:
++		ret = zynqmp_pm_pinctrl_set_function(pm_api_arg[0],
++						     pm_api_arg[1]);
++		break;
++	case PM_PINCTRL_CONFIG_PARAM_GET:
++		ret = zynqmp_pm_pinctrl_get_config(pm_api_arg[0], pm_api_arg[1],
++						   &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf,
++				"Pin: %llu, Param: %llu, Value: %u\n",
++				pm_api_arg[0], pm_api_arg[1],
++				pm_api_ret[0]);
++		break;
++	case PM_PINCTRL_CONFIG_PARAM_SET:
++		ret = zynqmp_pm_pinctrl_set_config(pm_api_arg[0],
++						   pm_api_arg[1],
++						   pm_api_arg[2]);
++		break;
++	case PM_IOCTL:
++		ret = zynqmp_pm_ioctl(pm_api_arg[0], pm_api_arg[1],
++				      pm_api_arg[2], pm_api_arg[3],
++				      &pm_api_ret[0]);
++		if (!ret && (pm_api_arg[1] == IOCTL_GET_RPU_OPER_MODE ||
++			     pm_api_arg[1] == IOCTL_GET_PLL_FRAC_MODE ||
++			     pm_api_arg[1] == IOCTL_GET_PLL_FRAC_DATA ||
++			     pm_api_arg[1] == IOCTL_READ_GGS ||
++			     pm_api_arg[1] == IOCTL_READ_PGGS ||
++			     pm_api_arg[1] == IOCTL_PROBE_COUNTER_READ))
++			sprintf(debugfs_buf, "IOCTL return value: %u\n",
++				pm_api_ret[1]);
++		break;
++	case PM_CLOCK_ENABLE:
++		ret = zynqmp_pm_clock_enable(pm_api_arg[0]);
++		break;
++	case PM_CLOCK_DISABLE:
++		ret = zynqmp_pm_clock_disable(pm_api_arg[0]);
++		break;
++	case PM_CLOCK_GETSTATE:
++		ret = zynqmp_pm_clock_getstate(pm_api_arg[0], &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf, "Clock state: %u\n",
++				pm_api_ret[0]);
++		break;
++	case PM_CLOCK_SETDIVIDER:
++		ret = zynqmp_pm_clock_setdivider(pm_api_arg[0], pm_api_arg[1]);
++		break;
++	case PM_CLOCK_GETDIVIDER:
++		ret = zynqmp_pm_clock_getdivider(pm_api_arg[0], &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf, "Divider Value: %d\n",
++				pm_api_ret[0]);
++		break;
++	case PM_CLOCK_SETRATE:
++		ret = zynqmp_pm_clock_setrate(pm_api_arg[0], pm_api_arg[1]);
++		break;
++	case PM_CLOCK_GETRATE:
++		ret = zynqmp_pm_clock_getrate(pm_api_arg[0], &rate);
++		if (!ret)
++			sprintf(debugfs_buf, "Clock rate :%llu\n", rate);
++		break;
++	case PM_CLOCK_SETPARENT:
++		ret = zynqmp_pm_clock_setparent(pm_api_arg[0], pm_api_arg[1]);
++		break;
++	case PM_CLOCK_GETPARENT:
++		ret = zynqmp_pm_clock_getparent(pm_api_arg[0], &pm_api_ret[0]);
++		if (!ret)
++			sprintf(debugfs_buf,
++				"Clock parent Index: %u\n", pm_api_ret[0]);
++		break;
+ 	case PM_QUERY_DATA:
+ 		qdata.qid = pm_api_arg[0];
+ 		qdata.arg1 = pm_api_arg[1];
+@@ -121,6 +384,14 @@ static int process_api_request(u32 pm_id, u64 *pm_api_arg, u32 *pm_api_ret)
+ 				pm_api_ret[2], pm_api_ret[3]);
+ 		}
+ 		break;
++	case PM_MMIO_WRITE:
++		ret = zynqmp_pm_mmio_write(pm_api_arg[0], pm_api_arg[1],
++					   pm_api_arg[2]);
++		break;
++	case PM_MMIO_READ:
++		ret = zynqmp_pm_mmio_read(pm_api_arg[0], &pm_api_ret[0]);
++		sprintf(debugfs_buf, "REG value: 0x%x\n", pm_api_ret[0]);
++		break;
+ 	default:
+ 		sprintf(debugfs_buf, "Unsupported PM-API request\n");
+ 		ret = -EINVAL;
+diff --git a/drivers/firmware/xilinx/zynqmp-secure.c b/drivers/firmware/xilinx/zynqmp-secure.c
+new file mode 100644
+index 000000000..706ad9b5c
+--- /dev/null
++++ b/drivers/firmware/xilinx/zynqmp-secure.c
+@@ -0,0 +1,188 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx ZynqMP SecureFw Driver.
++ * Copyright (c) 2018 Xilinx Inc.
++ */
++
++#include <asm/cacheflush.h>
++#include <linux/device.h>
++#include <linux/dma-mapping.h>
++#include <linux/firmware.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/of_device.h>
++
++#define ZYNQMP_AES_KEY_SIZE	64
++
++static u8 key[ZYNQMP_AES_KEY_SIZE] = {0};
++static dma_addr_t dma_addr;
++static u8 *keyptr;
++static size_t dma_size;
++static char *kbuf;
++
++static ssize_t secure_load_store(struct device *dev,
++				 struct device_attribute *attr,
++				 const char *buf, size_t count)
++{
++	const struct firmware *fw;
++	char image_name[NAME_MAX];
++	u64 dst, ret;
++	int len;
++
++	strncpy(image_name, buf, NAME_MAX);
++	len = strlen(image_name);
++	if (image_name[len - 1] == '\n')
++		image_name[len - 1] = 0;
++
++	ret = request_firmware(&fw, image_name, dev);
++	if (ret) {
++		dev_err(dev, "Error requesting firmware %s\n", image_name);
++		return ret;
++	}
++	dma_size = fw->size;
++
++	if (keyptr)
++		dma_size = fw->size + ZYNQMP_AES_KEY_SIZE;
++
++	kbuf = dma_alloc_coherent(dev, dma_size,
++				  &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	memcpy(kbuf, fw->data, fw->size);
++
++	if (keyptr)
++		memcpy(kbuf + fw->size, key, ZYNQMP_AES_KEY_SIZE);
++
++	/* To ensure cache coherency */
++	__flush_cache_user_range((unsigned long)kbuf,
++				 (unsigned long)kbuf + dma_size);
++	release_firmware(fw);
++
++	if (keyptr)
++		ret = zynqmp_pm_secure_load(dma_addr, dma_addr + fw->size,
++					    &dst);
++	else
++		ret = zynqmp_pm_secure_load(dma_addr, 0, &dst);
++
++	if (ret) {
++		dev_info(dev, "Failed to load secure image \r\n");
++		return ret;
++	}
++	dev_info(dev, "Verified image at 0x%llx\n", dst);
++
++	return count;
++}
++
++static ssize_t key_show(struct device *dev,
++			struct device_attribute *attr,
++			char *buf)
++{
++	return snprintf(buf, ZYNQMP_AES_KEY_SIZE + 1, "%s\n", key);
++}
++
++static ssize_t key_store(struct device *dev,
++			 struct device_attribute *attr,
++			 const char *buf, size_t count)
++{
++	memcpy(key, buf, count);
++	keyptr = &key[0];
++	return count;
++}
++
++static ssize_t secure_load_done_store(struct device *dev,
++				      struct device_attribute *attr,
++				      const char *buf, size_t count)
++{
++	int ret;
++	unsigned int value;
++
++	ret = kstrtouint(buf, 10, &value);
++	if (ret)
++		return ret;
++	if (value)
++		dma_free_coherent(dev, dma_size, kbuf, dma_addr);
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(key);
++static DEVICE_ATTR_WO(secure_load);
++static DEVICE_ATTR_WO(secure_load_done);
++
++static struct attribute *securefw_attrs[] = {
++	&dev_attr_secure_load_done.attr,
++	&dev_attr_secure_load.attr,
++	&dev_attr_key.attr,
++	NULL,
++};
++
++ATTRIBUTE_GROUPS(securefw);
++
++static int securefw_probe(struct platform_device *pdev)
++{
++	int ret;
++	struct platform_device *securefw_pdev;
++
++	securefw_pdev = pdev;
++
++	securefw_pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
++
++	ret = of_dma_configure(&securefw_pdev->dev, NULL, true);
++	if (ret < 0) {
++		dev_info(&securefw_pdev->dev, "Cannot setup DMA ops\r\n");
++		return ret;
++	}
++
++	ret = sysfs_create_groups(&securefw_pdev->dev.kobj, securefw_groups);
++	if (ret)
++		return ret;
++
++	dev_info(&securefw_pdev->dev, "securefw probed\r\n");
++	return ret;
++}
++
++static int securefw_remove(struct platform_device *pdev)
++{
++	sysfs_remove_groups(&pdev->dev.kobj, securefw_groups);
++	return 0;
++}
++
++static struct platform_driver securefw_driver = {
++	.driver = {
++		.name = "securefw",
++	},
++	.probe = securefw_probe,
++	.remove = securefw_remove,
++};
++
++static struct platform_device *securefw_dev_reg;
++
++static int __init zynqmp_secure_init(void)
++{
++	int ret;
++
++	ret = platform_driver_register(&securefw_driver);
++	if (ret)
++		return ret;
++
++	securefw_dev_reg = platform_device_register_simple("securefw", -1,
++							   NULL, 0);
++	if (IS_ERR(securefw_dev_reg)) {
++		ret = PTR_ERR(securefw_dev_reg);
++		platform_driver_unregister(&securefw_driver);
++		return ret;
++	}
++	return 0;
++}
++
++static void __exit zynqmp_secure_exit(void)
++{
++	platform_device_unregister(securefw_dev_reg);
++	platform_driver_unregister(&securefw_driver);
++}
++
++module_init(zynqmp_secure_init);
++module_exit(zynqmp_secure_exit);
+diff --git a/drivers/firmware/xilinx/zynqmp.c b/drivers/firmware/xilinx/zynqmp.c
+index 9e6504592..51fb63d0d 100644
+--- a/drivers/firmware/xilinx/zynqmp.c
++++ b/drivers/firmware/xilinx/zynqmp.c
+@@ -23,14 +23,25 @@
+ #include <linux/hashtable.h>
+ 
+ #include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/firmware/xlnx-event-manager.h>
+ #include "zynqmp-debug.h"
+ 
+ /* Max HashMap Order for PM API feature check (1<<7 = 128) */
+ #define PM_API_FEATURE_CHECK_MAX_ORDER  7
+ 
++/* CRL registers and bitfields */
++#define CRL_APB_BASE			0xFF5E0000U
++/* BOOT_PIN_CTRL- Used to control the mode pins after boot */
++#define CRL_APB_BOOT_PIN_CTRL		(CRL_APB_BASE + (0x250U))
++/* BOOT_PIN_CTRL_MASK- out_val[11:8], out_en[3:0] */
++#define CRL_APB_BOOTPIN_CTRL_MASK	0xF0FU
++
+ static bool feature_check_enabled;
+ static DEFINE_HASHTABLE(pm_api_features_map, PM_API_FEATURE_CHECK_MAX_ORDER);
+ 
++static unsigned long register_address;
++static struct platform_device *em_dev;
++
+ /**
+  * struct pm_api_feature_data - PM API Feature data
+  * @pm_api_id:		PM API Id, used as key to index into hashmap
+@@ -153,7 +164,7 @@ static noinline int do_fw_call_hvc(u64 arg0, u64 arg1, u64 arg2,
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-static int zynqmp_pm_feature(u32 api_id)
++int zynqmp_pm_feature(const u32 api_id)
+ {
+ 	int ret;
+ 	u32 ret_payload[PAYLOAD_ARG_CNT];
+@@ -615,13 +626,13 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_get_pll_frac_data);
+ /**
+  * zynqmp_pm_set_sd_tapdelay() -  Set tap delay for the SD device
+  *
+- * @node_id	Node ID of the device
+- * @type	Type of tap delay to set (input/output)
+- * @value	Value to set fot the tap delay
++ * @node_id:	Node ID of the device
++ * @type:	Type of tap delay to set (input/output)
++ * @value:	Value to set fot the tap delay
+  *
+  * This function sets input/output tap delay for the SD device.
+  *
+- * @return	Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_set_sd_tapdelay(u32 node_id, u32 type, u32 value)
+ {
+@@ -633,12 +644,12 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_set_sd_tapdelay);
+ /**
+  * zynqmp_pm_sd_dll_reset() - Reset DLL logic
+  *
+- * @node_id	Node ID of the device
+- * @type	Reset type
++ * @node_id:	Node ID of the device
++ * @type:	Reset type
+  *
+  * This function resets DLL logic for the SD device.
+  *
+- * @return	Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_sd_dll_reset(u32 node_id, u32 type)
+ {
+@@ -649,12 +660,12 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_sd_dll_reset);
+ 
+ /**
+  * zynqmp_pm_write_ggs() - PM API for writing global general storage (ggs)
+- * @index	GGS register index
+- * @value	Register value to be written
++ * @index:	GGS register index
++ * @value:	Register value to be written
+  *
+  * This function writes value to GGS register.
+  *
+- * @return      Returns status, either success or error+reason
++ * Return:      Returns status, either success or error+reason
+  */
+ int zynqmp_pm_write_ggs(u32 index, u32 value)
+ {
+@@ -664,13 +675,13 @@ int zynqmp_pm_write_ggs(u32 index, u32 value)
+ EXPORT_SYMBOL_GPL(zynqmp_pm_write_ggs);
+ 
+ /**
+- * zynqmp_pm_write_ggs() - PM API for reading global general storage (ggs)
+- * @index	GGS register index
+- * @value	Register value to be written
++ * zynqmp_pm_read_ggs() - PM API for reading global general storage (ggs)
++ * @index:	GGS register index
++ * @value:	Pointer for returning value
+  *
+- * This function returns GGS register value.
++ * This function returns GGS register value via value parameter.
+  *
+- * @return      Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_read_ggs(u32 index, u32 *value)
+ {
+@@ -682,12 +693,12 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_read_ggs);
+ /**
+  * zynqmp_pm_write_pggs() - PM API for writing persistent global general
+  *			     storage (pggs)
+- * @index	PGGS register index
+- * @value	Register value to be written
++ * @index:	PGGS register index
++ * @value:	Register value to be written
+  *
+  * This function writes value to PGGS register.
+  *
+- * @return      Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_write_pggs(u32 index, u32 value)
+ {
+@@ -697,14 +708,14 @@ int zynqmp_pm_write_pggs(u32 index, u32 value)
+ EXPORT_SYMBOL_GPL(zynqmp_pm_write_pggs);
+ 
+ /**
+- * zynqmp_pm_write_pggs() - PM API for reading persistent global general
++ * zynqmp_pm_read_pggs() - PM API for reading persistent global general
+  *			     storage (pggs)
+- * @index	PGGS register index
+- * @value	Register value to be written
++ * @index:	PGGS register index
++ * @value:	Pointer for returning value
+  *
+  * This function returns PGGS register value.
+  *
+- * @return      Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_read_pggs(u32 index, u32 *value)
+ {
+@@ -713,14 +724,76 @@ int zynqmp_pm_read_pggs(u32 index, u32 *value)
+ }
+ EXPORT_SYMBOL_GPL(zynqmp_pm_read_pggs);
+ 
++int zynqmp_pm_usb_set_state(u32 node, u32 state, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, node, IOCTL_USB_SET_STATE, state,
++				   value, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_usb_set_state);
++
++int zynqmp_pm_ulpi_reset(void)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_ULPI_RESET, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_ulpi_reset);
++
++int zynqmp_pm_afi(u32 index, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_AFI, index, value,
++				   NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_afi);
++
++int zynqmp_pm_set_sgmii_mode(u32 enable)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_SET_SGMII_MODE, enable, 0,
++				   NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_sgmii_mode);
++
++int zynqmp_pm_set_tapdelay_bypass(u32 index, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_SET_TAPDELAY_BYPASS,
++				   index, value, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_tapdelay_bypass);
++
++int zynqmp_pm_probe_counter_read(u32 deviceid, u32 reg, u32 *value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, deviceid, IOCTL_PROBE_COUNTER_READ, reg,
++				   0, value);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_probe_counter_read);
++
++int zynqmp_pm_probe_counter_write(u32 domain, u32 reg, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, domain, IOCTL_PROBE_COUNTER_WRITE, reg,
++				   value, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_probe_counter_write);
++
++int zynqmp_pm_ospi_mux_select(u32 dev_id, u32 select)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, dev_id, IOCTL_OSPI_MUX_SELECT, select,
++				   0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_ospi_mux_select);
++
++int zynqmp_pm_get_last_reset_reason(u32 *reset_reason)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_GET_LAST_RESET_REASON, 0,
++				   0, reset_reason);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_get_last_reset_reason);
++
+ /**
+  * zynqmp_pm_set_boot_health_status() - PM API for setting healthy boot status
+- * @value	Status value to be written
++ * @value:	Status value to be written
+  *
+  * This function sets healthy bit value to indicate boot health status
+  * to firmware.
+  *
+- * @return      Returns status, either success or error+reason
++ * Return:	Returns status, either success or error+reason
+  */
+ int zynqmp_pm_set_boot_health_status(u32 value)
+ {
+@@ -728,6 +801,20 @@ int zynqmp_pm_set_boot_health_status(u32 value)
+ 				   value, 0, NULL);
+ }
+ 
++/**
++ * zynqmp_pm_clear_aie_npi_isr - Clear AI engine NPI interrupt status register
++ * @node:	AI engine node id
++ * @irq_mask:	Mask of AI engine NPI interrupt bit to clear
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_clear_aie_npi_isr(u32 node, u32 irq_mask)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, node, IOCTL_AIE_ISR_CLEAR,
++				   irq_mask, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_clear_aie_npi_isr);
++
+ /**
+  * zynqmp_pm_reset_assert - Request setting of reset (1 - assert, 0 - release)
+  * @reset:		Reset to be configured
+@@ -736,7 +823,7 @@ int zynqmp_pm_set_boot_health_status(u32 value)
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_reset_assert(const enum zynqmp_pm_reset reset,
++int zynqmp_pm_reset_assert(const u32 reset,
+ 			   const enum zynqmp_pm_reset_action assert_flag)
+ {
+ 	return zynqmp_pm_invoke_fn(PM_RESET_ASSERT, reset, assert_flag,
+@@ -751,7 +838,7 @@ EXPORT_SYMBOL_GPL(zynqmp_pm_reset_assert);
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset, u32 *status)
++int zynqmp_pm_reset_get_status(const u32 reset, u32 *status)
+ {
+ 	u32 ret_payload[PAYLOAD_ARG_CNT];
+ 	int ret;
+@@ -812,234 +899,999 @@ int zynqmp_pm_fpga_get_status(u32 *value)
+ EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_get_status);
+ 
+ /**
+- * zynqmp_pm_init_finalize() - PM call to inform firmware that the caller
+- *			       master has initialized its own power management
++ * zynqmp_pm_load_pdi - Load and process pdi
++ * @src:	Source device where PDI is located
++ * @address:	Pdi src address
+  *
+- * This API function is to be used for notify the power management controller
+- * about the completed power management initialization.
++ * This function provides support to load pdi from linux
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_init_finalize(void)
++int zynqmp_pm_load_pdi(const u32 src, const u64 address)
+ {
+-	return zynqmp_pm_invoke_fn(PM_PM_INIT_FINALIZE, 0, 0, 0, 0, NULL);
++	return zynqmp_pm_invoke_fn(PM_LOAD_PDI, src,
++				   lower_32_bits(address),
++				   upper_32_bits(address), 0, NULL);
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_init_finalize);
++EXPORT_SYMBOL_GPL(zynqmp_pm_load_pdi);
+ 
+ /**
+- * zynqmp_pm_set_suspend_mode()	- Set system suspend mode
+- * @mode:	Mode to set for system suspend
++ * zynqmp_pm_write_aes_key - Write AES key registers
++ * @keylen:	Size of the input key to be written
++ * @keysrc:	Key Source to be selected to which provided
++ *			key should be updated
++ * @keyaddr: Address of a buffer which should contain the key
++ *			to be written
+  *
+- * This API function is used to set mode of system suspend.
++ * This function provides support to write AES volatile user keys.
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_set_suspend_mode(u32 mode)
++int zynqmp_pm_write_aes_key(const u32 keylen, const u32 keysrc,
++			    const u64 keyaddr)
+ {
+-	return zynqmp_pm_invoke_fn(PM_SET_SUSPEND_MODE, mode, 0, 0, 0, NULL);
++	return zynqmp_pm_invoke_fn(PM_WRITE_AES_KEY, keylen, keysrc,
++				   lower_32_bits(keyaddr),
++				   upper_32_bits(keyaddr), NULL);
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_set_suspend_mode);
++EXPORT_SYMBOL_GPL(zynqmp_pm_write_aes_key);
+ 
+ /**
+- * zynqmp_pm_request_node() - Request a node with specific capabilities
+- * @node:		Node ID of the slave
+- * @capabilities:	Requested capabilities of the slave
+- * @qos:		Quality of service (not supported)
+- * @ack:		Flag to specify whether acknowledge is requested
++ * zynqmp_pm_bbram_write_aeskey - Write AES key in BBRAM
++ * @keylen:	Size of the input key to be written
++ * @keyaddr: Address of a buffer which should contain the key
++ *			to be written
+  *
+- * This function is used by master to request particular node from firmware.
+- * Every master must request node before using it.
++ * This function provides support to write AES keys into BBRAM.
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_request_node(const u32 node, const u32 capabilities,
+-			   const u32 qos, const enum zynqmp_pm_request_ack ack)
++int zynqmp_pm_bbram_write_aeskey(u32 keylen, const u64 keyaddr)
+ {
+-	return zynqmp_pm_invoke_fn(PM_REQUEST_NODE, node, capabilities,
+-				   qos, ack, NULL);
++	return zynqmp_pm_invoke_fn(PM_BBRAM_WRITE_KEY, keylen,
++				   lower_32_bits(keyaddr),
++				   upper_32_bits(keyaddr), 0, NULL);
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_request_node);
++EXPORT_SYMBOL_GPL(zynqmp_pm_bbram_write_aeskey);
+ 
+ /**
+- * zynqmp_pm_release_node() - Release a node
+- * @node:	Node ID of the slave
++ * zynqmp_pm_bbram_write_usrdata - Write user data in BBRAM
++ * @data: User data to be written in BBRAM
+  *
+- * This function is used by master to inform firmware that master
+- * has released node. Once released, master must not use that node
+- * without re-request.
++ * This function provides support to write user data into BBRAM.
++ * The size of the user data must be 4 bytes.
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_release_node(const u32 node)
++int zynqmp_pm_bbram_write_usrdata(u32 data)
+ {
+-	return zynqmp_pm_invoke_fn(PM_RELEASE_NODE, node, 0, 0, 0, NULL);
++	return zynqmp_pm_invoke_fn(PM_BBRAM_WRITE_USERDATA, data, 0, 0, 0,
++				   NULL);
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_release_node);
++EXPORT_SYMBOL_GPL(zynqmp_pm_bbram_write_usrdata);
+ 
+ /**
+- * zynqmp_pm_set_requirement() - PM call to set requirement for PM slaves
+- * @node:		Node ID of the slave
+- * @capabilities:	Requested capabilities of the slave
+- * @qos:		Quality of service (not supported)
+- * @ack:		Flag to specify whether acknowledge is requested
++ * zynqmp_pm_bbram_read_usrdata - Read user data in BBRAM
++ * @outaddr: Address of a buffer to store the user data read from BBRAM
+  *
+- * This API function is to be used for slaves a PU already has requested
+- * to change its capabilities.
++ * This function provides support to read user data in BBRAM.
+  *
+  * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
+-			      const u32 qos,
+-			      const enum zynqmp_pm_request_ack ack)
++int zynqmp_pm_bbram_read_usrdata(const u64 outaddr)
+ {
+-	return zynqmp_pm_invoke_fn(PM_SET_REQUIREMENT, node, capabilities,
+-				   qos, ack, NULL);
++	return zynqmp_pm_invoke_fn(PM_BBRAM_READ_USERDATA, outaddr, 0, 0, 0,
++				   NULL);
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_set_requirement);
++EXPORT_SYMBOL_GPL(zynqmp_pm_bbram_read_usrdata);
+ 
+ /**
+- * zynqmp_pm_aes - Access AES hardware to encrypt/decrypt the data using
+- * AES-GCM core.
+- * @address:	Address of the AesParams structure.
+- * @out:	Returned output value
++ * zynqmp_pm_bbram_zeroize - Zeroizes AES key in BBRAM
+  *
+- * Return:	Returns status, either success or error code.
++ * Description:
++ * This function provides support to zeroize AES key in BBRAM.
++ *
++ * Return: Returns status, either success or error+reason
+  */
+-int zynqmp_pm_aes_engine(const u64 address, u32 *out)
++int zynqmp_pm_bbram_zeroize(void)
++{
++	return zynqmp_pm_invoke_fn(PM_BBRAM_ZEROIZE, 0, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_bbram_zeroize);
++
++/**
++ * zynqmp_pm_bbram_lock_userdata - Locks user data for write
++ *
++ * Description:
++ * This function disables writing user data into BBRAM.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_bbram_lock_userdata(void)
++{
++	return zynqmp_pm_invoke_fn(PM_BBRAM_LOCK_USERDATA, 0, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_bbram_lock_userdata);
++
++/**
++ * zynqmp_pm_fpga_read - Perform the fpga configuration readback
++ * @reg_numframes: Configuration register offset (or) Number of frames to read
++ * @phys_address: Physical Address of the buffer
++ * @readback_type: Type of fpga readback operation
++ * @value: Value to read
++ *
++ * This function provides access to xilfpga library to perform
++ * fpga configuration readback.
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_fpga_read(const u32 reg_numframes, const u64 phys_address,
++			u32 readback_type, u32 *value)
+ {
+ 	u32 ret_payload[PAYLOAD_ARG_CNT];
+ 	int ret;
+ 
+-	if (!out)
++	if (!value)
+ 		return -EINVAL;
+ 
+-	ret = zynqmp_pm_invoke_fn(PM_SECURE_AES, upper_32_bits(address),
+-				  lower_32_bits(address),
+-				  0, 0, ret_payload);
+-	*out = ret_payload[1];
++	ret = zynqmp_pm_invoke_fn(PM_FPGA_READ, reg_numframes,
++				  lower_32_bits(phys_address),
++				  upper_32_bits(phys_address), readback_type,
++				  ret_payload);
++	*value = ret_payload[1];
+ 
+ 	return ret;
+ }
+-EXPORT_SYMBOL_GPL(zynqmp_pm_aes_engine);
++EXPORT_SYMBOL_GPL(zynqmp_pm_fpga_read);
+ 
+ /**
+- * zynqmp_pm_system_shutdown - PM call to request a system shutdown or restart
+- * @type:	Shutdown or restart? 0 for shutdown, 1 for restart
+- * @subtype:	Specifies which system should be restarted or shut down
++ * zynqmp_pm_sha_hash - Access the SHA engine to calculate the hash
++ * @address:	Address of the data/ Address of output buffer where
++ *		hash should be stored.
++ * @size:	Size of the data.
++ * @flags:
++ *	BIT(0) - for initializing csudma driver and SHA3(Here address
++ *		 and size inputs can be NULL).
++ *	BIT(1) - to call Sha3_Update API which can be called multiple
++ *		 times when data is not contiguous.
++ *	BIT(2) - to get final hash of the whole updated data.
++ *		 Hash will be overwritten at provided address with
++ *		 48 bytes.
+  *
+- * Return:	Returns status, either success or error+reason
++ * Return:	Returns status, either success or error code.
+  */
+-int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype)
++int zynqmp_pm_sha_hash(const u64 address, const u32 size, const u32 flags)
+ {
+-	return zynqmp_pm_invoke_fn(PM_SYSTEM_SHUTDOWN, type, subtype,
+-				   0, 0, NULL);
++	u32 lower_32_bits = (u32)address;
++	u32 upper_32_bits = (u32)(address >> 32);
++
++	return zynqmp_pm_invoke_fn(PM_SECURE_SHA, upper_32_bits, lower_32_bits,
++				   size, flags, NULL);
+ }
++EXPORT_SYMBOL_GPL(zynqmp_pm_sha_hash);
+ 
+ /**
+- * struct zynqmp_pm_shutdown_scope - Struct for shutdown scope
+- * @subtype:	Shutdown subtype
+- * @name:	Matching string for scope argument
++ * zynqmp_pm_rsa - Access RSA hardware to encrypt/decrypt the data with RSA.
++ * @address:	Address of the data
++ * @size:	Size of the data.
++ * @flags:
++ *		BIT(0) - Encryption/Decryption
++ *			 0 - RSA decryption with private key
++ *			 1 - RSA encryption with public key.
+  *
+- * This struct encapsulates mapping between shutdown scope ID and string.
++ * Return:	Returns status, either success or error code.
+  */
+-struct zynqmp_pm_shutdown_scope {
+-	const enum zynqmp_pm_shutdown_subtype subtype;
+-	const char *name;
+-};
+-
+-static struct zynqmp_pm_shutdown_scope shutdown_scopes[] = {
+-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM] = {
+-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM,
+-		.name = "subsystem",
+-	},
+-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY] = {
+-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY,
+-		.name = "ps_only",
+-	},
+-	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM] = {
+-		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM,
+-		.name = "system",
+-	},
+-};
++int zynqmp_pm_rsa(const u64 address, const u32 size, const u32 flags)
++{
++	u32 lower_32_bits = (u32)address;
++	u32 upper_32_bits = (u32)(address >> 32);
+ 
+-static struct zynqmp_pm_shutdown_scope *selected_scope =
+-		&shutdown_scopes[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM];
++	return zynqmp_pm_invoke_fn(PM_SECURE_RSA, upper_32_bits, lower_32_bits,
++				   size, flags, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_rsa);
+ 
+ /**
+- * zynqmp_pm_is_shutdown_scope_valid - Check if shutdown scope string is valid
+- * @scope_string:	Shutdown scope string
++ * zynqmp_pm_request_suspend - PM call to request for another PU or subsystem to
++ *					be suspended gracefully.
++ * @node:	Node ID of the targeted PU or subsystem
++ * @ack:	Flag to specify whether acknowledge is requested
++ * @latency:	Requested wakeup latency (not supported)
++ * @state:	Requested state (not supported)
+  *
+- * Return:		Return pointer to matching shutdown scope struct from
+- *			array of available options in system if string is valid,
+- *			otherwise returns NULL.
++ * Return:	Returns status, either success or error+reason
+  */
+-static struct zynqmp_pm_shutdown_scope*
+-		zynqmp_pm_is_shutdown_scope_valid(const char *scope_string)
++int zynqmp_pm_request_suspend(const u32 node,
++			      const enum zynqmp_pm_request_ack ack,
++			      const u32 latency, const u32 state)
+ {
+-	int count;
++	return zynqmp_pm_invoke_fn(PM_REQUEST_SUSPEND, node, ack,
++				   latency, state, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_request_suspend);
+ 
+-	for (count = 0; count < ARRAY_SIZE(shutdown_scopes); count++)
+-		if (sysfs_streq(scope_string, shutdown_scopes[count].name))
+-			return &shutdown_scopes[count];
++/**
++ * zynqmp_pm_force_powerdown - PM call to request for another PU or subsystem to
++ *				be powered down forcefully
++ * @target:	Node ID of the targeted PU or subsystem
++ * @ack:	Flag to specify whether acknowledge is requested
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_force_powerdown(const u32 target,
++			      const enum zynqmp_pm_request_ack ack)
++{
++	return zynqmp_pm_invoke_fn(PM_FORCE_POWERDOWN, target, ack, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_force_powerdown);
+ 
+-	return NULL;
++/**
++ * zynqmp_pm_request_wakeup - PM call to wake up selected master or subsystem
++ * @node:	Node ID of the master or subsystem
++ * @set_addr:	Specifies whether the address argument is relevant
++ * @address:	Address from which to resume when woken up
++ * @ack:	Flag to specify whether acknowledge requested
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_request_wakeup(const u32 node, const bool set_addr,
++			     const u64 address,
++			     const enum zynqmp_pm_request_ack ack)
++{
++	/* set_addr flag is encoded into 1st bit of address */
++	return zynqmp_pm_invoke_fn(PM_REQUEST_WAKEUP, node, address | set_addr,
++				   address >> 32, ack, NULL);
+ }
++EXPORT_SYMBOL_GPL(zynqmp_pm_request_wakeup);
+ 
+-static ssize_t shutdown_scope_show(struct device *device,
+-				   struct device_attribute *attr,
+-				   char *buf)
++/**
++ * zynqmp_pm_set_wakeup_source - PM call to specify the wakeup source
++ *					while suspended
++ * @target:	Node ID of the targeted PU or subsystem
++ * @wakeup_node:Node ID of the wakeup peripheral
++ * @enable:	Enable or disable the specified peripheral as wake source
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_wakeup_source(const u32 target, const u32 wakeup_node,
++				const u32 enable)
+ {
+-	int i;
++	return zynqmp_pm_invoke_fn(PM_SET_WAKEUP_SOURCE, target,
++				   wakeup_node, enable, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_wakeup_source);
+ 
+-	for (i = 0; i < ARRAY_SIZE(shutdown_scopes); i++) {
+-		if (&shutdown_scopes[i] == selected_scope) {
+-			strcat(buf, "[");
+-			strcat(buf, shutdown_scopes[i].name);
+-			strcat(buf, "]");
+-		} else {
+-			strcat(buf, shutdown_scopes[i].name);
+-		}
+-		strcat(buf, " ");
+-	}
+-	strcat(buf, "\n");
++/**
++ * zynqmp_pm_set_max_latency - PM call to set wakeup latency requirements
++ * @node:	Node ID of the slave
++ * @latency:	Requested maximum wakeup latency
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_max_latency(const u32 node, const u32 latency)
++{
++	return zynqmp_pm_invoke_fn(PM_SET_MAX_LATENCY, node, latency,
++				   0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_max_latency);
+ 
+-	return strlen(buf);
++/**
++ * zynqmp_pm_set_configuration - PM call to set system configuration
++ * @physical_addr:	Physical 32-bit address of data structure in memory
++ *
++ * Return:		Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_configuration(const u32 physical_addr)
++{
++	return zynqmp_pm_invoke_fn(PM_SET_CONFIGURATION, physical_addr, 0,
++				   0, 0, NULL);
+ }
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_configuration);
+ 
+-static ssize_t shutdown_scope_store(struct device *device,
+-				    struct device_attribute *attr,
+-				    const char *buf, size_t count)
++/**
++ * zynqmp_pm_get_node_status - PM call to request a node's current power state
++ * @node:		ID of the component or sub-system in question
++ * @status:		Current operating state of the requested node
++ * @requirements:	Current requirements asserted on the node,
++ *			used for slave nodes only.
++ * @usage:		Usage information, used for slave nodes only:
++ *			PM_USAGE_NO_MASTER	- No master is currently using
++ *						  the node
++ *			PM_USAGE_CURRENT_MASTER	- Only requesting master is
++ *						  currently using the node
++ *			PM_USAGE_OTHER_MASTER	- Only other masters are
++ *						  currently using the node
++ *			PM_USAGE_BOTH_MASTERS	- Both the current and at least
++ *						  one other master is currently
++ *						  using the node
++ *
++ * Return:		Returns status, either success or error+reason
++ */
++int zynqmp_pm_get_node_status(const u32 node, u32 *const status,
++			      u32 *const requirements, u32 *const usage)
+ {
++	u32 ret_payload[PAYLOAD_ARG_CNT];
+ 	int ret;
+-	struct zynqmp_pm_shutdown_scope *scope;
+ 
+-	scope = zynqmp_pm_is_shutdown_scope_valid(buf);
+-	if (!scope)
++	if (!status)
+ 		return -EINVAL;
+ 
+-	ret = zynqmp_pm_system_shutdown(ZYNQMP_PM_SHUTDOWN_TYPE_SETSCOPE_ONLY,
+-					scope->subtype);
+-	if (ret) {
+-		pr_err("unable to set shutdown scope %s\n", buf);
+-		return ret;
++	ret = zynqmp_pm_invoke_fn(PM_GET_NODE_STATUS, node, 0, 0,
++				  0, ret_payload);
++	if (ret_payload[0] == XST_PM_SUCCESS) {
++		*status = ret_payload[1];
++		if (requirements)
++			*requirements = ret_payload[2];
++		if (usage)
++			*usage = ret_payload[3];
+ 	}
+ 
+-	selected_scope = scope;
+-
+-	return count;
++	return ret;
+ }
++EXPORT_SYMBOL_GPL(zynqmp_pm_get_node_status);
+ 
+-static DEVICE_ATTR_RW(shutdown_scope);
+-
+-static ssize_t health_status_store(struct device *device,
+-				   struct device_attribute *attr,
+-				   const char *buf, size_t count)
++/**
++ * zynqmp_pm_get_operating_characteristic - PM call to request operating
++ *						characteristic information
++ * @node:	Node ID of the slave
++ * @type:	Type of the operating characteristic requested
++ * @result:	Used to return the reqeusted operating characteristic
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_get_operating_characteristic(const u32 node,
++		const enum zynqmp_pm_opchar_type type,
++		u32 *const result)
+ {
++	u32 ret_payload[PAYLOAD_ARG_CNT];
+ 	int ret;
+-	unsigned int value;
+ 
+-	ret = kstrtouint(buf, 10, &value);
+-	if (ret)
++	if (!result)
++		return -EINVAL;
++
++	ret = zynqmp_pm_invoke_fn(PM_GET_OPERATING_CHARACTERISTIC,
++				  node, type, 0, 0, ret_payload);
++	if (ret_payload[0] == XST_PM_SUCCESS)
++		*result = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_get_operating_characteristic);
++
++/**
++ * zynqmp_pm_pinctrl_request - Request Pin from firmware
++ * @pin: Pin number to request
++ *
++ * This function requests pin from firmware.
++ *
++ * Return: Returns status, either success or error+reason.
++ */
++int zynqmp_pm_pinctrl_request(const u32 pin)
++{
++	return zynqmp_pm_invoke_fn(PM_PINCTRL_REQUEST, pin, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_request);
++
++/**
++ * zynqmp_pm_pinctrl_release - Inform firmware that Pin control is released
++ * @pin: Pin number to release
++ *
++ * This function release pin from firmware.
++ *
++ * Return: Returns status, either success or error+reason.
++ */
++int zynqmp_pm_pinctrl_release(const u32 pin)
++{
++	return zynqmp_pm_invoke_fn(PM_PINCTRL_RELEASE, pin, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_release);
++
++/**
++ * zynqmp_pm_pinctrl_get_function - Read function id set for the given pin
++ * @pin: Pin number
++ * @id: Buffer to store function ID
++ *
++ * This function provides the function currently set for the given pin.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	if (!id)
++		return -EINVAL;
++
++	ret = zynqmp_pm_invoke_fn(PM_PINCTRL_GET_FUNCTION, pin, 0,
++				  0, 0, ret_payload);
++	*id = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_get_function);
++
++/**
++ * zynqmp_pm_pinctrl_set_function - Set requested function for the pin
++ * @pin: Pin number
++ * @id: Function ID to set
++ *
++ * This function sets requested function for the given pin.
++ *
++ * Return: Returns status, either success or error+reason.
++ */
++int zynqmp_pm_pinctrl_set_function(const u32 pin, const u32 id)
++{
++	return zynqmp_pm_invoke_fn(PM_PINCTRL_SET_FUNCTION, pin, id,
++				   0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_set_function);
++
++/**
++ * zynqmp_pm_pinctrl_get_config - Get configuration parameter for the pin
++ * @pin: Pin number
++ * @param: Parameter to get
++ * @value: Buffer to store parameter value
++ *
++ * This function gets requested configuration parameter for the given pin.
++ *
++ * Return: Returns status, either success or error+reason.
++ */
++int zynqmp_pm_pinctrl_get_config(const u32 pin, const u32 param,
++				 u32 *value)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	if (!value)
++		return -EINVAL;
++
++	ret = zynqmp_pm_invoke_fn(PM_PINCTRL_CONFIG_PARAM_GET, pin, param,
++				  0, 0, ret_payload);
++	*value = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_get_config);
++
++/**
++ * zynqmp_pm_config_reg_access - PM Config API for Config register access
++ * @register_access_id:	ID of the requested REGISTER_ACCESS
++ * @address:		Address of the register to be accessed
++ * @mask:		Mask to be written to the register
++ * @value:		Value to be written to the register
++ * @out:		Returned output value
++ *
++ * This function calls REGISTER_ACCESS to configure CSU/PMU registers.
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++
++int zynqmp_pm_config_reg_access(u32 register_access_id, u32 address,
++				u32 mask, u32 value, u32 *out)
++{
++	return zynqmp_pm_invoke_fn(PM_REGISTER_ACCESS, register_access_id,
++				   address, mask, value, out);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_config_reg_access);
++
++/**
++ * zynqmp_pm_mmio_read - Provide access to register read.
++ * @address:	Address of the register to be accessed
++ * @out:	Returned output value
++ *
++ * This function calls MMIO_READ to read the register.
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++
++int zynqmp_pm_mmio_read(u32 address, u32 *out)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	ret = zynqmp_pm_invoke_fn(PM_MMIO_READ, address, 0, 0, 0,
++				  ret_payload);
++	*out = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_mmio_read);
++
++/**
++ * zynqmp_pm_mmio_write - Provide access to register write.
++ * @address:	Address of the register to be accessed
++ * @mask:	Mask to be written to the register
++ * @value:	Value to be written to the register
++ *
++ * This function calls MMIO_WRITE to write the register.
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++
++int zynqmp_pm_mmio_write(u32 address, u32 mask, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_MMIO_WRITE, address, mask,
++				   value, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_mmio_write);
++
++/**
++ * zynqmp_pm_pinctrl_set_config - Set configuration parameter for the pin
++ * @pin: Pin number
++ * @param: Parameter to set
++ * @value: Parameter value to set
++ *
++ * This function sets requested configuration parameter for the given pin.
++ *
++ * Return: Returns status, either success or error+reason.
++ */
++int zynqmp_pm_pinctrl_set_config(const u32 pin, const u32 param,
++				 u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_PINCTRL_CONFIG_PARAM_SET, pin,
++				   param, value, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_pinctrl_set_config);
++
++/**
++ * zynqmp_pm_bootmode_read() - PM Config API for read bootpin status
++ * @ps_mode: Returned output value of ps_mode
++ *
++ * This API function is to be used for notify the power management controller
++ * to read bootpin status.
++ *
++ * Return: status, either success or error+reason
++ */
++unsigned int zynqmp_pm_bootmode_read(u32 *ps_mode)
++{
++	unsigned int ret;
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++
++	ret = zynqmp_pm_invoke_fn(PM_MMIO_READ, CRL_APB_BOOT_PIN_CTRL, 0,
++				  0, 0, ret_payload);
++
++	*ps_mode = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_bootmode_read);
++
++/**
++ * zynqmp_pm_bootmode_write() - PM Config API for Configure bootpin
++ * @ps_mode: Value to be written to the bootpin ctrl register
++ *
++ * This API function is to be used for notify the power management controller
++ * to configure bootpin.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_bootmode_write(u32 ps_mode)
++{
++	return zynqmp_pm_invoke_fn(PM_MMIO_WRITE, CRL_APB_BOOT_PIN_CTRL,
++				   CRL_APB_BOOTPIN_CTRL_MASK, ps_mode, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_bootmode_write);
++
++/**
++ * zynqmp_pm_init_finalize() - PM call to inform firmware that the caller
++ *			       master has initialized its own power management
++ *
++ * Return: Returns status, either success or error+reason
++ *
++ * This API function is to be used for notify the power management controller
++ * about the completed power management initialization.
++ */
++int zynqmp_pm_init_finalize(void)
++{
++	return zynqmp_pm_invoke_fn(PM_PM_INIT_FINALIZE, 0, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_init_finalize);
++
++/**
++ * zynqmp_pm_set_suspend_mode()	- Set system suspend mode
++ * @mode:	Mode to set for system suspend
++ *
++ * This API function is used to set mode of system suspend.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_suspend_mode(u32 mode)
++{
++	return zynqmp_pm_invoke_fn(PM_SET_SUSPEND_MODE, mode, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_suspend_mode);
++
++/**
++ * zynqmp_pm_request_node() - Request a node with specific capabilities
++ * @node:		Node ID of the slave
++ * @capabilities:	Requested capabilities of the slave
++ * @qos:		Quality of service (not supported)
++ * @ack:		Flag to specify whether acknowledge is requested
++ *
++ * This function is used by master to request particular node from firmware.
++ * Every master must request node before using it.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_request_node(const u32 node, const u32 capabilities,
++			   const u32 qos, const enum zynqmp_pm_request_ack ack)
++{
++	return zynqmp_pm_invoke_fn(PM_REQUEST_NODE, node, capabilities,
++				   qos, ack, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_request_node);
++
++/**
++ * zynqmp_pm_release_node() - Release a node
++ * @node:	Node ID of the slave
++ *
++ * This function is used by master to inform firmware that master
++ * has released node. Once released, master must not use that node
++ * without re-request.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_release_node(const u32 node)
++{
++	return zynqmp_pm_invoke_fn(PM_RELEASE_NODE, node, 0, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_release_node);
++
++/**
++ * zynqmp_pm_get_rpu_mode() - Get RPU mode
++ * @node_id:	Node ID of the device
++ * @rpu_mode:	return by reference value
++ *		either split or lockstep
++ *
++ * Return:	return 0 on success or error+reason.
++ *		if success, then  rpu_mode will be set
++ *		to current rpu mode.
++ */
++int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	ret = zynqmp_pm_invoke_fn(PM_IOCTL, node_id,
++				  IOCTL_GET_RPU_OPER_MODE, 0, 0, ret_payload);
++
++	/* only set rpu_mode if no error */
++	if (ret == XST_PM_SUCCESS)
++		*rpu_mode = ret_payload[0];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_get_rpu_mode);
++
++/**
++ * zynqmp_pm_set_rpu_mode() - Set RPU mode
++ * @node_id:	Node ID of the device
++ * @rpu_mode:	Argument 1 to requested IOCTL call. either split or lockstep
++ *
++ *		This function is used to set RPU mode to split or
++ *		lockstep
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_rpu_mode(u32 node_id, enum rpu_oper_mode rpu_mode)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, node_id,
++				   IOCTL_SET_RPU_OPER_MODE, (u32)rpu_mode,
++				   0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_rpu_mode);
++
++/**
++ * zynqmp_pm_set_tcm_config - configure TCM
++ * @node_id:	Node ID of the device
++ * @tcm_mode:	Argument 1 to requested IOCTL call
++ *              either PM_RPU_TCM_COMB or PM_RPU_TCM_SPLIT
++ *
++ * This function is used to set RPU mode to split or combined
++ *
++ * Return: status: 0 for success, else failure
++ */
++int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, node_id,
++				   IOCTL_TCM_COMB_CONFIG, (u32)tcm_mode, 0,
++				   NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_tcm_config);
++
++/**
++ * zynqmp_pm_force_pwrdwn - PM call to request for another PU or subsystem to
++ *             be powered down forcefully
++ * @node:  Node ID of the targeted PU or subsystem
++ * @ack:   Flag to specify whether acknowledge is requested
++ *
++ * Return: status, either success or error+reason
++ */
++int zynqmp_pm_force_pwrdwn(const u32 node,
++			   const enum zynqmp_pm_request_ack ack)
++{
++	return zynqmp_pm_invoke_fn(PM_FORCE_POWERDOWN, node, ack, 0, 0, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_force_pwrdwn);
++
++/**
++ * zynqmp_pm_request_wake - PM call to wake up selected master or subsystem
++ * @node:  Node ID of the master or subsystem
++ * @set_addr:  Specifies whether the address argument is relevant
++ * @address:   Address from which to resume when woken up
++ * @ack:   Flag to specify whether acknowledge requested
++ *
++ * Return: status, either success or error+reason
++ */
++int zynqmp_pm_request_wake(const u32 node,
++			   const bool set_addr,
++			   const u64 address,
++			   const enum zynqmp_pm_request_ack ack)
++{
++	/* set_addr flag is encoded into 1st bit of address */
++	return zynqmp_pm_invoke_fn(PM_REQUEST_WAKEUP, node, address | set_addr,
++				   address >> 32, ack, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_request_wake);
++
++/**
++ * zynqmp_pm_set_requirement() - PM call to set requirement for PM slaves
++ * @node:		Node ID of the slave
++ * @capabilities:	Requested capabilities of the slave
++ * @qos:		Quality of service (not supported)
++ * @ack:		Flag to specify whether acknowledge is requested
++ *
++ * This API function is to be used for slaves a PU already has requested
++ * to change its capabilities.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
++			      const u32 qos,
++			      const enum zynqmp_pm_request_ack ack)
++{
++	return zynqmp_pm_invoke_fn(PM_SET_REQUIREMENT, node, capabilities,
++				   qos, ack, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_set_requirement);
++
++/**
++ * zynqmp_pm_aes_engine - Access AES hardware to encrypt/decrypt the data using
++ * AES-GCM core.
++ * @address:	Address of the AesParams structure.
++ * @out:	Returned output value
++ *
++ * Return:	Returns status, either success or error code.
++ */
++int zynqmp_pm_aes_engine(const u64 address, u32 *out)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	if (!out)
++		return -EINVAL;
++
++	ret = zynqmp_pm_invoke_fn(PM_SECURE_AES, upper_32_bits(address),
++				  lower_32_bits(address),
++				  0, 0, ret_payload);
++	*out = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_aes_engine);
++
++/**
++ * zynqmp_pm_efuse_access - Provides access to efuse memory.
++ * @address:	Address of the efuse params structure
++ * @out:		Returned output value
++ *
++ * Return:	Returns status, either success or error code.
++ */
++int zynqmp_pm_efuse_access(const u64 address, u32 *out)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret;
++
++	if (!out)
++		return -EINVAL;
++
++	ret = zynqmp_pm_invoke_fn(PM_EFUSE_ACCESS, upper_32_bits(address),
++				  lower_32_bits(address), 0, 0, ret_payload);
++	*out = ret_payload[1];
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_efuse_access);
++
++int zynqmp_pm_secure_load(const u64 src_addr, u64 key_addr, u64 *dst)
++{
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++	int ret_value;
++
++	if (!dst)
++		return -EINVAL;
++
++	ret_value = zynqmp_pm_invoke_fn(PM_SECURE_IMAGE,
++					lower_32_bits(src_addr),
++					upper_32_bits(src_addr),
++					lower_32_bits(key_addr),
++					upper_32_bits(key_addr),
++					ret_payload);
++	*dst = ((u64)ret_payload[1] << 32) | ret_payload[2];
++
++	return ret_value;
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_secure_load);
++
++/**
++ * zynqmp_pm_register_notifier() - PM API for register a subsystem
++ *                                to be notified about specific
++ *                                event/error.
++ * @node:	Node ID to which the event is related.
++ * @event:	Event Mask for Error Event.
++ * @wake:	Wake subsystem upon capturing the event if value 1
++ * @enable:	Enable the registration for value 1, disable for value 0
++ *
++ * This function is used to register/un-register for particular node-event
++ * combination in firmware.
++ *
++ * Return: Returns status, either success or error+reason
++ */
++
++int zynqmp_pm_register_notifier(const u32 node, const u32 event,
++				const u32 wake, const u32 enable)
++{
++	return zynqmp_pm_invoke_fn(PM_REGISTER_NOTIFIER, node, event,
++				   wake, enable, NULL);
++}
++EXPORT_SYMBOL_GPL(zynqmp_pm_register_notifier);
++
++/**
++ * zynqmp_pm_system_shutdown - PM call to request a system shutdown or restart
++ * @type:	Shutdown or restart? 0 for shutdown, 1 for restart
++ * @subtype:	Specifies which system should be restarted or shut down
++ *
++ * Return:	Returns status, either success or error+reason
++ */
++int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype)
++{
++	return zynqmp_pm_invoke_fn(PM_SYSTEM_SHUTDOWN, type, subtype,
++				   0, 0, NULL);
++}
++
++/**
++ * zynqmp_pm_set_feature_config - PM call to request IOCTL for feature config
++ * @id:         The config ID of the feature to be configured
++ * @value:      The config value of the feature to be configured
++ *
++ * Return:      Returns 0 on success or error value on failure.
++ */
++int zynqmp_pm_set_feature_config(enum pm_feature_config_id id, u32 value)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_SET_FEATURE_CONFIG,
++				   id, value, NULL);
++}
++
++/**
++ * zynqmp_pm_get_feature_config - PM call to get value of configured feature
++ * @id:         The config id of the feature to be queried
++ * @payload:    Returned value array
++ *
++ * Return:      Returns 0 on success or error value on failure.
++ */
++int zynqmp_pm_get_feature_config(enum pm_feature_config_id id,
++				 u32 *payload)
++{
++	return zynqmp_pm_invoke_fn(PM_IOCTL, 0, IOCTL_GET_FEATURE_CONFIG,
++				   id, 0, payload);
++}
++
++/**
++ * struct zynqmp_pm_shutdown_scope - Struct for shutdown scope
++ * @subtype:	Shutdown subtype
++ * @name:	Matching string for scope argument
++ *
++ * This struct encapsulates mapping between shutdown scope ID and string.
++ */
++struct zynqmp_pm_shutdown_scope {
++	const enum zynqmp_pm_shutdown_subtype subtype;
++	const char *name;
++};
++
++static struct zynqmp_pm_shutdown_scope shutdown_scopes[] = {
++	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM] = {
++		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM,
++		.name = "subsystem",
++	},
++	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY] = {
++		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY,
++		.name = "ps_only",
++	},
++	[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM] = {
++		.subtype = ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM,
++		.name = "system",
++	},
++};
++
++static struct zynqmp_pm_shutdown_scope *selected_scope =
++		&shutdown_scopes[ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM];
++
++/**
++ * zynqmp_pm_is_shutdown_scope_valid - Check if shutdown scope string is valid
++ * @scope_string:	Shutdown scope string
++ *
++ * Return:		Return pointer to matching shutdown scope struct from
++ *			array of available options in system if string is valid,
++ *			otherwise returns NULL.
++ */
++static struct zynqmp_pm_shutdown_scope*
++		zynqmp_pm_is_shutdown_scope_valid(const char *scope_string)
++{
++	int count;
++
++	for (count = 0; count < ARRAY_SIZE(shutdown_scopes); count++)
++		if (sysfs_streq(scope_string, shutdown_scopes[count].name))
++			return &shutdown_scopes[count];
++
++	return NULL;
++}
++
++static ssize_t shutdown_scope_show(struct device *device,
++				   struct device_attribute *attr,
++				   char *buf)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(shutdown_scopes); i++) {
++		if (&shutdown_scopes[i] == selected_scope) {
++			strcat(buf, "[");
++			strcat(buf, shutdown_scopes[i].name);
++			strcat(buf, "]");
++		} else {
++			strcat(buf, shutdown_scopes[i].name);
++		}
++		strcat(buf, " ");
++	}
++	strcat(buf, "\n");
++
++	return strlen(buf);
++}
++
++static ssize_t shutdown_scope_store(struct device *device,
++				    struct device_attribute *attr,
++				    const char *buf, size_t count)
++{
++	int ret;
++	struct zynqmp_pm_shutdown_scope *scope;
++
++	scope = zynqmp_pm_is_shutdown_scope_valid(buf);
++	if (!scope)
++		return -EINVAL;
++
++	ret = zynqmp_pm_system_shutdown(ZYNQMP_PM_SHUTDOWN_TYPE_SETSCOPE_ONLY,
++					scope->subtype);
++	if (ret) {
++		pr_err("unable to set shutdown scope %s\n", buf);
++		return ret;
++	}
++
++	selected_scope = scope;
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(shutdown_scope);
++
++static ssize_t health_status_store(struct device *device,
++				   struct device_attribute *attr,
++				   const char *buf, size_t count)
++{
++	int ret;
++	unsigned int value;
++
++	ret = kstrtouint(buf, 10, &value);
++	if (ret)
+ 		return ret;
+ 
+ 	ret = zynqmp_pm_set_boot_health_status(value);
+@@ -1203,6 +2055,108 @@ static DEVICE_ATTR_RW(pggs1);
+ static DEVICE_ATTR_RW(pggs2);
+ static DEVICE_ATTR_RW(pggs3);
+ 
++static ssize_t last_reset_reason_show(struct device *device,
++				      struct device_attribute *attr,
++				      char *buf)
++{
++	int ret;
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++
++	ret = zynqmp_pm_get_last_reset_reason(ret_payload);
++	if (ret)
++		return ret;
++	switch (ret_payload[1]) {
++	case PM_RESET_REASON_EXT_POR:
++		return sprintf(buf, "ext_por\n");
++	case PM_RESET_REASON_SW_POR:
++		return sprintf(buf, "sw_por\n");
++	case PM_RESET_REASON_SLR_POR:
++		return sprintf(buf, "sl_por\n");
++	case PM_RESET_REASON_ERR_POR:
++		return sprintf(buf, "err_por\n");
++	case PM_RESET_REASON_DAP_SRST:
++		return sprintf(buf, "dap_srst\n");
++	case PM_RESET_REASON_ERR_SRST:
++		return sprintf(buf, "err_srst\n");
++	case PM_RESET_REASON_SW_SRST:
++		return sprintf(buf, "sw_srst\n");
++	case PM_RESET_REASON_SLR_SRST:
++		return sprintf(buf, "slr_srst\n");
++	default:
++		return sprintf(buf, "unknown reset\n");
++	}
++}
++static DEVICE_ATTR_RO(last_reset_reason);
++
++static atomic_t feature_conf_id;
++
++static ssize_t feature_config_id_show(struct device *device,
++				      struct device_attribute *attr,
++				      char *buf)
++{
++	return sysfs_emit(buf, "%d\n", atomic_read(&feature_conf_id));
++}
++
++static ssize_t feature_config_id_store(struct device *device,
++				       struct device_attribute *attr,
++				       const char *buf, size_t count)
++{
++	u32 config_id;
++	int ret;
++
++	if (!buf)
++		return -EINVAL;
++
++	ret = kstrtou32(buf, 10, &config_id);
++	if (ret)
++		return ret;
++
++	atomic_set(&feature_conf_id, config_id);
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(feature_config_id);
++
++static ssize_t feature_config_value_show(struct device *device,
++					 struct device_attribute *attr,
++					 char *buf)
++{
++	int ret;
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++
++	ret = zynqmp_pm_get_feature_config(atomic_read(&feature_conf_id),
++					   ret_payload);
++	if (ret)
++		return ret;
++
++	return sysfs_emit(buf, "%d\n", ret_payload[1]);
++}
++
++static ssize_t feature_config_value_store(struct device *device,
++					  struct device_attribute *attr,
++					  const char *buf, size_t count)
++{
++	u32 value;
++	int ret;
++
++	if (!buf)
++		return -EINVAL;
++
++	ret = kstrtou32(buf, 10, &value);
++	if (ret)
++		return ret;
++
++	ret = zynqmp_pm_set_feature_config(atomic_read(&feature_conf_id),
++					   value);
++	if (ret)
++		return ret;
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(feature_config_value);
++
+ static struct attribute *zynqmp_firmware_attrs[] = {
+ 	&dev_attr_ggs0.attr,
+ 	&dev_attr_ggs1.attr,
+@@ -1214,11 +2168,168 @@ static struct attribute *zynqmp_firmware_attrs[] = {
+ 	&dev_attr_pggs3.attr,
+ 	&dev_attr_shutdown_scope.attr,
+ 	&dev_attr_health_status.attr,
++	&dev_attr_last_reset_reason.attr,
++	&dev_attr_feature_config_id.attr,
++	&dev_attr_feature_config_value.attr,
+ 	NULL,
+ };
+ 
+ ATTRIBUTE_GROUPS(zynqmp_firmware);
+ 
++/**
++ * config_reg_store - Write config_reg sysfs attribute
++ * @kobj:	Kobject structure
++ * @attr:	Kobject attribute structure
++ * @buf:	User entered health_status attribute string
++ * @count:	Buffer size
++ *
++ * User-space interface for setting the config register.
++ *
++ * To write any CSU/PMU register
++ * echo <address> <mask> <values> > /sys/firmware/zynqmp/config_reg
++ * Usage:
++ * echo 0x345AB234 0xFFFFFFFF 0x1234ABCD > /sys/firmware/zynqmp/config_reg
++ *
++ * To Read any CSU/PMU register, write address to the variable like below
++ * echo <address> > /sys/firmware/zynqmp/config_reg
++ *
++ * Return:	count argument if request succeeds, the corresponding error
++ *		code otherwise
++ */
++static ssize_t config_reg_store(struct kobject *kobj,
++				struct kobj_attribute *attr,
++				const char *buf, size_t count)
++{
++	char *kern_buff, *inbuf, *tok;
++	unsigned long address, value, mask;
++	int ret;
++
++	kern_buff = kzalloc(count, GFP_KERNEL);
++	if (!kern_buff)
++		return -ENOMEM;
++
++	ret = strlcpy(kern_buff, buf, count);
++	if (ret < 0) {
++		ret = -EFAULT;
++		goto err;
++	}
++
++	inbuf = kern_buff;
++
++	/* Read the addess */
++	tok = strsep(&inbuf, " ");
++	if (!tok) {
++		ret = -EFAULT;
++		goto err;
++	}
++	ret = kstrtol(tok, 16, &address);
++	if (ret) {
++		ret = -EFAULT;
++		goto err;
++	}
++	/* Read the write value */
++	tok = strsep(&inbuf, " ");
++	/*
++	 * If parameter provided is only address, then its a read operation.
++	 * Store the address in a global variable and retrieve whenever
++	 * required.
++	 */
++	if (!tok) {
++		register_address = address;
++		goto err;
++	}
++	register_address = address;
++
++	ret = kstrtol(tok, 16, &mask);
++	if (ret) {
++		ret = -EFAULT;
++		goto err;
++	}
++	tok = strsep(&inbuf, " ");
++	if (!tok) {
++		ret = -EFAULT;
++		goto err;
++	}
++	ret = kstrtol(tok, 16, &value);
++	if (ret) {
++		ret = -EFAULT;
++		goto err;
++	}
++	ret = zynqmp_pm_config_reg_access(CONFIG_REG_WRITE, address,
++					  mask, value, NULL);
++	if (ret)
++		pr_err("unable to write value to %lx\n", value);
++err:
++	kfree(kern_buff);
++	if (ret)
++		return ret;
++	return count;
++}
++
++/**
++ * config_reg_show - Read config_reg sysfs attribute
++ * @kobj:	Kobject structure
++ * @attr:	Kobject attribute structure
++ * @buf:	User entered health_status attribute string
++ *
++ * User-space interface for getting the config register.
++ *
++ * To Read any CSU/PMU register, write address to the variable like below
++ * echo <address> > /sys/firmware/zynqmp/config_reg
++ *
++ * Then Read the address using below command
++ * cat /sys/firmware/zynqmp/config_reg
++ *
++ * Return: number of chars written to buf.
++ */
++static ssize_t config_reg_show(struct kobject *kobj,
++			       struct kobj_attribute *attr,
++			       char *buf)
++{
++	int ret;
++	u32 ret_payload[PAYLOAD_ARG_CNT];
++
++	ret = zynqmp_pm_config_reg_access(CONFIG_REG_READ, register_address,
++					  0, 0, ret_payload);
++	if (ret)
++		return ret;
++
++	return sprintf(buf, "0x%x\n", ret_payload[1]);
++}
++
++static struct kobj_attribute zynqmp_attr_config_reg =
++					__ATTR_RW(config_reg);
++
++static struct attribute *attrs[] = {
++	&zynqmp_attr_config_reg.attr,
++	NULL,
++};
++
++static const struct attribute_group attr_group = {
++	.attrs = attrs,
++	NULL,
++};
++
++static int zynqmp_pm_sysfs_init(void)
++{
++	struct kobject *zynqmp_kobj;
++	int ret;
++
++	zynqmp_kobj = kobject_create_and_add("zynqmp", firmware_kobj);
++	if (!zynqmp_kobj) {
++		pr_err("zynqmp: Firmware kobj add failed.\n");
++		return -ENOMEM;
++	}
++
++	ret = sysfs_create_group(zynqmp_kobj, &attr_group);
++	if (ret) {
++		pr_err("%s() sysfs creation fail with error %d\n",
++		       __func__, ret);
++	}
++
++	return ret;
++}
++
+ static int zynqmp_firmware_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -1272,8 +2383,23 @@ static int zynqmp_firmware_probe(struct platform_device *pdev)
+ 		return ret;
+ 	}
+ 
++	ret = zynqmp_pm_sysfs_init();
++	if (ret) {
++		pr_err("%s() sysfs init fail with error %d\n", __func__, ret);
++		return ret;
++	}
++
+ 	zynqmp_pm_api_debugfs_init();
+ 
++	np = of_find_compatible_node(NULL, NULL, "xlnx,versal");
++	if (np) {
++		em_dev = platform_device_register_data(&pdev->dev, "xlnx_event_manager",
++						       -1, NULL, 0);
++		if (IS_ERR(em_dev))
++			dev_err_probe(&pdev->dev, PTR_ERR(pdev), "EM register fail with error\n");
++	}
++	of_node_put(np);
++
+ 	return of_platform_populate(dev->of_node, NULL, NULL, dev);
+ }
+ 
+@@ -1291,6 +2417,8 @@ static int zynqmp_firmware_remove(struct platform_device *pdev)
+ 		kfree(feature_data);
+ 	}
+ 
++	platform_device_unregister(em_dev);
++
+ 	return 0;
+ }
+ 
+diff --git a/include/linux/firmware/xlnx-error-events.h b/include/linux/firmware/xlnx-error-events.h
+new file mode 100644
+index 000000000..01e01eb7e
+--- /dev/null
++++ b/include/linux/firmware/xlnx-error-events.h
+@@ -0,0 +1,640 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Xilinx Versal Error Event Node IDs and Error Event Mask.
++ * Use with Xilinx Event Management Driver
++ *
++ * Copyright (C) 2021 Xilinx
++ *
++ * Abhyuday Godhasara <abhyuday.godhasara@xilinx.com>
++ */
++
++#ifndef _FIRMWARE_XLNX_ERROR_EVENTS_H_
++#define _FIRMWARE_XLNX_ERROR_EVENTS_H_
++
++/*
++ * Error Event Node Ids
++ */
++#define XPM_NODETYPE_EVENT_ERROR_PMC_ERR1	(0x28100000U)
++#define XPM_NODETYPE_EVENT_ERROR_PMC_ERR2	(0x28104000U)
++#define XPM_NODETYPE_EVENT_ERROR_PSM_ERR1	(0x28108000U)
++#define XPM_NODETYPE_EVENT_ERROR_PSM_ERR2	(0x2810C000U)
++#define XPM_NODETYPE_EVENT_ERROR_SW_ERR		(0x28110000U)
++
++/*
++ * Error Event Mask belongs to PMC ERR2 node.
++ * For which Node_Id = XPM_NODETYPE_EVENT_ERROR_PMC_ERR2
++ */
++
++/**
++ * XPM_EVENT_ERROR_MASK_BOOT_CR: Error event mask for PMC Boot Correctable Error.
++ * Set by ROM code during ROM execution during Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_BOOT_CR		BIT(0)
++
++/**
++ * XPM_EVENT_ERROR_MASK_BOOT_NCR: Error event mask for PMC Boot Non-Correctable Error.
++ * Set by ROM code during ROM execution during Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_BOOT_NCR		BIT(1)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FW_CR: Error event mask for PMC Firmware Boot Correctable Error.
++ * Set by PLM during firmware execution during Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_FW_CR		BIT(2)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FW_NCR: Error event mask for PMC Firmware Boot Non-Correctable Error.
++ * Set by PLM during firmware execution during Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_FW_NCR		BIT(3)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GSW_CR: Error event mask for General Software Correctable Error.
++ * Set by any processors after Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_GSW_CR		BIT(4)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GSW_NCR: Error event mask for General Software Non-Correctable Error.
++ * Set by any processors after Boot.
++ */
++#define XPM_EVENT_ERROR_MASK_GSW_NCR		BIT(5)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CFU: Error event mask for CFU Error.
++ */
++#define XPM_EVENT_ERROR_MASK_CFU		BIT(6)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CFRAME: Error event mask for CFRAME Error.
++ */
++#define XPM_EVENT_ERROR_MASK_CFRAME		BIT(7)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMC_PSM_CR: Error event mask for PSM Correctable Error,
++ * Summary from PSM Error Management.
++ */
++#define XPM_EVENT_ERROR_MASK_PMC_PSM_CR		BIT(8)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMC_PSM_NCR: Error event mask for PSM Non-Correctable Error,
++ * Summary from PSM Error Management.
++ */
++#define XPM_EVENT_ERROR_MASK_PMC_PSM_NCR	BIT(9)
++
++/**
++ * XPM_EVENT_ERROR_MASK_DDRMB_CR: Error event mask for DDRMC MB Correctable ECC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_DDRMB_CR		BIT(10)
++
++/**
++ * XPM_EVENT_ERROR_MASK_DDRMB_NCR: Error event mask for DDRMC MB Non-Correctable ECC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_DDRMB_NCR		BIT(11)
++
++/**
++ * XPM_EVENT_ERROR_MASK_NOCTYPE1_CR: Error event mask for NoC Type1 Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_NOCTYPE1_CR	BIT(12)
++
++/**
++ * XPM_EVENT_ERROR_MASK_NOCTYPE1_NCR: Error event mask for NoC Type1 Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_NOCTYPE1_NCR	BIT(13)
++
++/**
++ * XPM_EVENT_ERROR_MASK_NOCUSER: Error event mask for NoC User Error.
++ */
++#define XPM_EVENT_ERROR_MASK_NOCUSER		BIT(14)
++
++/**
++ * XPM_EVENT_ERROR_MASK_MMCM: Error event mask for MMCM Lock Error.
++ */
++#define XPM_EVENT_ERROR_MASK_MMCM		BIT(15)
++
++/**
++ * XPM_EVENT_ERROR_MASK_AIE_CR: Error event mask for ME Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_AIE_CR		BIT(16)
++
++/**
++ * XPM_EVENT_ERROR_MASK_AIE_NCR: Error event mask for ME Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_AIE_NCR		BIT(17)
++
++/**
++ * XPM_EVENT_ERROR_MASK_DDRMC_CR: Error event mask for DDRMC MC Correctable ECC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_DDRMC_CR		BIT(18)
++
++/**
++ * XPM_EVENT_ERROR_MASK_DDRMC_NCR: Error event mask for DDRMC MC Non-Correctable ECC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_DDRMC_NCR		BIT(19)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GT_CR: Error event mask for GT Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_GT_CR		BIT(20)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GT_NCR: Error event mask for GT Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_GT_NCR		BIT(21)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PLSMON_CR: Error event mask for PL Sysmon Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PLSMON_CR		BIT(22)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PLSMON_NCR: Error event mask for PL Sysmon Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PLSMON_NCR		BIT(23)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PL0: Error event mask for User defined PL generic error.
++ */
++#define XPM_EVENT_ERROR_MASK_PL0		BIT(24)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PL1: Error event mask for User defined PL generic error.
++ */
++#define XPM_EVENT_ERROR_MASK_PL1		BIT(25)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PL2: Error event mask for User defined PL generic error.
++ */
++#define XPM_EVENT_ERROR_MASK_PL2		BIT(26)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PL3: Error event mask for User defined PL generic error.
++ */
++#define XPM_EVENT_ERROR_MASK_PL3		BIT(27)
++
++/**
++ * XPM_EVENT_ERROR_MASK_NPIROOT: Error event mask for NPI Root Error.
++ */
++#define XPM_EVENT_ERROR_MASK_NPIROOT		BIT(28)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT3: Error event mask for SSIT Error from Slave SLR1,
++ * Only used in Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT3		BIT(29)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT4: Error event mask for SSIT Error from Slave SLR2,
++ * Only used in Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT4		BIT(30)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT5: Error event mask for SSIT Error from Slave SLR3,
++ * Only used in Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT5		BIT(31)
++
++/*
++ * Error Event Mask belongs to PMC ERR2 node,
++ * For which Node_Id = XPM_NODETYPE_EVENT_ERROR_PMC_ERR2
++ */
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCAPB: Error event mask for General purpose PMC error,
++ * can be triggered by any of the following peripherals:,
++ * - PMC Global Regsiters,- PMC Clock & Reset (CRP),- PMC IOU Secure SLCR,
++ * - PMC IOU SLCR,- BBRAM Controller,- PMC Analog Control Registers,
++ * - RTC Control Registers.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCAPB		BIT(0)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCROM: Error event mask for PMC ROM Validation Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCROM		BIT(1)
++
++/**
++ * XPM_EVENT_ERROR_MASK_MB_FATAL0: Error event mask for PMC PPU0 MB TMR Fatal Error.
++ */
++#define XPM_EVENT_ERROR_MASK_MB_FATAL0		BIT(2)
++
++/**
++ * XPM_EVENT_ERROR_MASK_MB_FATAL1: Error event mask for PMC PPU1 MB TMR Fatal Error.
++ */
++#define XPM_EVENT_ERROR_MASK_MB_FATAL1		BIT(3)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCPAR: Error event mask for PMC Switch and PMC IOU Parity Errors.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCPAR		BIT(4)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMC_CR: Error event mask for PMC Correctable Errors,
++ * PPU0 RAM correctable error.,PPU1 instruction RAM correctable error.,
++ * PPU1 data RAM correctable error.
++ */
++#define XPM_EVENT_ERROR_MASK_PMC_CR		BIT(5)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMC_NCR: Error event mask for PMC Non-Correctable Errors,
++ * PPU0 RAM non-correctable error.,PPU1 instruction RAM non-correctable error.,
++ * PPU1 data RAM non-correctable error.,PRAM non-correctable error.
++ */
++#define XPM_EVENT_ERROR_MASK_PMC_NCR		BIT(6)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON0: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[0].
++ * Indicates an alarm condition on any of SUPPLY0 to SUPPLY31.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON0		BIT(7)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON1: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[1].
++ * Indicates an alarm condition on any of SUPPLY32 to SUPPLY63.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON1		BIT(8)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON2: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[2].
++ * Indicates an alarm condition on any of SUPPLY64 to SUPPLY95.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON2		BIT(9)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON3: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[3].
++ * Indicates an alarm condition on any of SUPPLY96 to SUPPLY127.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON3		BIT(10)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON4: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[4].
++ * Indicates an alarm condition on any of SUPPLY128 to SUPPLY159.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON4		BIT(11)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON8: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[8].
++ * Indicates an over-temperature alarm.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON8		BIT(15)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCSMON9: Error event mask for PMC Temperature Shutdown Alert
++ * and Power Supply.
++ * Failure Detection Errors from PMC Sysmon alarm[9].
++ * Indicates a device temperature alarm.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCSMON9		BIT(16)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CFI: Error event mask for CFI Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_CFI		BIT(17)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SEUCRC: Error event mask for CFRAME SEU CRC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_SEUCRC		BIT(18)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SEUECC: Error event mask for CFRAME SEU ECC Error.
++ */
++#define XPM_EVENT_ERROR_MASK_SEUECC		BIT(19)
++
++/**
++ * XPM_EVENT_ERROR_MASK_RTCALARM: Error event mask for RTC Alarm Error.
++ */
++#define XPM_EVENT_ERROR_MASK_RTCALARM		BIT(22)
++
++/**
++ * XPM_EVENT_ERROR_MASK_NPLL: Error event mask for PMC NPLL Lock Error,
++ * This error can be unmasked after the NPLL is locked to alert when the
++ * NPLL loses lock.
++ */
++#define XPM_EVENT_ERROR_MASK_NPLL		BIT(23)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PPLL: Error event mask for PMC PPLL Lock Error,
++ * This error can be unmasked after the PPLL is locked to alert when the
++ * PPLL loses lock.
++ */
++#define XPM_EVENT_ERROR_MASK_PPLL		BIT(24)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CLKMON: Error event mask for Clock Monitor Errors.,
++ * Collected from CRP's CLKMON_STATUS register.
++ */
++#define XPM_EVENT_ERROR_MASK_CLKMON		BIT(25)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCTO: Error event mask for PMC Interconnect Timeout Errors.,
++ * Collected from:,Interconnect mission interrupt status register.,
++ * Interconnect latent status register.,Timeout interrupt status register
++ * for SERBs.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCTO		BIT(26)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCXMPU: Error event mask for PMC XMPU Errors:,
++ * Register access error on APB., Read permission violation.,
++ * Write permission violation.,Security violation.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCXMPU		BIT(27)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PMCXPPU: Error event mask for PMC XPPU Errors:,
++ * Register access error on APB., Master ID not found.,Read permission violation.,
++ * Master ID parity error., Master ID access violation.,
++ * TrustZone violation.,Aperture parity error.
++ */
++#define XPM_EVENT_ERROR_MASK_PMCXPPU		BIT(28)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT0: Error event mask for For Master SLR:
++ * SSIT Error from Slave SLR1.,
++ * For Slave SLRs: SSIT Error0 from Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT0		BIT(29)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT1: Error event mask for For Master SLR:
++ * SSIT Error from Slave SLR2.,
++ * For Slave SLRs: SSIT Error1 from Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT1		BIT(30)
++
++/**
++ * XPM_EVENT_ERROR_MASK_SSIT2: Error event mask for For Master SLR:
++ * SSIT Error from Slave SLR3.,
++ * For Slave SLRs: SSIT Error2 from Master SLR.
++ */
++#define XPM_EVENT_ERROR_MASK_SSIT2		BIT(31)
++
++/*
++ * Error Event Mask belongs to PSM ERR1 node,
++ * For which Node_Id = XPM_NODETYPE_EVENT_ERROR_PSM_ERR1
++ */
++
++/**
++ * XPM_EVENT_ERROR_MASK_PS_SW_CR: Error event mask for PS Software can write to
++ * trigger register to generate this Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PS_SW_CR		BIT(0)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PS_SW_NCR: Error event mask for PS Software can write to
++ * trigger register to generate this Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PS_SW_NCR		BIT(1)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_B_CR: Error event mask for PSM Firmware can write to
++ * trigger register to generate this Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_B_CR		BIT(2)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_B_NCR: Error event mask for PSM Firmware can write to
++ * trigger register to generate this Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_B_NCR		BIT(3)
++
++/**
++ * XPM_EVENT_ERROR_MASK_MB_FATAL: Error event mask for Or of MB Fatal1, Fatal2, Fatal3 Error.
++ */
++#define XPM_EVENT_ERROR_MASK_MB_FATAL		BIT(4)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_CR: Error event mask for PSM Correctable.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_CR		BIT(5)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_NCR: Error event mask for PSM Non-Correctable.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_NCR		BIT(6)
++
++/**
++ * XPM_EVENT_ERROR_MASK_OCM_ECC: Error event mask for Non-Correctable ECC Error
++ * during an OCM access.
++ */
++#define XPM_EVENT_ERROR_MASK_OCM_ECC		BIT(7)
++
++/**
++ * XPM_EVENT_ERROR_MASK_L2_ECC: Error event mask for Non-Correctable ECC Error
++ * during APU L2 Cache access.
++ */
++#define XPM_EVENT_ERROR_MASK_L2_ECC		BIT(8)
++
++/**
++ * XPM_EVENT_ERROR_MASK_RPU_ECC: Error event mask for ECC Errors during a RPU memory access.
++ * Floating-point operation exceptions. RPU REG APB error.
++ */
++#define XPM_EVENT_ERROR_MASK_RPU_ECC		BIT(9)
++
++/**
++ * XPM_EVENT_ERROR_MASK_RPU_LS: Error event mask for RPU Lockstep Errors from R5_0.
++ * The Lockstep error is not initialized until RPU clock is enabled;
++ * therefore, error outcomes are masked by default and are expected to be
++ * unmasked after processor clock is enabled and before its reset is released.
++ */
++#define XPM_EVENT_ERROR_MASK_RPU_LS		BIT(10)
++
++/**
++ * XPM_EVENT_ERROR_MASK_RPU_CCF: Error event mask for RPU Common Cause Failures ORed together.
++ * The CCF Error register with the masking capability has to reside in the RPU.
++ */
++#define XPM_EVENT_ERROR_MASK_RPU_CCF		BIT(11)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GIC_AXI: Error event mask for APU GIC AXI Error by the AXI4 master port,
++ * such as SLVERR or DECERR.
++ */
++#define XPM_EVENT_ERROR_MASK_GIC_AXI		BIT(12)
++
++/**
++ * XPM_EVENT_ERROR_MASK_GIC_ECC: Error event mask for APU GIC ECC Error,
++ * a Non-Correctable ECC error occurred in any ECC-protected RAM.
++ */
++#define XPM_EVENT_ERROR_MASK_GIC_ECC		BIT(13)
++
++/**
++ * XPM_EVENT_ERROR_MASK_APLL_LOCK: Error event mask for APLL Lock Errors.
++ * The error can be unmasked after the PLL is locked to alert when the
++ * PLL loses lock.
++ */
++#define XPM_EVENT_ERROR_MASK_APLL_LOCK		BIT(14)
++
++/**
++ * XPM_EVENT_ERROR_MASK_RPLL_LOCK: Error event mask for RPLL Lock Errors.
++ * The error can be unmasked after the PLL is locked to alert when the
++ * PLL loses lock.
++ */
++#define XPM_EVENT_ERROR_MASK_RPLL_LOCK		BIT(15)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CPM_CR: Error event mask for CPM Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_CPM_CR		BIT(16)
++
++/**
++ * XPM_EVENT_ERROR_MASK_CPM_NCR: Error event mask for CPM Non-Correctable Error.
++ */
++#define XPM_EVENT_ERROR_MASK_CPM_NCR		BIT(17)
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_APB: Error event mask for LPD APB Errors
++ * from:,IPI REG,USB2 REG,CRL REG,LPD AFIFM4 REG,LPD IOU REG,
++ * LPD IOU SECURE SLCR REG,LPD SLCR REG,LPD SLCR SECURE REG.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_APB		BIT(18)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FPD_APB: Error event mask for FPD APB Errors
++ * from:,FPD AFIFM0 REG,FPD AFIFM2 REG,FPD SLCR REG,FPD SLCR SECURE REG,
++ * CRF REG.
++ */
++#define XPM_EVENT_ERROR_MASK_FPD_APB		BIT(19)
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_PAR: Error event mask for Data parity errors
++ * from the interfaces connected
++ * to the LPD interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_PAR		BIT(20)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FPD_PAR: Error event mask for Data parity errors
++ * from the interfaces connected
++ * to the FPD interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_FPD_PAR		BIT(21)
++
++/**
++ * XPM_EVENT_ERROR_MASK_IOU_PAR: Error event mask for LPD IO Peripheral Unit Parity Error.
++ */
++#define XPM_EVENT_ERROR_MASK_IOU_PAR		BIT(22)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_PAR: Error event mask for Data parity errors
++ * from the interfaces connected to the PSM interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_PAR		BIT(23)
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_TO: Error event mask for LPD Interconnect Timeout errors.
++ * Collected from:,Timeout errors at the slaves connected to the LPD
++ * interconnect.,Address decode error.,Interconnect mission errors for
++ * the slaves connected to the LPD interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_TO		BIT(24)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FPD_TO: Error event mask for FPD Interconnect Timeout errors.
++ * Collected from:,Coresight debug trace alarms.,Timeout errors at the
++ * slaves connected to the FPD interconnect.,Address decode error.,
++ * Data parity errors on the interfaces connected to the FPD interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_FPD_TO		BIT(25)
++
++/**
++ * XPM_EVENT_ERROR_MASK_PSM_TO: Error event mask for PSM Interconnect Timeout Errors.
++ * Collected from:,Interconnect mission errors for PSM_LOCAL slave or
++ * PSM_GLOBAL slave or MDM slave or LPD interconnect or PSM master.,
++ * Interconnect latent errors for PSM_LOCAL slave or PSM_GLOBAL slave or
++ * MDM slave or LPD interconnect or PSM master.,
++ * Timeout errors at the slaves connected to the PSM interconnect.
++ */
++#define XPM_EVENT_ERROR_MASK_PSM_TO		BIT(26)
++
++/**
++ * XPM_EVENT_ERROR_MASK_XRAM_CR: Error event mask for XRAM Correctable error.
++ * Only applicable in devices that have XRAM.
++ */
++#define XPM_EVENT_ERROR_MASK_XRAM_CR		BIT(27)
++
++/**
++ * XPM_EVENT_ERROR_MASK_XRAM_NCR: Error event mask for XRAM Non-Correctable error.
++ * Only applicable in devices that have XRAM.
++ */
++#define XPM_EVENT_ERROR_MASK_XRAM_NCR		BIT(28)
++
++/*
++ * Error Event Mask belongs to PSM ERR2 node,
++ * For which Node_Id = XPM_NODETYPE_EVENT_ERROR_PSM_ERR2
++ */
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_SWDT: Error event mask for Error from Watchdog Timer
++ * in the LPD Subsystem.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_SWDT		BIT(0)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FPD_SWDT: Error event mask for Error from Watchdog Timer
++ * in the FPD Subsystem.
++ */
++#define XPM_EVENT_ERROR_MASK_FPD_SWDT		BIT(1)
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_XMPU: Error event mask for LPD XMPU Errors:,
++ * Register access error on APB., Read permission violation.,
++ * Write permission violation.,Security violation.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_XMPU		BIT(18)
++
++/**
++ * XPM_EVENT_ERROR_MASK_LPD_XPPU: Error event mask for LPD XPPU Errors:,
++ * Register access error on APB., Master ID not found.,Read permission violation.,
++ * Master ID parity error., Master ID access violation.,
++ * TrustZone violation.,Aperture parity error.
++ */
++#define XPM_EVENT_ERROR_MASK_LPD_XPPU		BIT(19)
++
++/**
++ * XPM_EVENT_ERROR_MASK_FPD_XMPU: Error event mask for FPD XMPU Errors:,
++ * Register access error on APB., Read permission violation.,
++ * Write permission violation.,Security violation.
++ */
++#define XPM_EVENT_ERROR_MASK_FPD_XMPU		BIT(20)
++
++/*
++ * Error Event Mask belongs to SW ERR node,
++ * For which Node_Id = XPM_NODETYPE_EVENT_ERROR_SW_ERR
++ */
++
++/**
++ * XPM_EVENT_ERROR_MASK_HB_MON_0: Health Boot Monitoring errors.
++ */
++#define XPM_EVENT_ERROR_MASK_HB_MON_0		BIT(0)
++
++/**
++ * XPM_EVENT_ERROR_MASK_HB_MON_1: Health Boot Monitoring errors.
++ */
++#define XPM_EVENT_ERROR_MASK_HB_MON_1		BIT(1)
++
++/**
++ * XPM_EVENT_ERROR_MASK_HB_MON_2: Health Boot Monitoring errors.
++ */
++#define XPM_EVENT_ERROR_MASK_HB_MON_2		BIT(2)
++
++/**
++ * XPM_EVENT_ERROR_MASK_HB_MON_3: Health Boot Monitoring errors.
++ */
++#define XPM_EVENT_ERROR_MASK_HB_MON_3		BIT(3)
++
++#endif /* _FIRMWARE_XLNX_ERROR_EVENTS_H_ */
+diff --git a/include/linux/firmware/xlnx-event-manager.h b/include/linux/firmware/xlnx-event-manager.h
+new file mode 100644
+index 000000000..7e15f32dd
+--- /dev/null
++++ b/include/linux/firmware/xlnx-event-manager.h
+@@ -0,0 +1,36 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++
++#ifndef _FIRMWARE_XLNX_EVENT_MANAGER_H_
++#define _FIRMWARE_XLNX_EVENT_MANAGER_H_
++
++#include <linux/firmware/xlnx-zynqmp.h>
++
++#define CB_MAX_PAYLOAD_SIZE	(4U) /*In payload maximum 32bytes */
++
++/************************** Exported Function *****************************/
++
++typedef void (*event_cb_func_t)(const u32 *payload, void *data);
++
++#if IS_REACHABLE(CONFIG_XLNX_EVENT_MANAGER)
++int xlnx_register_event(const enum pm_api_cb_id cb_type, const u32 node_id,
++			const u32 event, const bool wake,
++			event_cb_func_t cb_fun, void *data);
++
++int xlnx_unregister_event(const enum pm_api_cb_id cb_type, const u32 node_id,
++			  const u32 event, event_cb_func_t cb_fun);
++#else
++static inline int xlnx_register_event(const enum pm_api_cb_id cb_type, const u32 node_id,
++				      const u32 event, const bool wake,
++				      event_cb_func_t cb_fun, void *data)
++{
++	return -ENODEV;
++}
++
++static inline int xlnx_unregister_event(const enum pm_api_cb_id cb_type, const u32 node_id,
++					const u32 event, event_cb_func_t cb_fun)
++{
++	return -ENODEV;
++}
++#endif
++
++#endif /* _FIRMWARE_XLNX_EVENT_MANAGER_H_ */
+diff --git a/include/linux/firmware/xlnx-zynqmp.h b/include/linux/firmware/xlnx-zynqmp.h
+index 4930ece07..ae88c6f4f 100644
+--- a/include/linux/firmware/xlnx-zynqmp.h
++++ b/include/linux/firmware/xlnx-zynqmp.h
+@@ -2,7 +2,7 @@
+ /*
+  * Xilinx Zynq MPSoC Firmware layer
+  *
+- *  Copyright (C) 2014-2019 Xilinx
++ *  Copyright (C) 2014-2021 Xilinx
+  *
+  *  Michal Simek <michal.simek@xilinx.com>
+  *  Davorin Mista <davorin.mista@aggios.com>
+@@ -12,6 +12,9 @@
+ 
+ #ifndef __FIRMWARE_ZYNQMP_H__
+ #define __FIRMWARE_ZYNQMP_H__
++#include <linux/types.h>
++
++#include <linux/err.h>
+ 
+ #define ZYNQMP_PM_VERSION_MAJOR	1
+ #define ZYNQMP_PM_VERSION_MINOR	0
+@@ -27,10 +30,25 @@
+ 
+ /* SMC SIP service Call Function Identifier Prefix */
+ #define PM_SIP_SVC			0xC2000000
++
++/* ATF only commands */
+ #define PM_GET_TRUSTZONE_VERSION	0xa03
+ #define PM_SET_SUSPEND_MODE		0xa02
+ #define GET_CALLBACK_DATA		0xa01
+ 
++/* Loader commands */
++#define PM_LOAD_PDI			0x701
++
++/* NVM Commands */
++#define PM_BBRAM_WRITE_KEY		0xB01
++#define PM_BBRAM_ZEROIZE		0xB02
++#define PM_BBRAM_WRITE_USERDATA		0xB03
++#define PM_BBRAM_READ_USERDATA		0xB04
++#define PM_BBRAM_LOCK_USERDATA		0xB05
++
++/* Secure Commands */
++#define PM_WRITE_AES_KEY		0x568
++
+ /* Number of 32bits values in payload */
+ #define PAYLOAD_ARG_CNT	4U
+ 
+@@ -40,7 +58,15 @@
+ /* Payload size (consists of callback API ID + arguments) */
+ #define CB_PAYLOAD_SIZE (CB_ARG_CNT + 1)
+ 
+-#define ZYNQMP_PM_MAX_QOS		100U
++#define ZYNQMP_PM_MAX_LATENCY	(~0U)
++#define ZYNQMP_PM_MAX_QOS	100U
++
++/* Usage status, returned by PmGetNodeStatus */
++#define PM_USAGE_NO_MASTER			0x0U
++#define PM_USAGE_CURRENT_MASTER			0x1U
++#define PM_USAGE_OTHER_MASTER			0x2U
++#define PM_USAGE_BOTH_MASTERS			(PM_USAGE_CURRENT_MASTER | \
++						 PM_USAGE_OTHER_MASTER)
+ 
+ #define GSS_NUM_REGS	(4)
+ 
+@@ -57,33 +83,72 @@
+  */
+ #define XILINX_ZYNQMP_PM_FPGA_FULL	0x0U
+ #define XILINX_ZYNQMP_PM_FPGA_PARTIAL	BIT(0)
++#define XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_DDR	BIT(1)
++#define XILINX_ZYNQMP_PM_FPGA_AUTHENTICATION_OCM	BIT(2)
++#define XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_USERKEY	BIT(3)
++#define XILINX_ZYNQMP_PM_FPGA_ENCRYPTION_DEVKEY		BIT(4)
++
++enum pm_api_cb_id {
++	PM_INIT_SUSPEND_CB = 30,
++	PM_NOTIFY_CB = 32,
++};
+ 
+ enum pm_api_id {
+ 	PM_GET_API_VERSION = 1,
++	PM_SET_CONFIGURATION = 2,
++	PM_GET_NODE_STATUS = 3,
++	PM_GET_OPERATING_CHARACTERISTIC = 4,
++	PM_REGISTER_NOTIFIER = 5,
++	/* API for suspending */
++	PM_REQUEST_SUSPEND = 6,
++	PM_SELF_SUSPEND = 7,
++	PM_FORCE_POWERDOWN = 8,
++	PM_ABORT_SUSPEND = 9,
++	PM_REQUEST_WAKEUP = 10,
++	PM_SET_WAKEUP_SOURCE = 11,
+ 	PM_SYSTEM_SHUTDOWN = 12,
+ 	PM_REQUEST_NODE = 13,
+-	PM_RELEASE_NODE,
+-	PM_SET_REQUIREMENT,
++	PM_RELEASE_NODE = 14,
++	PM_SET_REQUIREMENT = 15,
++	PM_SET_MAX_LATENCY = 16,
++	/* Direct control API functions: */
+ 	PM_RESET_ASSERT = 17,
+-	PM_RESET_GET_STATUS,
++	PM_RESET_GET_STATUS = 18,
++	PM_MMIO_WRITE = 19,
++	PM_MMIO_READ = 20,
+ 	PM_PM_INIT_FINALIZE = 21,
+-	PM_FPGA_LOAD,
+-	PM_FPGA_GET_STATUS,
++	PM_FPGA_LOAD = 22,
++	PM_FPGA_GET_STATUS = 23,
+ 	PM_GET_CHIPID = 24,
++	/* ID 25 is been used by U-boot to process secure boot images */
++	/* Secure library generic API functions */
++	PM_SECURE_SHA = 26,
++	PM_SECURE_RSA,
++	PM_PINCTRL_REQUEST = 28,
++	PM_PINCTRL_RELEASE = 29,
++	PM_PINCTRL_GET_FUNCTION = 30,
++	PM_PINCTRL_SET_FUNCTION = 31,
++	PM_PINCTRL_CONFIG_PARAM_GET = 32,
++	PM_PINCTRL_CONFIG_PARAM_SET = 33,
+ 	PM_IOCTL = 34,
+-	PM_QUERY_DATA,
+-	PM_CLOCK_ENABLE,
+-	PM_CLOCK_DISABLE,
+-	PM_CLOCK_GETSTATE,
+-	PM_CLOCK_SETDIVIDER,
+-	PM_CLOCK_GETDIVIDER,
+-	PM_CLOCK_SETRATE,
+-	PM_CLOCK_GETRATE,
+-	PM_CLOCK_SETPARENT,
+-	PM_CLOCK_GETPARENT,
++	PM_QUERY_DATA = 35,
++	PM_CLOCK_ENABLE = 36,
++	PM_CLOCK_DISABLE = 37,
++	PM_CLOCK_GETSTATE = 38,
++	PM_CLOCK_SETDIVIDER = 39,
++	PM_CLOCK_GETDIVIDER = 40,
++	PM_CLOCK_SETRATE = 41,
++	PM_CLOCK_GETRATE = 42,
++	PM_CLOCK_SETPARENT = 43,
++	PM_CLOCK_GETPARENT = 44,
++	PM_SECURE_IMAGE = 45,
++	PM_FPGA_READ = 46,
+ 	PM_SECURE_AES = 47,
++	/* PM_REGISTER_ACCESS API */
++	PM_REGISTER_ACCESS = 52,
++	PM_EFUSE_ACCESS = 53,
+ 	PM_FEATURE_CHECK = 63,
+-	PM_API_MAX,
++        PM_API_MAX,
+ };
+ 
+ /* PMU-FW return status codes */
+@@ -91,209 +156,435 @@ enum pm_ret_status {
+ 	XST_PM_SUCCESS = 0,
+ 	XST_PM_NO_FEATURE = 19,
+ 	XST_PM_INTERNAL = 2000,
+-	XST_PM_CONFLICT,
+-	XST_PM_NO_ACCESS,
+-	XST_PM_INVALID_NODE,
+-	XST_PM_DOUBLE_REQ,
+-	XST_PM_ABORT_SUSPEND,
++	XST_PM_CONFLICT = 2001,
++	XST_PM_NO_ACCESS = 2002,
++	XST_PM_INVALID_NODE = 2003,
++	XST_PM_DOUBLE_REQ = 2004,
++	XST_PM_ABORT_SUSPEND = 2005,
+ 	XST_PM_MULT_USER = 2008,
+ };
+ 
+ enum pm_ioctl_id {
++	IOCTL_GET_RPU_OPER_MODE = 0,
++	IOCTL_SET_RPU_OPER_MODE = 1,
++	IOCTL_RPU_BOOT_ADDR_CONFIG = 2,
++	IOCTL_TCM_COMB_CONFIG = 3,
++	IOCTL_SET_TAPDELAY_BYPASS = 4,
++	IOCTL_SET_SGMII_MODE = 5,
+ 	IOCTL_SD_DLL_RESET = 6,
+-	IOCTL_SET_SD_TAPDELAY,
+-	IOCTL_SET_PLL_FRAC_MODE,
+-	IOCTL_GET_PLL_FRAC_MODE,
+-	IOCTL_SET_PLL_FRAC_DATA,
+-	IOCTL_GET_PLL_FRAC_DATA,
++	IOCTL_SET_SD_TAPDELAY = 7,
++	IOCTL_SET_PLL_FRAC_MODE = 8,
++	IOCTL_GET_PLL_FRAC_MODE = 9,
++	IOCTL_SET_PLL_FRAC_DATA = 10,
++	IOCTL_GET_PLL_FRAC_DATA = 11,
+ 	IOCTL_WRITE_GGS = 12,
+ 	IOCTL_READ_GGS = 13,
+ 	IOCTL_WRITE_PGGS = 14,
+ 	IOCTL_READ_PGGS = 15,
++	/* IOCTL for ULPI reset */
++	IOCTL_ULPI_RESET = 16,
+ 	/* Set healthy bit value */
+ 	IOCTL_SET_BOOT_HEALTH_STATUS = 17,
++	IOCTL_AFI = 18,
++	/* Probe counter read/write */
++	IOCTL_PROBE_COUNTER_READ = 19,
++	IOCTL_PROBE_COUNTER_WRITE = 20,
++	IOCTL_OSPI_MUX_SELECT = 21,
++	/* IOCTL for USB power request */
++	IOCTL_USB_SET_STATE = 22,
++	/* IOCTL to get last reset reason */
++	IOCTL_GET_LAST_RESET_REASON = 23,
++	/* AI engine NPI ISR clear */
++	IOCTL_AIE_ISR_CLEAR = 24,
++	/* Register SGI to ATF */
++	IOCTL_REGISTER_SGI = 25,
++	/* Runtime feature configuration */
++	IOCTL_SET_FEATURE_CONFIG = 26,
++	IOCTL_GET_FEATURE_CONFIG = 27,
+ };
+ 
+ enum pm_query_id {
+-	PM_QID_INVALID,
+-	PM_QID_CLOCK_GET_NAME,
+-	PM_QID_CLOCK_GET_TOPOLOGY,
+-	PM_QID_CLOCK_GET_FIXEDFACTOR_PARAMS,
+-	PM_QID_CLOCK_GET_PARENTS,
+-	PM_QID_CLOCK_GET_ATTRIBUTES,
++	PM_QID_INVALID = 0,
++	PM_QID_CLOCK_GET_NAME = 1,
++	PM_QID_CLOCK_GET_TOPOLOGY = 2,
++	PM_QID_CLOCK_GET_FIXEDFACTOR_PARAMS = 3,
++	PM_QID_CLOCK_GET_PARENTS = 4,
++	PM_QID_CLOCK_GET_ATTRIBUTES = 5,
++	PM_QID_PINCTRL_GET_NUM_PINS = 6,
++	PM_QID_PINCTRL_GET_NUM_FUNCTIONS = 7,
++	PM_QID_PINCTRL_GET_NUM_FUNCTION_GROUPS = 8,
++	PM_QID_PINCTRL_GET_FUNCTION_NAME = 9,
++	PM_QID_PINCTRL_GET_FUNCTION_GROUPS = 10,
++	PM_QID_PINCTRL_GET_PIN_GROUPS = 11,
+ 	PM_QID_CLOCK_GET_NUM_CLOCKS = 12,
+-	PM_QID_CLOCK_GET_MAX_DIVISOR,
++	PM_QID_CLOCK_GET_MAX_DIVISOR = 13,
++	PM_QID_PLD_GET_PARENT,
++};
++
++enum rpu_oper_mode {
++	PM_RPU_MODE_LOCKSTEP = 0,
++	PM_RPU_MODE_SPLIT = 1,
++};
++
++enum rpu_boot_mem {
++	PM_RPU_BOOTMEM_LOVEC = 0,
++	PM_RPU_BOOTMEM_HIVEC = 1,
++};
++
++enum rpu_tcm_comb {
++	PM_RPU_TCM_SPLIT = 0,
++	PM_RPU_TCM_COMB = 1,
+ };
+ 
+ enum zynqmp_pm_reset_action {
+-	PM_RESET_ACTION_RELEASE,
+-	PM_RESET_ACTION_ASSERT,
+-	PM_RESET_ACTION_PULSE,
++	PM_RESET_ACTION_RELEASE = 0,
++	PM_RESET_ACTION_ASSERT = 1,
++	PM_RESET_ACTION_PULSE = 2,
+ };
+ 
+ enum zynqmp_pm_reset {
+ 	ZYNQMP_PM_RESET_START = 1000,
+ 	ZYNQMP_PM_RESET_PCIE_CFG = ZYNQMP_PM_RESET_START,
+-	ZYNQMP_PM_RESET_PCIE_BRIDGE,
+-	ZYNQMP_PM_RESET_PCIE_CTRL,
+-	ZYNQMP_PM_RESET_DP,
+-	ZYNQMP_PM_RESET_SWDT_CRF,
+-	ZYNQMP_PM_RESET_AFI_FM5,
+-	ZYNQMP_PM_RESET_AFI_FM4,
+-	ZYNQMP_PM_RESET_AFI_FM3,
+-	ZYNQMP_PM_RESET_AFI_FM2,
+-	ZYNQMP_PM_RESET_AFI_FM1,
+-	ZYNQMP_PM_RESET_AFI_FM0,
+-	ZYNQMP_PM_RESET_GDMA,
+-	ZYNQMP_PM_RESET_GPU_PP1,
+-	ZYNQMP_PM_RESET_GPU_PP0,
+-	ZYNQMP_PM_RESET_GPU,
+-	ZYNQMP_PM_RESET_GT,
+-	ZYNQMP_PM_RESET_SATA,
+-	ZYNQMP_PM_RESET_ACPU3_PWRON,
+-	ZYNQMP_PM_RESET_ACPU2_PWRON,
+-	ZYNQMP_PM_RESET_ACPU1_PWRON,
+-	ZYNQMP_PM_RESET_ACPU0_PWRON,
+-	ZYNQMP_PM_RESET_APU_L2,
+-	ZYNQMP_PM_RESET_ACPU3,
+-	ZYNQMP_PM_RESET_ACPU2,
+-	ZYNQMP_PM_RESET_ACPU1,
+-	ZYNQMP_PM_RESET_ACPU0,
+-	ZYNQMP_PM_RESET_DDR,
+-	ZYNQMP_PM_RESET_APM_FPD,
+-	ZYNQMP_PM_RESET_SOFT,
+-	ZYNQMP_PM_RESET_GEM0,
+-	ZYNQMP_PM_RESET_GEM1,
+-	ZYNQMP_PM_RESET_GEM2,
+-	ZYNQMP_PM_RESET_GEM3,
+-	ZYNQMP_PM_RESET_QSPI,
+-	ZYNQMP_PM_RESET_UART0,
+-	ZYNQMP_PM_RESET_UART1,
+-	ZYNQMP_PM_RESET_SPI0,
+-	ZYNQMP_PM_RESET_SPI1,
+-	ZYNQMP_PM_RESET_SDIO0,
+-	ZYNQMP_PM_RESET_SDIO1,
+-	ZYNQMP_PM_RESET_CAN0,
+-	ZYNQMP_PM_RESET_CAN1,
+-	ZYNQMP_PM_RESET_I2C0,
+-	ZYNQMP_PM_RESET_I2C1,
+-	ZYNQMP_PM_RESET_TTC0,
+-	ZYNQMP_PM_RESET_TTC1,
+-	ZYNQMP_PM_RESET_TTC2,
+-	ZYNQMP_PM_RESET_TTC3,
+-	ZYNQMP_PM_RESET_SWDT_CRL,
+-	ZYNQMP_PM_RESET_NAND,
+-	ZYNQMP_PM_RESET_ADMA,
+-	ZYNQMP_PM_RESET_GPIO,
+-	ZYNQMP_PM_RESET_IOU_CC,
+-	ZYNQMP_PM_RESET_TIMESTAMP,
+-	ZYNQMP_PM_RESET_RPU_R50,
+-	ZYNQMP_PM_RESET_RPU_R51,
+-	ZYNQMP_PM_RESET_RPU_AMBA,
+-	ZYNQMP_PM_RESET_OCM,
+-	ZYNQMP_PM_RESET_RPU_PGE,
+-	ZYNQMP_PM_RESET_USB0_CORERESET,
+-	ZYNQMP_PM_RESET_USB1_CORERESET,
+-	ZYNQMP_PM_RESET_USB0_HIBERRESET,
+-	ZYNQMP_PM_RESET_USB1_HIBERRESET,
+-	ZYNQMP_PM_RESET_USB0_APB,
+-	ZYNQMP_PM_RESET_USB1_APB,
+-	ZYNQMP_PM_RESET_IPI,
+-	ZYNQMP_PM_RESET_APM_LPD,
+-	ZYNQMP_PM_RESET_RTC,
+-	ZYNQMP_PM_RESET_SYSMON,
+-	ZYNQMP_PM_RESET_AFI_FM6,
+-	ZYNQMP_PM_RESET_LPD_SWDT,
+-	ZYNQMP_PM_RESET_FPD,
+-	ZYNQMP_PM_RESET_RPU_DBG1,
+-	ZYNQMP_PM_RESET_RPU_DBG0,
+-	ZYNQMP_PM_RESET_DBG_LPD,
+-	ZYNQMP_PM_RESET_DBG_FPD,
+-	ZYNQMP_PM_RESET_APLL,
+-	ZYNQMP_PM_RESET_DPLL,
+-	ZYNQMP_PM_RESET_VPLL,
+-	ZYNQMP_PM_RESET_IOPLL,
+-	ZYNQMP_PM_RESET_RPLL,
+-	ZYNQMP_PM_RESET_GPO3_PL_0,
+-	ZYNQMP_PM_RESET_GPO3_PL_1,
+-	ZYNQMP_PM_RESET_GPO3_PL_2,
+-	ZYNQMP_PM_RESET_GPO3_PL_3,
+-	ZYNQMP_PM_RESET_GPO3_PL_4,
+-	ZYNQMP_PM_RESET_GPO3_PL_5,
+-	ZYNQMP_PM_RESET_GPO3_PL_6,
+-	ZYNQMP_PM_RESET_GPO3_PL_7,
+-	ZYNQMP_PM_RESET_GPO3_PL_8,
+-	ZYNQMP_PM_RESET_GPO3_PL_9,
+-	ZYNQMP_PM_RESET_GPO3_PL_10,
+-	ZYNQMP_PM_RESET_GPO3_PL_11,
+-	ZYNQMP_PM_RESET_GPO3_PL_12,
+-	ZYNQMP_PM_RESET_GPO3_PL_13,
+-	ZYNQMP_PM_RESET_GPO3_PL_14,
+-	ZYNQMP_PM_RESET_GPO3_PL_15,
+-	ZYNQMP_PM_RESET_GPO3_PL_16,
+-	ZYNQMP_PM_RESET_GPO3_PL_17,
+-	ZYNQMP_PM_RESET_GPO3_PL_18,
+-	ZYNQMP_PM_RESET_GPO3_PL_19,
+-	ZYNQMP_PM_RESET_GPO3_PL_20,
+-	ZYNQMP_PM_RESET_GPO3_PL_21,
+-	ZYNQMP_PM_RESET_GPO3_PL_22,
+-	ZYNQMP_PM_RESET_GPO3_PL_23,
+-	ZYNQMP_PM_RESET_GPO3_PL_24,
+-	ZYNQMP_PM_RESET_GPO3_PL_25,
+-	ZYNQMP_PM_RESET_GPO3_PL_26,
+-	ZYNQMP_PM_RESET_GPO3_PL_27,
+-	ZYNQMP_PM_RESET_GPO3_PL_28,
+-	ZYNQMP_PM_RESET_GPO3_PL_29,
+-	ZYNQMP_PM_RESET_GPO3_PL_30,
+-	ZYNQMP_PM_RESET_GPO3_PL_31,
+-	ZYNQMP_PM_RESET_RPU_LS,
+-	ZYNQMP_PM_RESET_PS_ONLY,
+-	ZYNQMP_PM_RESET_PL,
+-	ZYNQMP_PM_RESET_PS_PL0,
+-	ZYNQMP_PM_RESET_PS_PL1,
+-	ZYNQMP_PM_RESET_PS_PL2,
+-	ZYNQMP_PM_RESET_PS_PL3,
++	ZYNQMP_PM_RESET_PCIE_BRIDGE = 1001,
++	ZYNQMP_PM_RESET_PCIE_CTRL = 1002,
++	ZYNQMP_PM_RESET_DP = 1003,
++	ZYNQMP_PM_RESET_SWDT_CRF = 1004,
++	ZYNQMP_PM_RESET_AFI_FM5 = 1005,
++	ZYNQMP_PM_RESET_AFI_FM4 = 1006,
++	ZYNQMP_PM_RESET_AFI_FM3 = 1007,
++	ZYNQMP_PM_RESET_AFI_FM2 = 1008,
++	ZYNQMP_PM_RESET_AFI_FM1 = 1009,
++	ZYNQMP_PM_RESET_AFI_FM0 = 1010,
++	ZYNQMP_PM_RESET_GDMA = 1011,
++	ZYNQMP_PM_RESET_GPU_PP1 = 1012,
++	ZYNQMP_PM_RESET_GPU_PP0 = 1013,
++	ZYNQMP_PM_RESET_GPU = 1014,
++	ZYNQMP_PM_RESET_GT = 1015,
++	ZYNQMP_PM_RESET_SATA = 1016,
++	ZYNQMP_PM_RESET_ACPU3_PWRON = 1017,
++	ZYNQMP_PM_RESET_ACPU2_PWRON = 1018,
++	ZYNQMP_PM_RESET_ACPU1_PWRON = 1019,
++	ZYNQMP_PM_RESET_ACPU0_PWRON = 1020,
++	ZYNQMP_PM_RESET_APU_L2 = 1021,
++	ZYNQMP_PM_RESET_ACPU3 = 1022,
++	ZYNQMP_PM_RESET_ACPU2 = 1023,
++	ZYNQMP_PM_RESET_ACPU1 = 1024,
++	ZYNQMP_PM_RESET_ACPU0 = 1025,
++	ZYNQMP_PM_RESET_DDR = 1026,
++	ZYNQMP_PM_RESET_APM_FPD = 1027,
++	ZYNQMP_PM_RESET_SOFT = 1028,
++	ZYNQMP_PM_RESET_GEM0 = 1029,
++	ZYNQMP_PM_RESET_GEM1 = 1030,
++	ZYNQMP_PM_RESET_GEM2 = 1031,
++	ZYNQMP_PM_RESET_GEM3 = 1032,
++	ZYNQMP_PM_RESET_QSPI = 1033,
++	ZYNQMP_PM_RESET_UART0 = 1034,
++	ZYNQMP_PM_RESET_UART1 = 1035,
++	ZYNQMP_PM_RESET_SPI0 = 1036,
++	ZYNQMP_PM_RESET_SPI1 = 1037,
++	ZYNQMP_PM_RESET_SDIO0 = 1038,
++	ZYNQMP_PM_RESET_SDIO1 = 1039,
++	ZYNQMP_PM_RESET_CAN0 = 1040,
++	ZYNQMP_PM_RESET_CAN1 = 1041,
++	ZYNQMP_PM_RESET_I2C0 = 1042,
++	ZYNQMP_PM_RESET_I2C1 = 1043,
++	ZYNQMP_PM_RESET_TTC0 = 1044,
++	ZYNQMP_PM_RESET_TTC1 = 1045,
++	ZYNQMP_PM_RESET_TTC2 = 1046,
++	ZYNQMP_PM_RESET_TTC3 = 1047,
++	ZYNQMP_PM_RESET_SWDT_CRL = 1048,
++	ZYNQMP_PM_RESET_NAND = 1049,
++	ZYNQMP_PM_RESET_ADMA = 1050,
++	ZYNQMP_PM_RESET_GPIO = 1051,
++	ZYNQMP_PM_RESET_IOU_CC = 1052,
++	ZYNQMP_PM_RESET_TIMESTAMP = 1053,
++	ZYNQMP_PM_RESET_RPU_R50 = 1054,
++	ZYNQMP_PM_RESET_RPU_R51 = 1055,
++	ZYNQMP_PM_RESET_RPU_AMBA = 1056,
++	ZYNQMP_PM_RESET_OCM = 1057,
++	ZYNQMP_PM_RESET_RPU_PGE = 1058,
++	ZYNQMP_PM_RESET_USB0_CORERESET = 1059,
++	ZYNQMP_PM_RESET_USB1_CORERESET = 1060,
++	ZYNQMP_PM_RESET_USB0_HIBERRESET = 1061,
++	ZYNQMP_PM_RESET_USB1_HIBERRESET = 1062,
++	ZYNQMP_PM_RESET_USB0_APB = 1063,
++	ZYNQMP_PM_RESET_USB1_APB = 1064,
++	ZYNQMP_PM_RESET_IPI = 1065,
++	ZYNQMP_PM_RESET_APM_LPD = 1066,
++	ZYNQMP_PM_RESET_RTC = 1067,
++	ZYNQMP_PM_RESET_SYSMON = 1068,
++	ZYNQMP_PM_RESET_AFI_FM6 = 1069,
++	ZYNQMP_PM_RESET_LPD_SWDT = 1070,
++	ZYNQMP_PM_RESET_FPD = 1071,
++	ZYNQMP_PM_RESET_RPU_DBG1 = 1072,
++	ZYNQMP_PM_RESET_RPU_DBG0 = 1073,
++	ZYNQMP_PM_RESET_DBG_LPD = 1074,
++	ZYNQMP_PM_RESET_DBG_FPD = 1075,
++	ZYNQMP_PM_RESET_APLL = 1076,
++	ZYNQMP_PM_RESET_DPLL = 1077,
++	ZYNQMP_PM_RESET_VPLL = 1078,
++	ZYNQMP_PM_RESET_IOPLL = 1079,
++	ZYNQMP_PM_RESET_RPLL = 1080,
++	ZYNQMP_PM_RESET_GPO3_PL_0 = 1081,
++	ZYNQMP_PM_RESET_GPO3_PL_1 = 1082,
++	ZYNQMP_PM_RESET_GPO3_PL_2 = 1083,
++	ZYNQMP_PM_RESET_GPO3_PL_3 = 1084,
++	ZYNQMP_PM_RESET_GPO3_PL_4 = 1085,
++	ZYNQMP_PM_RESET_GPO3_PL_5 = 1086,
++	ZYNQMP_PM_RESET_GPO3_PL_6 = 1087,
++	ZYNQMP_PM_RESET_GPO3_PL_7 = 1088,
++	ZYNQMP_PM_RESET_GPO3_PL_8 = 1089,
++	ZYNQMP_PM_RESET_GPO3_PL_9 = 1090,
++	ZYNQMP_PM_RESET_GPO3_PL_10 = 1091,
++	ZYNQMP_PM_RESET_GPO3_PL_11 = 1092,
++	ZYNQMP_PM_RESET_GPO3_PL_12 = 1093,
++	ZYNQMP_PM_RESET_GPO3_PL_13 = 1094,
++	ZYNQMP_PM_RESET_GPO3_PL_14 = 1095,
++	ZYNQMP_PM_RESET_GPO3_PL_15 = 1096,
++	ZYNQMP_PM_RESET_GPO3_PL_16 = 1097,
++	ZYNQMP_PM_RESET_GPO3_PL_17 = 1098,
++	ZYNQMP_PM_RESET_GPO3_PL_18 = 1099,
++	ZYNQMP_PM_RESET_GPO3_PL_19 = 1100,
++	ZYNQMP_PM_RESET_GPO3_PL_20 = 1101,
++	ZYNQMP_PM_RESET_GPO3_PL_21 = 1102,
++	ZYNQMP_PM_RESET_GPO3_PL_22 = 1103,
++	ZYNQMP_PM_RESET_GPO3_PL_23 = 1104,
++	ZYNQMP_PM_RESET_GPO3_PL_24 = 1105,
++	ZYNQMP_PM_RESET_GPO3_PL_25 = 1106,
++	ZYNQMP_PM_RESET_GPO3_PL_26 = 1107,
++	ZYNQMP_PM_RESET_GPO3_PL_27 = 1108,
++	ZYNQMP_PM_RESET_GPO3_PL_28 = 1109,
++	ZYNQMP_PM_RESET_GPO3_PL_29 = 1110,
++	ZYNQMP_PM_RESET_GPO3_PL_30 = 1111,
++	ZYNQMP_PM_RESET_GPO3_PL_31 = 1112,
++	ZYNQMP_PM_RESET_RPU_LS = 1113,
++	ZYNQMP_PM_RESET_PS_ONLY = 1114,
++	ZYNQMP_PM_RESET_PL = 1115,
++	ZYNQMP_PM_RESET_PS_PL0 = 1116,
++	ZYNQMP_PM_RESET_PS_PL1 = 1117,
++	ZYNQMP_PM_RESET_PS_PL2 = 1118,
++	ZYNQMP_PM_RESET_PS_PL3 = 1119,
+ 	ZYNQMP_PM_RESET_END = ZYNQMP_PM_RESET_PS_PL3
+ };
+ 
++enum zynqmp_pm_abort_reason {
++	ZYNQMP_PM_ABORT_REASON_WAKEUP_EVENT = 100,
++	ZYNQMP_PM_ABORT_REASON_POWER_UNIT_BUSY = 101,
++	ZYNQMP_PM_ABORT_REASON_NO_POWERDOWN = 102,
++	ZYNQMP_PM_ABORT_REASON_UNKNOWN = 103,
++};
++
+ enum zynqmp_pm_suspend_reason {
+ 	SUSPEND_POWER_REQUEST = 201,
+-	SUSPEND_ALERT,
+-	SUSPEND_SYSTEM_SHUTDOWN,
++	SUSPEND_ALERT = 202,
++	SUSPEND_SYSTEM_SHUTDOWN = 203,
+ };
+ 
+ enum zynqmp_pm_request_ack {
+ 	ZYNQMP_PM_REQUEST_ACK_NO = 1,
+-	ZYNQMP_PM_REQUEST_ACK_BLOCKING,
+-	ZYNQMP_PM_REQUEST_ACK_NON_BLOCKING,
++	ZYNQMP_PM_REQUEST_ACK_BLOCKING = 2,
++	ZYNQMP_PM_REQUEST_ACK_NON_BLOCKING = 3,
+ };
+ 
+ enum pm_node_id {
++	NODE_UNKNOWN = 0,
++	NODE_APU = 1,
++	NODE_APU_0 = 2,
++	NODE_APU_1 = 3,
++	NODE_APU_2 = 4,
++	NODE_APU_3 = 5,
++	NODE_RPU = 6,
++	NODE_RPU_0 = 7,
++	NODE_RPU_1 = 8,
++	NODE_PLD = 9,
++	NODE_FPD = 10,
++	NODE_OCM_BANK_0 = 11,
++	NODE_OCM_BANK_1 = 12,
++	NODE_OCM_BANK_2 = 13,
++	NODE_OCM_BANK_3 = 14,
++	NODE_TCM_0_A = 15,
++	NODE_TCM_0_B = 16,
++	NODE_TCM_1_A = 17,
++	NODE_TCM_1_B = 18,
++	NODE_L2 = 19,
++	NODE_GPU_PP_0 = 20,
++	NODE_GPU_PP_1 = 21,
++	NODE_USB_0 = 22,
++	NODE_USB_1 = 23,
++	NODE_TTC_0 = 24,
++	NODE_TTC_1 = 25,
++	NODE_TTC_2 = 26,
++	NODE_TTC_3 = 27,
++	NODE_SATA = 28,
++	NODE_ETH_0 = 29,
++	NODE_ETH_1 = 30,
++	NODE_ETH_2 = 31,
++	NODE_ETH_3 = 32,
++	NODE_UART_0 = 33,
++	NODE_UART_1 = 34,
++	NODE_SPI_0 = 35,
++	NODE_SPI_1 = 36,
++	NODE_I2C_0 = 37,
++	NODE_I2C_1 = 38,
+ 	NODE_SD_0 = 39,
+-	NODE_SD_1,
++	NODE_SD_1 = 40,
++	NODE_DP = 41,
++	NODE_GDMA = 42,
++	NODE_ADMA = 43,
++	NODE_NAND = 44,
++	NODE_QSPI = 45,
++	NODE_GPIO = 46,
++	NODE_CAN_0 = 47,
++	NODE_CAN_1 = 48,
++	NODE_EXTERN = 49,
++	NODE_APLL = 50,
++	NODE_VPLL = 51,
++	NODE_DPLL = 52,
++	NODE_RPLL = 53,
++	NODE_IOPLL = 54,
++	NODE_DDR = 55,
++	NODE_IPI_APU = 56,
++	NODE_IPI_RPU_0 = 57,
++	NODE_GPU = 58,
++	NODE_PCIE = 59,
++	NODE_PCAP = 60,
++	NODE_RTC = 61,
++	NODE_LPD = 62,
++	NODE_VCU = 63,
++	NODE_IPI_RPU_1 = 64,
++	NODE_IPI_PL_0 = 65,
++	NODE_IPI_PL_1 = 66,
++	NODE_IPI_PL_2 = 67,
++	NODE_IPI_PL_3 = 68,
++	NODE_PL = 69,
++	NODE_GEM_TSU = 70,
++	NODE_SWDT_0 = 71,
++	NODE_SWDT_1 = 72,
++	NODE_CSU = 73,
++	NODE_PJTAG = 74,
++	NODE_TRACE = 75,
++	NODE_TESTSCAN = 76,
++	NODE_PMU = 77,
++	NODE_MAX = 78,
+ };
+ 
+ enum tap_delay_type {
+ 	PM_TAPDELAY_INPUT = 0,
+-	PM_TAPDELAY_OUTPUT,
++	PM_TAPDELAY_OUTPUT = 1,
+ };
+ 
+ enum dll_reset_type {
+-	PM_DLL_RESET_ASSERT,
+-	PM_DLL_RESET_RELEASE,
+-	PM_DLL_RESET_PULSE,
++	PM_DLL_RESET_ASSERT = 0,
++	PM_DLL_RESET_RELEASE = 1,
++	PM_DLL_RESET_PULSE = 2,
++};
++
++enum pm_pinctrl_config_param {
++	PM_PINCTRL_CONFIG_SLEW_RATE = 0,
++	PM_PINCTRL_CONFIG_BIAS_STATUS = 1,
++	PM_PINCTRL_CONFIG_PULL_CTRL = 2,
++	PM_PINCTRL_CONFIG_SCHMITT_CMOS = 3,
++	PM_PINCTRL_CONFIG_DRIVE_STRENGTH = 4,
++	PM_PINCTRL_CONFIG_VOLTAGE_STATUS = 5,
++	PM_PINCTRL_CONFIG_TRI_STATE = 6,
++	PM_PINCTRL_CONFIG_MAX = 7,
++};
++
++enum pm_pinctrl_slew_rate {
++	PM_PINCTRL_SLEW_RATE_FAST = 0,
++	PM_PINCTRL_SLEW_RATE_SLOW = 1,
++};
++
++enum pm_pinctrl_bias_status {
++	PM_PINCTRL_BIAS_DISABLE = 0,
++	PM_PINCTRL_BIAS_ENABLE = 1,
++};
++
++enum pm_pinctrl_pull_ctrl {
++	PM_PINCTRL_BIAS_PULL_DOWN = 0,
++	PM_PINCTRL_BIAS_PULL_UP = 1,
++};
++
++enum pm_pinctrl_schmitt_cmos {
++	PM_PINCTRL_INPUT_TYPE_CMOS = 0,
++	PM_PINCTRL_INPUT_TYPE_SCHMITT = 1,
++};
++
++enum zynqmp_pm_opchar_type {
++	ZYNQMP_PM_OPERATING_CHARACTERISTIC_POWER = 1,
++	ZYNQMP_PM_OPERATING_CHARACTERISTIC_ENERGY = 2,
++	ZYNQMP_PM_OPERATING_CHARACTERISTIC_TEMPERATURE = 3,
++};
++
++enum pm_pinctrl_drive_strength {
++	PM_PINCTRL_DRIVE_STRENGTH_2MA = 0,
++	PM_PINCTRL_DRIVE_STRENGTH_4MA = 1,
++	PM_PINCTRL_DRIVE_STRENGTH_8MA = 2,
++	PM_PINCTRL_DRIVE_STRENGTH_12MA = 3,
++};
++
++enum pm_pinctrl_tri_state {
++	PM_PINCTRL_TRI_STATE_DISABLE = 0,
++	PM_PINCTRL_TRI_STATE_ENABLE = 1,
+ };
+ 
+ enum zynqmp_pm_shutdown_type {
+-	ZYNQMP_PM_SHUTDOWN_TYPE_SHUTDOWN,
+-	ZYNQMP_PM_SHUTDOWN_TYPE_RESET,
+-	ZYNQMP_PM_SHUTDOWN_TYPE_SETSCOPE_ONLY,
++	ZYNQMP_PM_SHUTDOWN_TYPE_SHUTDOWN = 0,
++	ZYNQMP_PM_SHUTDOWN_TYPE_RESET = 1,
++	ZYNQMP_PM_SHUTDOWN_TYPE_SETSCOPE_ONLY = 2,
+ };
+ 
+ enum zynqmp_pm_shutdown_subtype {
+-	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM,
+-	ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY,
+-	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM,
++	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SUBSYSTEM = 0,
++	ZYNQMP_PM_SHUTDOWN_SUBTYPE_PS_ONLY = 1,
++	ZYNQMP_PM_SHUTDOWN_SUBTYPE_SYSTEM = 2,
++};
++
++enum tap_delay_signal_type {
++	PM_TAPDELAY_NAND_DQS_IN = 0,
++	PM_TAPDELAY_NAND_DQS_OUT = 1,
++	PM_TAPDELAY_QSPI = 2,
++	PM_TAPDELAY_MAX = 3,
++};
++
++enum tap_delay_bypass_ctrl {
++	PM_TAPDELAY_BYPASS_DISABLE = 0,
++	PM_TAPDELAY_BYPASS_ENABLE = 1,
++};
++
++enum sgmii_mode {
++	PM_SGMII_DISABLE = 0,
++	PM_SGMII_ENABLE = 1,
++};
++
++enum pm_register_access_id {
++	CONFIG_REG_WRITE,
++	CONFIG_REG_READ,
++};
++
++enum ospi_mux_select_type {
++	PM_OSPI_MUX_SEL_DMA = 0,
++	PM_OSPI_MUX_SEL_LINEAR = 1,
++	PM_OSPI_MUX_GET_MODE = 2,
++};
++
++enum pm_reset_reason {
++	PM_RESET_REASON_EXT_POR = 0,
++	PM_RESET_REASON_SW_POR = 1,
++	PM_RESET_REASON_SLR_POR = 2,
++	PM_RESET_REASON_ERR_POR = 3,
++	PM_RESET_REASON_DAP_SRST = 7,
++	PM_RESET_REASON_ERR_SRST = 8,
++	PM_RESET_REASON_SW_SRST = 9,
++	PM_RESET_REASON_SLR_SRST = 10,
++};
++
++enum pm_feature_config_id {
++	PM_FEATURE_INVALID = 0,
++	PM_FEATURE_OVERTEMP_STATUS = 1,
++	PM_FEATURE_OVERTEMP_VALUE = 2,
++	PM_FEATURE_EXTWDT_STATUS = 3,
++	PM_FEATURE_EXTWDT_VALUE = 4,
+ };
+ 
+ /**
+@@ -310,7 +601,6 @@ struct zynqmp_pm_query_data {
+ 	u32 arg3;
+ };
+ 
+-
+ int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 arg0, u32 arg1,
+ 			u32 arg2, u32 arg3, u32 *ret_payload);
+ 
+@@ -333,9 +623,11 @@ int zynqmp_pm_set_pll_frac_data(u32 clk_id, u32 data);
+ int zynqmp_pm_get_pll_frac_data(u32 clk_id, u32 *data);
+ int zynqmp_pm_set_sd_tapdelay(u32 node_id, u32 type, u32 value);
+ int zynqmp_pm_sd_dll_reset(u32 node_id, u32 type);
+-int zynqmp_pm_reset_assert(const enum zynqmp_pm_reset reset,
++int zynqmp_pm_reset_assert(const u32 reset,
+ 			   const enum zynqmp_pm_reset_action assert_flag);
+-int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset, u32 *status);
++int zynqmp_pm_reset_get_status(const u32 reset, u32 *status);
++unsigned int zynqmp_pm_bootmode_read(u32 *ps_mode);
++int zynqmp_pm_bootmode_write(u32 ps_mode);
+ int zynqmp_pm_init_finalize(void);
+ int zynqmp_pm_set_suspend_mode(u32 mode);
+ int zynqmp_pm_request_node(const u32 node, const u32 capabilities,
+@@ -345,14 +637,76 @@ int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
+ 			      const u32 qos,
+ 			      const enum zynqmp_pm_request_ack ack);
+ int zynqmp_pm_aes_engine(const u64 address, u32 *out);
++int zynqmp_pm_efuse_access(const u64 address, u32 *out);
++int zynqmp_pm_secure_load(const u64 src_addr, u64 key_addr, u64 *dst);
++int zynqmp_pm_load_pdi(const u32 src, const u64 address);
++int zynqmp_pm_write_aes_key(const u32 keylen, const u32 keysrc, const u64 keyaddr);
++int zynqmp_pm_bbram_write_usrdata(u32 data);
++int zynqmp_pm_bbram_read_usrdata(const u64 outaddr);
++int zynqmp_pm_bbram_write_aeskey(u32 keylen, const u64 keyaddr);
++int zynqmp_pm_bbram_zeroize(void);
++int zynqmp_pm_bbram_lock_userdata(void);
++int zynqmp_pm_fpga_read(const u32 reg_numframes, const u64 phys_address,
++			u32 readback_type, u32 *value);
++int zynqmp_pm_sha_hash(const u64 address, const u32 size, const u32 flags);
++int zynqmp_pm_rsa(const u64 address, const u32 size, const u32 flags);
++int zynqmp_pm_config_reg_access(u32 register_access_id, u32 address, u32 mask,
++				u32 value, u32 *out);
++int zynqmp_pm_mmio_read(u32 address, u32 *out);
++int zynqmp_pm_mmio_write(u32 address, u32 mask, u32 value);
++int zynqmp_pm_request_suspend(const u32 node, const enum zynqmp_pm_request_ack ack,
++			      const u32 latency, const u32 state);
++int zynqmp_pm_set_max_latency(const u32 node, const u32 latency);
++int zynqmp_pm_set_configuration(const u32 physical_addr);
++int zynqmp_pm_get_node_status(const u32 node, u32 *const status,
++			      u32 *const requirements, u32 *const usage);
++int zynqmp_pm_get_operating_characteristic(const u32 node,
++					   const enum zynqmp_pm_opchar_type type,
++					   u32 *const result);
++int zynqmp_pm_force_powerdown(const u32 target, const enum zynqmp_pm_request_ack ack);
++int zynqmp_pm_request_wakeup(const u32 node, const bool set_addr,
++			     const u64 address, const enum zynqmp_pm_request_ack ack);
++int zynqmp_pm_set_wakeup_source(const u32 target, const u32 wakeup_node, const u32 enable);
+ int zynqmp_pm_fpga_load(const u64 address, const u32 size, const u32 flags);
+ int zynqmp_pm_fpga_get_status(u32 *value);
+ int zynqmp_pm_write_ggs(u32 index, u32 value);
+ int zynqmp_pm_read_ggs(u32 index, u32 *value);
+ int zynqmp_pm_write_pggs(u32 index, u32 value);
+ int zynqmp_pm_read_pggs(u32 index, u32 *value);
++int zynqmp_pm_usb_set_state(u32 node, u32 state, u32 value);
++int zynqmp_pm_afi(u32 index, u32 value);
++int zynqmp_pm_set_tapdelay_bypass(u32 index, u32 value);
++int zynqmp_pm_set_sgmii_mode(u32 enable);
++int zynqmp_pm_ulpi_reset(void);
++int zynqmp_pm_probe_counter_read(u32 domain, u32 reg, u32 *value);
++int zynqmp_pm_probe_counter_write(u32 domain, u32 reg, u32 value);
++int zynqmp_pm_ospi_mux_select(u32 dev_id, u32 select);
++int zynqmp_pm_get_last_reset_reason(u32 *reset_reason);
+ int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype);
+ int zynqmp_pm_set_boot_health_status(u32 value);
++int zynqmp_pm_force_pwrdwn(const u32 target,
++			   const enum zynqmp_pm_request_ack ack);
++int zynqmp_pm_request_wake(const u32 node,
++			   const bool set_addr,
++			   const u64 address,
++			   const enum zynqmp_pm_request_ack ack);
++int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode);
++int zynqmp_pm_set_rpu_mode(u32 node_id, u32 arg1);
++int zynqmp_pm_set_tcm_config(u32 node_id, u32 arg1);
++int zynqmp_pm_clear_aie_npi_isr(u32 node, u32 irq_mask);
++int zynqmp_pm_pinctrl_request(const u32 pin);
++int zynqmp_pm_pinctrl_release(const u32 pin);
++int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id);
++int zynqmp_pm_pinctrl_set_function(const u32 pin, const u32 id);
++int zynqmp_pm_pinctrl_get_config(const u32 pin, const u32 param,
++				 u32 *value);
++int zynqmp_pm_pinctrl_set_config(const u32 pin, const u32 param,
++				 u32 value);
++int zynqmp_pm_register_notifier(const u32 node, const u32 event,
++				const u32 wake, const u32 enable);
++int zynqmp_pm_feature(const u32 api_id);
++int zynqmp_pm_set_feature_config(enum pm_feature_config_id id, u32 value);
++int zynqmp_pm_get_feature_config(enum pm_feature_config_id id, u32 *payload);
+ #else
+ static inline int zynqmp_pm_get_api_version(u32 *version)
+ {
+@@ -445,18 +799,28 @@ static inline int zynqmp_pm_sd_dll_reset(u32 node_id, u32 type)
+ 	return -ENODEV;
+ }
+ 
+-static inline int zynqmp_pm_reset_assert(const enum zynqmp_pm_reset reset,
+-			   const enum zynqmp_pm_reset_action assert_flag)
++static inline int zynqmp_pm_reset_assert(const u32 reset,
++					 const enum zynqmp_pm_reset_action assert_flag)
+ {
+ 	return -ENODEV;
+ }
+ 
+-static inline int zynqmp_pm_reset_get_status(const enum zynqmp_pm_reset reset,
++static inline int zynqmp_pm_reset_get_status(const u32 reset,
+ 					     u32 *status)
+ {
+ 	return -ENODEV;
+ }
+ 
++static inline unsigned int zynqmp_pm_bootmode_read(u32 *ps_mode)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bootmode_write(u32 ps_mode)
++{
++	return -ENODEV;
++}
++
+ static inline int zynqmp_pm_init_finalize(void)
+ {
+ 	return -ENODEV;
+@@ -480,9 +844,9 @@ static inline int zynqmp_pm_release_node(const u32 node)
+ }
+ 
+ static inline int zynqmp_pm_set_requirement(const u32 node,
+-					const u32 capabilities,
+-					const u32 qos,
+-					const enum zynqmp_pm_request_ack ack)
++					    const u32 capabilities,
++					    const u32 qos,
++					    const enum zynqmp_pm_request_ack ack)
+ {
+ 	return -ENODEV;
+ }
+@@ -523,6 +887,31 @@ static inline int zynqmp_pm_read_pggs(u32 index, u32 *value)
+ 	return -ENODEV;
+ }
+ 
++static inline int zynqmp_pm_usb_set_state(u32 node, u32 state, u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_afi(u32 index, u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_tapdelay_bypass(u32 index, u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_sgmii_mode(u32 enable)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_ulpi_reset(void)
++{
++	return -ENODEV;
++}
++
+ static inline int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype)
+ {
+ 	return -ENODEV;
+@@ -532,6 +921,246 @@ static inline int zynqmp_pm_set_boot_health_status(u32 value)
+ {
+ 	return -ENODEV;
+ }
++
++static inline int zynqmp_pm_force_pwrdwn(const u32 target,
++					 const enum zynqmp_pm_request_ack ack)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_request_wake(const u32 node,
++					 const bool set_addr,
++					 const u64 address,
++					 const enum zynqmp_pm_request_ack ack)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_rpu_mode(u32 node_id, u32 arg1)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_tcm_config(u32 node_id, u32 arg1)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_clear_aie_npi_isr(u32 node, u32 irq_mask)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_request(const u32 pin)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_release(const u32 pin)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_set_function(const u32 pin, const u32 id)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_get_config(const u32 pin, const u32 param,
++					       u32 *value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_pinctrl_set_config(const u32 pin, const u32 param,
++					       u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_efuse_access(const u64 address, u32 *out)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_sha_hash(const u64 address, const u32 size,
++				     const u32 flags)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_rsa(const u64 address, const u32 size,
++				const u32 flags)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_config_reg_access(u32 register_access_id,
++					      u32 address, u32 mask, u32 value,
++					      u32 *out)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_mmio_write(u32 address, u32 mask, u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_mmio_read(u32 address, u32 *out)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_request_suspend(const u32 node,
++					    const enum zynqmp_pm_request_ack ack,
++					    const u32 latency, const u32 state)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_max_latency(const u32 node, const u32 latency)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_configuration(const u32 physical_addr)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_get_node_status(const u32 node, u32 *const status,
++					    u32 *const requirements,
++					    u32 *const usage)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_get_operating_characteristic(const u32 node,
++							 const enum zynqmp_pm_opchar_type type,
++							 u32 *const result)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_force_powerdown(const u32 target,
++					    const enum zynqmp_pm_request_ack ack)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_request_wakeup(const u32 node, const bool set_addr,
++					   const u64 address,
++					   const enum zynqmp_pm_request_ack ack)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_wakeup_source(const u32 target,
++					      const u32 wakeup_node,
++					      const u32 enable)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_fpga_read(const u32 reg_numframes,
++				      const u64 phys_address, u32 readback_type,
++				      u32 *value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_load_pdi(const u32 src, const u64 address)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_write_aes_key(const u32 keylen, const u32 keysrc, const u64 keyaddr)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bbram_write_usrdata(u32 data)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bbram_read_usrdata(const u64 outaddr)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bbram_write_aeskey(const u64 keyaddr, u16 keylen)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bbram_zeroize(void)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_bbram_lock_userdata(void)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_probe_counter_read(u32 deviceid, u32 reg, u32 *value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_probe_counter_write(u32 domain, u32 reg, u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_ospi_mux_select(u32 dev_id, u32 select)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_secure_load(const u64 src_addr, u64 key_addr, u64 *dst)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_get_last_reset_reason(u32 *reset_reason)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_register_notifier(const u32 node, const u32 event,
++					      const u32 wake, const u32 enable)
++{
++	return -ENODEV;
++}
++static inline int zynqmp_pm_feature(const u32 api_id)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_set_feature_config(enum pm_feature_config_id id,
++					       u32 value)
++{
++	return -ENODEV;
++}
++
++static inline int zynqmp_pm_get_feature_config(enum pm_feature_config_id id,
++					       u32 *payload)
++{
++	return -ENODEV;
++}
+ #endif
+ 
+ #endif /* __FIRMWARE_ZYNQMP_H__ */

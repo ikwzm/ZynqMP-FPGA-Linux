@@ -1,0 +1,207 @@
+diff --git a/drivers/usb/chipidea/ci_hdrc_usb2.c b/drivers/usb/chipidea/ci_hdrc_usb2.c
+index 89e1d82d7..abab2e1ca 100644
+--- a/drivers/usb/chipidea/ci_hdrc_usb2.c
++++ b/drivers/usb/chipidea/ci_hdrc_usb2.c
+@@ -30,6 +30,7 @@ static const struct ci_hdrc_platform_data ci_default_pdata = {
+ 
+ static const struct ci_hdrc_platform_data ci_zynq_pdata = {
+ 	.capoffset	= DEF_CAPOFFSET,
++	.flags          = CI_HDRC_PHY_VBUS_CONTROL,
+ };
+ 
+ static const struct ci_hdrc_platform_data ci_zevio_pdata = {
+@@ -64,6 +65,10 @@ static int ci_hdrc_usb2_probe(struct platform_device *pdev)
+ 	if (match && match->data) {
+ 		/* struct copy */
+ 		*ci_pdata = *(struct ci_hdrc_platform_data *)match->data;
++		ci_pdata->usb_phy = devm_usb_get_phy_by_phandle(dev, "usb-phy",
++					 0);
++		if (IS_ERR(ci_pdata->usb_phy))
++			return PTR_ERR(ci_pdata->usb_phy);
+ 	}
+ 
+ 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+diff --git a/drivers/usb/chipidea/core.c b/drivers/usb/chipidea/core.c
+index 127b1a62b..f62122236 100644
+--- a/drivers/usb/chipidea/core.c
++++ b/drivers/usb/chipidea/core.c
+@@ -319,7 +319,8 @@ static int _ci_usb_phy_init(struct ci_hdrc *ci)
+ 
+ 		ret = phy_power_on(ci->phy);
+ 		if (ret) {
+-			phy_exit(ci->phy);
++			if (phy_exit(ci->phy) < 0)
++				dev_dbg(ci->dev, "phy exit failed\r\n");
+ 			return ret;
+ 		}
+ 	} else {
+@@ -336,12 +337,20 @@ static int _ci_usb_phy_init(struct ci_hdrc *ci)
+  */
+ static void ci_usb_phy_exit(struct ci_hdrc *ci)
+ {
++	int ret;
++
+ 	if (ci->platdata->flags & CI_HDRC_OVERRIDE_PHY_CONTROL)
+ 		return;
+ 
+ 	if (ci->phy) {
+-		phy_power_off(ci->phy);
+-		phy_exit(ci->phy);
++		ret = phy_power_off(ci->phy);
++		if (ret < 0)
++			dev_dbg(ci->dev, "phy poweroff failed\r\n");
++
++		ret = phy_exit(ci->phy);
++		if (ret < 0)
++			dev_dbg(ci->dev, "phy exit failed\r\n");
++
+ 	} else {
+ 		usb_phy_shutdown(ci->usb_phy);
+ 	}
+@@ -704,13 +713,16 @@ static int ci_get_platdata(struct device *dev,
+ 	if (usb_get_maximum_speed(dev) == USB_SPEED_FULL)
+ 		platdata->flags |= CI_HDRC_FORCE_FULLSPEED;
+ 
+-	of_property_read_u32(dev->of_node, "phy-clkgate-delay-us",
+-				     &platdata->phy_clkgate_delay_us);
++	if (of_property_read_u32(dev->of_node, "phy-clkgate-delay-us",
++				 &platdata->phy_clkgate_delay_us))
++		dev_dbg(dev, "Missing phy-clkgate-delay-us property\n");
+ 
+ 	platdata->itc_setting = 1;
+ 
+-	of_property_read_u32(dev->of_node, "itc-setting",
+-					&platdata->itc_setting);
++	if (of_property_read_u32(dev->of_node, "itc-setting",
++				 &platdata->itc_setting))
++		dev_dbg(dev, "Missing itc-setting property\n");
++
+ 
+ 	ret = of_property_read_u32(dev->of_node, "ahb-burst-config",
+ 				&platdata->ahb_burst_config);
+diff --git a/drivers/usb/chipidea/host.c b/drivers/usb/chipidea/host.c
+index f5f56ee07..21af19a1c 100644
+--- a/drivers/usb/chipidea/host.c
++++ b/drivers/usb/chipidea/host.c
+@@ -57,6 +57,14 @@ static int ehci_ci_portpower(struct usb_hcd *hcd, int portnum, bool enable)
+ 		priv->enabled = enable;
+ 	}
+ 
++	if (ci->platdata->flags & CI_HDRC_PHY_VBUS_CONTROL &&
++			ci->usb_phy && ci->usb_phy->set_vbus) {
++		if (enable)
++			ci->usb_phy->set_vbus(ci->usb_phy, 1);
++		else
++			ci->usb_phy->set_vbus(ci->usb_phy, 0);
++	}
++
+ 	if (enable && (ci->platdata->phy_mode == USBPHY_INTERFACE_MODE_HSIC)) {
+ 		/*
+ 		 * Marvell 28nm HSIC PHY requires forcing the port to HS mode.
+@@ -65,6 +73,7 @@ static int ehci_ci_portpower(struct usb_hcd *hcd, int portnum, bool enable)
+ 		hw_port_test_set(ci, 5);
+ 		hw_port_test_set(ci, 0);
+ 	}
++
+ 	return 0;
+ };
+ 
+diff --git a/drivers/usb/chipidea/otg.c b/drivers/usb/chipidea/otg.c
+index d3aada3ce..8ea18336e 100644
+--- a/drivers/usb/chipidea/otg.c
++++ b/drivers/usb/chipidea/otg.c
+@@ -167,6 +167,7 @@ static int hw_wait_vbus_lower_bsv(struct ci_hdrc *ci)
+ static void ci_handle_id_switch(struct ci_hdrc *ci)
+ {
+ 	enum ci_role role = ci_otg_role(ci);
++	int ret;
+ 
+ 	if (role != ci->role) {
+ 		dev_dbg(ci->dev, "switching from %s to %s\n",
+@@ -192,7 +193,10 @@ static void ci_handle_id_switch(struct ci_hdrc *ci)
+ 			 */
+ 			hw_wait_vbus_lower_bsv(ci);
+ 
+-		ci_role_start(ci, role);
++		ret = ci_role_start(ci, role);
++		if (ret < 0)
++			dev_dbg(ci->dev, "switching err %d\n", ret);
++
+ 		/* vbus change may have already occurred */
+ 		if (role == CI_ROLE_GADGET)
+ 			ci_handle_vbus_change(ci);
+diff --git a/drivers/usb/chipidea/otg_fsm.c b/drivers/usb/chipidea/otg_fsm.c
+index 6ed4b00db..ec02ea0ab 100644
+--- a/drivers/usb/chipidea/otg_fsm.c
++++ b/drivers/usb/chipidea/otg_fsm.c
+@@ -471,6 +471,11 @@ static void ci_otg_drv_vbus(struct otg_fsm *fsm, int on)
+ 				return;
+ 			}
+ 		}
++
++		if (ci->platdata->flags & CI_HDRC_PHY_VBUS_CONTROL &&
++				ci->usb_phy && ci->usb_phy->set_vbus)
++			ci->usb_phy->set_vbus(ci->usb_phy, 1);
++
+ 		/* Disable data pulse irq */
+ 		hw_write_otgsc(ci, OTGSC_DPIE, 0);
+ 
+@@ -480,6 +485,10 @@ static void ci_otg_drv_vbus(struct otg_fsm *fsm, int on)
+ 		if (ci->platdata->reg_vbus)
+ 			regulator_disable(ci->platdata->reg_vbus);
+ 
++		if (ci->platdata->flags & CI_HDRC_PHY_VBUS_CONTROL &&
++				ci->usb_phy && ci->usb_phy->set_vbus)
++			ci->usb_phy->set_vbus(ci->usb_phy, 0);
++
+ 		fsm->a_bus_drop = 1;
+ 		fsm->a_bus_req = 0;
+ 	}
+diff --git a/drivers/usb/chipidea/udc.c b/drivers/usb/chipidea/udc.c
+index 5f35cdd2c..64a60dfe6 100644
+--- a/drivers/usb/chipidea/udc.c
++++ b/drivers/usb/chipidea/udc.c
+@@ -48,6 +48,8 @@ ctrl_endpt_in_desc = {
+ 	.wMaxPacketSize  = cpu_to_le16(CTRL_PAYLOAD_MAX),
+ };
+ 
++static int reprime_dtd(struct ci_hdrc *ci, struct ci_hw_ep *hwep,
++		       struct td_node *node);
+ /**
+  * hw_ep_bit: calculates the bit number
+  * @num: endpoint number
+@@ -594,6 +596,12 @@ static int _hardware_enqueue(struct ci_hw_ep *hwep, struct ci_hw_req *hwreq)
+ 
+ 		prevlastnode->ptr->next = cpu_to_le32(next);
+ 		wmb();
++
++		if (ci->rev == CI_REVISION_22) {
++			if (!hw_read(ci, OP_ENDPTSTAT, BIT(n)))
++				reprime_dtd(ci, hwep, prevlastnode);
++		}
++
+ 		if (hw_read(ci, OP_ENDPTPRIME, BIT(n)))
+ 			goto done;
+ 		do {
+@@ -674,7 +682,8 @@ static int _hardware_dequeue(struct ci_hw_ep *hwep, struct ci_hw_req *hwreq)
+ 		if ((TD_STATUS_ACTIVE & tmptoken) != 0) {
+ 			int n = hw_ep_bit(hwep->num, hwep->dir);
+ 
+-			if (ci->rev == CI_REVISION_24)
++			if (ci->rev == CI_REVISION_24 ||
++			    ci->rev == CI_REVISION_22)
+ 				if (!hw_read(ci, OP_ENDPTSTAT, BIT(n)))
+ 					reprime_dtd(ci, hwep, node);
+ 			hwreq->req.status = -EALREADY;
+diff --git a/include/linux/usb/chipidea.h b/include/linux/usb/chipidea.h
+index 025b41687..2aa42e4c2 100644
+--- a/include/linux/usb/chipidea.h
++++ b/include/linux/usb/chipidea.h
+@@ -62,6 +62,7 @@ struct ci_hdrc_platform_data {
+ #define CI_HDRC_REQUIRES_ALIGNED_DMA	BIT(13)
+ #define CI_HDRC_IMX_IS_HSIC		BIT(14)
+ #define CI_HDRC_PMQOS			BIT(15)
++#define CI_HDRC_PHY_VBUS_CONTROL	BIT(16)
+ 	enum usb_dr_mode	dr_mode;
+ #define CI_HDRC_CONTROLLER_RESET_EVENT		0
+ #define CI_HDRC_CONTROLLER_STOPPED_EVENT	1

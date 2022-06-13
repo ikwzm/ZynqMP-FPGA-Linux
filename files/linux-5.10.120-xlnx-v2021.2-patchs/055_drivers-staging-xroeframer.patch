@@ -1,0 +1,3905 @@
+diff --git a/drivers/staging/xroeframer/Kconfig b/drivers/staging/xroeframer/Kconfig
+new file mode 100644
+index 000000000..0aaf47478
+--- /dev/null
++++ b/drivers/staging/xroeframer/Kconfig
+@@ -0,0 +1,18 @@
++#
++# Xilinx Radio over Ethernet Framer driver
++#
++
++config XROE_FRAMER
++	tristate "Xilinx Radio over Ethernet Framer driver"
++	help
++	  The "Radio Over Ethernet Framer" IP (roe_framer) ingests/generates
++	  Ethernet packet data, (de-)multiplexes packets based on protocol
++	  into/from various Radio Antenna data streams.
++
++	  It has 2 main, independent, data paths:
++
++	  - Downlink, from the BaseBand to the Phone, Ethernet to Antenna,
++	  we call this the De-Framer path, or defm on all related IP signals.
++
++	  - Uplink, from the Phone to the BaseBand, Antenna to Ethernet,
++	  we call this the Framer path, or fram on all related IP signals.
+diff --git a/drivers/staging/xroeframer/Makefile b/drivers/staging/xroeframer/Makefile
+new file mode 100644
+index 000000000..f7bf07e98
+--- /dev/null
++++ b/drivers/staging/xroeframer/Makefile
+@@ -0,0 +1,12 @@
++# SPDX-License-Identifier: GPL-2.0
++#
++# Makefile for Radio over Ethernet Framer driver
++#
++obj-$(CONFIG_XROE_FRAMER)	:= framer.o
++
++framer-objs := 	xroe_framer.o \
++		sysfs_xroe.o \
++		sysfs_xroe_framer_ipv4.o \
++		sysfs_xroe_framer_ipv6.o \
++		sysfs_xroe_framer_udp.o \
++		sysfs_xroe_framer_stats.o
+diff --git a/drivers/staging/xroeframer/README b/drivers/staging/xroeframer/README
+new file mode 100644
+index 000000000..505a46c2c
+--- /dev/null
++++ b/drivers/staging/xroeframer/README
+@@ -0,0 +1,47 @@
++Xilinx Radio over Ethernet Framer driver
++=========================================
++
++About the RoE Framer
++
++The "Radio Over Ethernet Framer" IP (roe_framer) ingests/generates Ethernet
++packet data, (de-)multiplexes packets based on protocol into/from various
++Radio Antenna data streams.
++
++It has 2 main, independent, data paths
++
++- Downlink, from the BaseBand to the Phone, Ethernet to Antenna,
++we call this the De-Framer path, or defm on all related IP signals.
++
++- Uplink, from the Phone to the BaseBand, Antenna to Ethernet,
++we call this the Framer path, or fram on all related IP signals.
++
++Key points:
++
++- Apart from the AXI4-Lite configuration port and a handful of strobe/control
++signals all data interfaces are AXI Stream(AXIS).
++- The IP does not contain an Ethernet MAC IP, rather it routes, or creates
++packets based on the direction through the roe_framer.
++- Currently designed to work with
++	- 1, 2 or 4 10G Ethernet AXIS stream ports to/from 1, 2, 4, 8, 16,
++	or 32 antenna ports
++		Note: each Ethernet port is 64 bit data @ 156.25MHz
++	- 1 or 2 25G Ethernet AXIS stream ports to/from 1, 2, 4, 8, 16,
++	or 32 antenna ports
++		Note: each Ethernet port is 64 bit data @ 390.25MHz
++- Contains a filter so that all non-protocol packets, or non-hardware-IP
++processed packets can be forwarded to another block for processing. In general
++this in a Microprocessor, specifically the Zynq ARM in our case. This filter
++function can move into the optional switch when TSN is used.
++
++About the Linux Driver
++
++The RoE Framer Linux Driver provides sysfs access to the framer controls. The
++loading of the driver to the hardware is possible using Device Tree binding
++(see "dt-binding.txt" for more information). When the driver is loaded, the
++general controls (such as framing mode, enable, restart etc) are exposed
++under /sys/kernel/xroe. Furthermore, specific controls can be found under
++/sys/kernel/xroe/framer. These include protocol-specific settings, for
++IPv4, IPv6 & UDP.
++
++There is also the option of accessing the framer's register map using
++ioctl calls for both reading and writing (where permitted) directly.
+diff --git a/drivers/staging/xroeframer/dt-binding.txt b/drivers/staging/xroeframer/dt-binding.txt
+new file mode 100644
+index 000000000..8dabef16d
+--- /dev/null
++++ b/drivers/staging/xroeframer/dt-binding.txt
+@@ -0,0 +1,17 @@
++* Xilinx Radio over Ethernet Framer driver
++
++Required properties:
++- compatible: must be "xlnx,roe-framer-1.0"
++- reg: physical base address of the framer and length of memory mapped region
++- clock-names: list of clock names
++- clocks: list of clock sources corresponding to the clock names
++
++Example:
++	roe_framer@a0000000 {
++		compatible = "xlnx,roe-framer-1.0";
++		reg = <0x0 0xa0000000 0x0 0x10000>;
++		clock-names = "s_axi_aclk", "m_axis_defm_aclk",
++			      "s_axis_fram_aclk", "tx0_eth_port_clk",
++			      "internal_bus_clk";
++		clocks = <0x43 0x44 0x44 0x45 0x45>;
++	};
+diff --git a/drivers/staging/xroeframer/roe_framer_ctrl.h b/drivers/staging/xroeframer/roe_framer_ctrl.h
+new file mode 100644
+index 000000000..162c49a9b
+--- /dev/null
++++ b/drivers/staging/xroeframer/roe_framer_ctrl.h
+@@ -0,0 +1,1088 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++/*-----------------------------------------------------------------------------
++ * C Header bank BASE definitions
++ *-----------------------------------------------------------------------------
++ */
++#define ROE_FRAMER_V1_0_CFG_BASE_ADDR 0x0 /* 0 */
++#define ROE_FRAMER_V1_0_FRAM_BASE_ADDR 0x2000 /* 8192 */
++#define ROE_FRAMER_V1_0_FRAM_DRP_BASE_ADDR 0x4000 /* 16384 */
++#define ROE_FRAMER_V1_0_DEFM_BASE_ADDR 0x6000 /* 24576 */
++#define ROE_FRAMER_V1_0_DEFM_DRP_BASE_ADDR 0x8000 /* 32768 */
++#define ROE_FRAMER_V1_0_ETH_BASE_ADDR 0xa000 /* 40960 */
++#define ROE_FRAMER_V1_0_STATS_BASE_ADDR 0xc000 /* 49152 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_cfg
++ * with prefix cfg_ @ address 0x0
++ *-----------------------------------------------------------------------------
++ */
++/* Type = roInt */
++#define CFG_MAJOR_REVISION_ADDR 0x0 /* 0 */
++#define CFG_MAJOR_REVISION_MASK 0xff000000 /* 4278190080 */
++#define CFG_MAJOR_REVISION_OFFSET 0x18 /* 24 */
++#define CFG_MAJOR_REVISION_WIDTH 0x8 /* 8 */
++#define CFG_MAJOR_REVISION_DEFAULT 0x1 /* 1 */
++
++/* Type = roInt */
++#define CFG_MINOR_REVISION_ADDR 0x0 /* 0 */
++#define CFG_MINOR_REVISION_MASK 0xff0000 /* 16711680 */
++#define CFG_MINOR_REVISION_OFFSET 0x10 /* 16 */
++#define CFG_MINOR_REVISION_WIDTH 0x8 /* 8 */
++#define CFG_MINOR_REVISION_DEFAULT 0x0 /* 0 */
++
++/* Type = roInt */
++#define CFG_VERSION_REVISION_ADDR 0x0 /* 0 */
++#define CFG_VERSION_REVISION_MASK 0xff00 /* 65280 */
++#define CFG_VERSION_REVISION_OFFSET 0x8 /* 8 */
++#define CFG_VERSION_REVISION_WIDTH 0x8 /* 8 */
++#define CFG_VERSION_REVISION_DEFAULT 0x0 /* 0 */
++
++/* Type = roInt */
++#define CFG_INTERNAL_REVISION_ADDR 0x4 /* 4 */
++#define CFG_INTERNAL_REVISION_MASK 0xffffffff /* 4294967295 */
++#define CFG_INTERNAL_REVISION_OFFSET 0x0 /* 0 */
++#define CFG_INTERNAL_REVISION_WIDTH 0x20 /* 32 */
++#define CFG_INTERNAL_REVISION_DEFAULT 0x12345678 /* 305419896 */
++
++/* Type = rw */
++#define CFG_TIMEOUT_VALUE_ADDR 0x8 /* 8 */
++#define CFG_TIMEOUT_VALUE_MASK 0xfff /* 4095 */
++#define CFG_TIMEOUT_VALUE_OFFSET 0x0 /* 0 */
++#define CFG_TIMEOUT_VALUE_WIDTH 0xc /* 12 */
++#define CFG_TIMEOUT_VALUE_DEFAULT 0x80 /* 128 */
++
++/* Type = rw */
++#define CFG_USER_RW_OUT_ADDR 0xc /* 12 */
++#define CFG_USER_RW_OUT_MASK 0xff /* 255 */
++#define CFG_USER_RW_OUT_OFFSET 0x0 /* 0 */
++#define CFG_USER_RW_OUT_WIDTH 0x8 /* 8 */
++#define CFG_USER_RW_OUT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_USER_RO_IN_ADDR 0xc /* 12 */
++#define CFG_USER_RO_IN_MASK 0xff0000 /* 16711680 */
++#define CFG_USER_RO_IN_OFFSET 0x10 /* 16 */
++#define CFG_USER_RO_IN_WIDTH 0x8 /* 8 */
++#define CFG_USER_RO_IN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define CFG_MASTER_INT_ENABLE_ADDR 0x10 /* 16 */
++#define CFG_MASTER_INT_ENABLE_MASK 0x1 /* 1 */
++#define CFG_MASTER_INT_ENABLE_OFFSET 0x0 /* 0 */
++#define CFG_MASTER_INT_ENABLE_WIDTH 0x1 /* 1 */
++#define CFG_MASTER_INT_ENABLE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define CFG_FRAM_FIFO_OF_ENABLE_ADDR 0x14 /* 20 */
++#define CFG_FRAM_FIFO_OF_ENABLE_MASK 0x1 /* 1 */
++#define CFG_FRAM_FIFO_OF_ENABLE_OFFSET 0x0 /* 0 */
++#define CFG_FRAM_FIFO_OF_ENABLE_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_FIFO_OF_ENABLE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define CFG_FRAM_FIFO_UF_ENABLE_ADDR 0x14 /* 20 */
++#define CFG_FRAM_FIFO_UF_ENABLE_MASK 0x2 /* 2 */
++#define CFG_FRAM_FIFO_UF_ENABLE_OFFSET 0x1 /* 1 */
++#define CFG_FRAM_FIFO_UF_ENABLE_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_FIFO_UF_ENABLE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define CFG_AXI_TIMEOUT_ENABLE_ADDR 0x14 /* 20 */
++#define CFG_AXI_TIMEOUT_ENABLE_MASK 0x80000000 /* 2147483648 */
++#define CFG_AXI_TIMEOUT_ENABLE_OFFSET 0x1f /* 31 */
++#define CFG_AXI_TIMEOUT_ENABLE_WIDTH 0x1 /* 1 */
++#define CFG_AXI_TIMEOUT_ENABLE_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define CFG_INTERRUPT_STATUS_SAMPLE_ADDR 0x1c /* 28 */
++#define CFG_INTERRUPT_STATUS_SAMPLE_MASK 0x1 /* 1 */
++#define CFG_INTERRUPT_STATUS_SAMPLE_OFFSET 0x0 /* 0 */
++#define CFG_INTERRUPT_STATUS_SAMPLE_WIDTH 0x1 /* 1 */
++#define CFG_INTERRUPT_STATUS_SAMPLE_DEFAULT 0x1 /* 1 */
++
++/* Type = roSig */
++#define CFG_FRAM_RESET_STATUS_ADDR 0x18 /* 24 */
++#define CFG_FRAM_RESET_STATUS_MASK 0x1 /* 1 */
++#define CFG_FRAM_RESET_STATUS_OFFSET 0x0 /* 0 */
++#define CFG_FRAM_RESET_STATUS_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_RESET_STATUS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_DEFM_RESET_STATUS_ADDR 0x18 /* 24 */
++#define CFG_DEFM_RESET_STATUS_MASK 0x2 /* 2 */
++#define CFG_DEFM_RESET_STATUS_OFFSET 0x1 /* 1 */
++#define CFG_DEFM_RESET_STATUS_WIDTH 0x1 /* 1 */
++#define CFG_DEFM_RESET_STATUS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_FRAM_ANT_OF_INTERRUPT_ADDR 0x18 /* 24 */
++#define CFG_FRAM_ANT_OF_INTERRUPT_MASK 0x100 /* 256 */
++#define CFG_FRAM_ANT_OF_INTERRUPT_OFFSET 0x8 /* 8 */
++#define CFG_FRAM_ANT_OF_INTERRUPT_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_ANT_OF_INTERRUPT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_FRAM_ETH_OF_INTERRUPT_ADDR 0x18 /* 24 */
++#define CFG_FRAM_ETH_OF_INTERRUPT_MASK 0x200 /* 512 */
++#define CFG_FRAM_ETH_OF_INTERRUPT_OFFSET 0x9 /* 9 */
++#define CFG_FRAM_ETH_OF_INTERRUPT_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_ETH_OF_INTERRUPT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_FRAM_ANT_UF_INTERRUPT_ADDR 0x18 /* 24 */
++#define CFG_FRAM_ANT_UF_INTERRUPT_MASK 0x400 /* 1024 */
++#define CFG_FRAM_ANT_UF_INTERRUPT_OFFSET 0xa /* 10 */
++#define CFG_FRAM_ANT_UF_INTERRUPT_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_ANT_UF_INTERRUPT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_FRAM_ETH_UF_INTERRUPT_ADDR 0x18 /* 24 */
++#define CFG_FRAM_ETH_UF_INTERRUPT_MASK 0x800 /* 2048 */
++#define CFG_FRAM_ETH_UF_INTERRUPT_OFFSET 0xb /* 11 */
++#define CFG_FRAM_ETH_UF_INTERRUPT_WIDTH 0x1 /* 1 */
++#define CFG_FRAM_ETH_UF_INTERRUPT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_AXI_TIMEOUT_STATUS_ADDR 0x18 /* 24 */
++#define CFG_AXI_TIMEOUT_STATUS_MASK 0x80000000 /* 2147483648 */
++#define CFG_AXI_TIMEOUT_STATUS_OFFSET 0x1f /* 31 */
++#define CFG_AXI_TIMEOUT_STATUS_WIDTH 0x1 /* 1 */
++#define CFG_AXI_TIMEOUT_STATUS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_CONFIG_NO_OF_FRAM_ANTS_ADDR 0x20 /* 32 */
++#define CFG_CONFIG_NO_OF_FRAM_ANTS_MASK 0xffff /* 65535 */
++#define CFG_CONFIG_NO_OF_FRAM_ANTS_OFFSET 0x0 /* 0 */
++#define CFG_CONFIG_NO_OF_FRAM_ANTS_WIDTH 0x10 /* 16 */
++#define CFG_CONFIG_NO_OF_FRAM_ANTS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_CONFIG_NO_OF_DEFM_ANTS_ADDR 0x20 /* 32 */
++#define CFG_CONFIG_NO_OF_DEFM_ANTS_MASK 0xffff0000 /* 4294901760 */
++#define CFG_CONFIG_NO_OF_DEFM_ANTS_OFFSET 0x10 /* 16 */
++#define CFG_CONFIG_NO_OF_DEFM_ANTS_WIDTH 0x10 /* 16 */
++#define CFG_CONFIG_NO_OF_DEFM_ANTS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_CONFIG_NO_OF_ETH_PORTS_ADDR 0x24 /* 36 */
++#define CFG_CONFIG_NO_OF_ETH_PORTS_MASK 0x3ff /* 1023 */
++#define CFG_CONFIG_NO_OF_ETH_PORTS_OFFSET 0x0 /* 0 */
++#define CFG_CONFIG_NO_OF_ETH_PORTS_WIDTH 0xa /* 10 */
++#define CFG_CONFIG_NO_OF_ETH_PORTS_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define CFG_CONFIG_ETH_SPEED_ADDR 0x24 /* 36 */
++#define CFG_CONFIG_ETH_SPEED_MASK 0x3ff0000 /* 67043328 */
++#define CFG_CONFIG_ETH_SPEED_OFFSET 0x10 /* 16 */
++#define CFG_CONFIG_ETH_SPEED_WIDTH 0xa /* 10 */
++#define CFG_CONFIG_ETH_SPEED_DEFAULT 0x0 /* 0 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_fram
++ * with prefix fram_ @ address 0x2000
++ *------------------------------------------------------------------------------
++ */
++/* Type = rwpdef */
++#define FRAM_DISABLE_ADDR 0x2000 /* 8192 */
++#define FRAM_DISABLE_MASK 0x1 /* 1 */
++#define FRAM_DISABLE_OFFSET 0x0 /* 0 */
++#define FRAM_DISABLE_WIDTH 0x1 /* 1 */
++#define FRAM_DISABLE_DEFAULT 0x1 /* 1 */
++
++/* Type = roSig */
++#define FRAM_READY_ADDR 0x2000 /* 8192 */
++#define FRAM_READY_MASK 0x2 /* 2 */
++#define FRAM_READY_OFFSET 0x1 /* 1 */
++#define FRAM_READY_WIDTH 0x1 /* 1 */
++#define FRAM_READY_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define FRAM_FIFO_FULL_INDICATOR_ADDR 0x2004 /* 8196 */
++#define FRAM_FIFO_FULL_INDICATOR_MASK 0xffffffff /* 4294967295 */
++#define FRAM_FIFO_FULL_INDICATOR_OFFSET 0x0 /* 0 */
++#define FRAM_FIFO_FULL_INDICATOR_WIDTH 0x20 /* 32 */
++#define FRAM_FIFO_FULL_INDICATOR_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_LOW_CNT_MIN_ADDR 0x2020 /* 8224 */
++#define FRAM_SN_DATA_LOW_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_LOW_CNT_MIN_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_LOW_CNT_MIN_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_LOW_CNT_MIN_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_LOW_CNT_MAX_ADDR 0x2024 /* 8228 */
++#define FRAM_SN_DATA_LOW_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_LOW_CNT_MAX_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_LOW_CNT_MAX_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_LOW_CNT_MAX_DEFAULT 0x78 /* 120 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_LOW_CNT_INITVAL_ADDR 0x2028 /* 8232 */
++#define FRAM_SN_DATA_LOW_CNT_INITVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_LOW_CNT_INITVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_LOW_CNT_INITVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_LOW_CNT_INITVAL_DEFAULT 0x75 /* 117 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_LOW_CNT_INCVAL_ADDR 0x202c /* 8236 */
++#define FRAM_SN_DATA_LOW_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_LOW_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_LOW_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_LOW_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_HIGH_CNT_MIN_ADDR 0x2030 /* 8240 */
++#define FRAM_SN_DATA_HIGH_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_HIGH_CNT_MIN_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_HIGH_CNT_MIN_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_HIGH_CNT_MIN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_HIGH_CNT_MAX_ADDR 0x2034 /* 8244 */
++#define FRAM_SN_DATA_HIGH_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_HIGH_CNT_MAX_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_HIGH_CNT_MAX_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_HIGH_CNT_MAX_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_HIGH_CNT_INITVAL_ADDR 0x2038 /* 8248 */
++#define FRAM_SN_DATA_HIGH_CNT_INITVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_HIGH_CNT_INITVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_HIGH_CNT_INITVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_HIGH_CNT_INITVAL_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define FRAM_SN_DATA_HIGH_CNT_INCVAL_ADDR 0x203c /* 8252 */
++#define FRAM_SN_DATA_HIGH_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_DATA_HIGH_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_DATA_HIGH_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_DATA_HIGH_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_LOW_CNT_MIN_ADDR 0x2050 /* 8272 */
++#define FRAM_SN_CTRL_LOW_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_LOW_CNT_MIN_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_LOW_CNT_MIN_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_LOW_CNT_MIN_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_LOW_CNT_MAX_ADDR 0x2054 /* 8276 */
++#define FRAM_SN_CTRL_LOW_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_LOW_CNT_MAX_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_LOW_CNT_MAX_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_LOW_CNT_MAX_DEFAULT 0x78 /* 120 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_LOW_CNT_INITVAL_ADDR 0x2058 /* 8280 */
++#define FRAM_SN_CTRL_LOW_CNT_INITVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_LOW_CNT_INITVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_LOW_CNT_INITVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_LOW_CNT_INITVAL_DEFAULT 0x75 /* 117 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_LOW_CNT_INCVAL_ADDR 0x205c /* 8284 */
++#define FRAM_SN_CTRL_LOW_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_LOW_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_LOW_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_LOW_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_HIGH_CNT_MIN_ADDR 0x2060 /* 8288 */
++#define FRAM_SN_CTRL_HIGH_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_HIGH_CNT_MIN_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_HIGH_CNT_MIN_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_HIGH_CNT_MIN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_HIGH_CNT_MAX_ADDR 0x2064 /* 8292 */
++#define FRAM_SN_CTRL_HIGH_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_HIGH_CNT_MAX_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_HIGH_CNT_MAX_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_HIGH_CNT_MAX_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_HIGH_CNT_INITVAL_ADDR 0x2068 /* 8296 */
++#define FRAM_SN_CTRL_HIGH_CNT_INITVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_HIGH_CNT_INITVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_HIGH_CNT_INITVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_HIGH_CNT_INITVAL_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define FRAM_SN_CTRL_HIGH_CNT_INCVAL_ADDR 0x206c /* 8300 */
++#define FRAM_SN_CTRL_HIGH_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define FRAM_SN_CTRL_HIGH_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define FRAM_SN_CTRL_HIGH_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define FRAM_SN_CTRL_HIGH_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define FRAM_PROTOCOL_DEFINITION_ADDR 0x2200 /* 8704 */
++#define FRAM_PROTOCOL_DEFINITION_MASK 0xf /* 15 */
++#define FRAM_PROTOCOL_DEFINITION_OFFSET 0x0 /* 0 */
++#define FRAM_PROTOCOL_DEFINITION_WIDTH 0x4 /* 4 */
++#define FRAM_PROTOCOL_DEFINITION_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_GEN_VLAN_TAG_ADDR 0x2200 /* 8704 */
++#define FRAM_GEN_VLAN_TAG_MASK 0x10 /* 16 */
++#define FRAM_GEN_VLAN_TAG_OFFSET 0x4 /* 4 */
++#define FRAM_GEN_VLAN_TAG_WIDTH 0x1 /* 1 */
++#define FRAM_GEN_VLAN_TAG_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_SEL_IPV_ADDRESS_TYPE_ADDR 0x2200 /* 8704 */
++#define FRAM_SEL_IPV_ADDRESS_TYPE_MASK 0x60 /* 96 */
++#define FRAM_SEL_IPV_ADDRESS_TYPE_OFFSET 0x5 /* 5 */
++#define FRAM_SEL_IPV_ADDRESS_TYPE_WIDTH 0x2 /* 2 */
++#define FRAM_SEL_IPV_ADDRESS_TYPE_DEFAULT 0x0 /* 0 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_fram_drp
++ * with prefix fram_drp @ address 0x4000
++ *------------------------------------------------------------------------------
++ */
++/* Type = rw */
++#define FRAM_DRPFRAM_DATA_PC_ID_ADDR 0x4000 /* 16384 */
++#define FRAM_DRPFRAM_DATA_PC_ID_MASK 0xffff /* 65535 */
++#define FRAM_DRPFRAM_DATA_PC_ID_OFFSET 0x0 /* 0 */
++#define FRAM_DRPFRAM_DATA_PC_ID_WIDTH 0x10 /* 16 */
++#define FRAM_DRPFRAM_DATA_PC_ID_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_DRPFRAM_DATA_MESSAGE_TYPE_ADDR 0x4000 /* 16384 */
++#define FRAM_DRPFRAM_DATA_MESSAGE_TYPE_MASK 0xff0000 /* 16711680 */
++#define FRAM_DRPFRAM_DATA_MESSAGE_TYPE_OFFSET 0x10 /* 16 */
++#define FRAM_DRPFRAM_DATA_MESSAGE_TYPE_WIDTH 0x8 /* 8 */
++#define FRAM_DRPFRAM_DATA_MESSAGE_TYPE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_DRPFRAM_DATA_ETHERNET_PORT_ADDR 0x4000 /* 16384 */
++#define FRAM_DRPFRAM_DATA_ETHERNET_PORT_MASK 0xff000000 /* 4278190080 */
++#define FRAM_DRPFRAM_DATA_ETHERNET_PORT_OFFSET 0x18 /* 24 */
++#define FRAM_DRPFRAM_DATA_ETHERNET_PORT_WIDTH 0x8 /* 8 */
++#define FRAM_DRPFRAM_DATA_ETHERNET_PORT_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_DRPFRAM_CTRL_PC_ID_ADDR 0x4400 /* 17408 */
++#define FRAM_DRPFRAM_CTRL_PC_ID_MASK 0xffff /* 65535 */
++#define FRAM_DRPFRAM_CTRL_PC_ID_OFFSET 0x0 /* 0 */
++#define FRAM_DRPFRAM_CTRL_PC_ID_WIDTH 0x10 /* 16 */
++#define FRAM_DRPFRAM_CTRL_PC_ID_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_DRPFRAM_CTRL_MESSAGE_TYPE_ADDR 0x4400 /* 17408 */
++#define FRAM_DRPFRAM_CTRL_MESSAGE_TYPE_MASK 0xff0000 /* 16711680 */
++#define FRAM_DRPFRAM_CTRL_MESSAGE_TYPE_OFFSET 0x10 /* 16 */
++#define FRAM_DRPFRAM_CTRL_MESSAGE_TYPE_WIDTH 0x8 /* 8 */
++#define FRAM_DRPFRAM_CTRL_MESSAGE_TYPE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define FRAM_DRPFRAM_CTRL_ETHERNET_PORT_ADDR 0x4400 /* 17408 */
++#define FRAM_DRPFRAM_CTRL_ETHERNET_PORT_MASK 0xff000000 /* 4278190080 */
++#define FRAM_DRPFRAM_CTRL_ETHERNET_PORT_OFFSET 0x18 /* 24 */
++#define FRAM_DRPFRAM_CTRL_ETHERNET_PORT_WIDTH 0x8 /* 8 */
++#define FRAM_DRPFRAM_CTRL_ETHERNET_PORT_DEFAULT 0x0 /* 0 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_defm
++ * with prefix defm_ @ address 0x6000
++ *------------------------------------------------------------------------------
++ */
++/* Type = rw */
++#define DEFM_RESTART_ADDR 0x6000 /* 24576 */
++#define DEFM_RESTART_MASK 0x1 /* 1 */
++#define DEFM_RESTART_OFFSET 0x0 /* 0 */
++#define DEFM_RESTART_WIDTH 0x1 /* 1 */
++#define DEFM_RESTART_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_READY_ADDR 0x6000 /* 24576 */
++#define DEFM_READY_MASK 0x2 /* 2 */
++#define DEFM_READY_OFFSET 0x1 /* 1 */
++#define DEFM_READY_WIDTH 0x1 /* 1 */
++#define DEFM_READY_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_ERR_PACKET_FILTER_ADDR 0x6004 /* 24580 */
++#define DEFM_ERR_PACKET_FILTER_MASK 0x3 /* 3 */
++#define DEFM_ERR_PACKET_FILTER_OFFSET 0x0 /* 0 */
++#define DEFM_ERR_PACKET_FILTER_WIDTH 0x2 /* 2 */
++#define DEFM_ERR_PACKET_FILTER_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_DATA_PKT_MESSAGE_TYPE_ADDR 0x6008 /* 24584 */
++#define DEFM_DATA_PKT_MESSAGE_TYPE_MASK 0xff /* 255 */
++#define DEFM_DATA_PKT_MESSAGE_TYPE_OFFSET 0x0 /* 0 */
++#define DEFM_DATA_PKT_MESSAGE_TYPE_WIDTH 0x8 /* 8 */
++#define DEFM_DATA_PKT_MESSAGE_TYPE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_CTRL_PKT_MESSAGE_TYPE_ADDR 0x600c /* 24588 */
++#define DEFM_CTRL_PKT_MESSAGE_TYPE_MASK 0xff /* 255 */
++#define DEFM_CTRL_PKT_MESSAGE_TYPE_OFFSET 0x0 /* 0 */
++#define DEFM_CTRL_PKT_MESSAGE_TYPE_WIDTH 0x8 /* 8 */
++#define DEFM_CTRL_PKT_MESSAGE_TYPE_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_LOW_CNT_MIN_ADDR 0x6020 /* 24608 */
++#define DEFM_SN_DATA_LOW_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_LOW_CNT_MIN_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_LOW_CNT_MIN_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_LOW_CNT_MIN_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_LOW_CNT_MAX_ADDR 0x6024 /* 24612 */
++#define DEFM_SN_DATA_LOW_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_LOW_CNT_MAX_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_LOW_CNT_MAX_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_LOW_CNT_MAX_DEFAULT 0x78 /* 120 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_LOW_CNT_INCVAL_ADDR 0x602c /* 24620 */
++#define DEFM_SN_DATA_LOW_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_LOW_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_LOW_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_LOW_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_HIGH_CNT_MIN_ADDR 0x6030 /* 24624 */
++#define DEFM_SN_DATA_HIGH_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_HIGH_CNT_MIN_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_HIGH_CNT_MIN_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_HIGH_CNT_MIN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_HIGH_CNT_MAX_ADDR 0x6034 /* 24628 */
++#define DEFM_SN_DATA_HIGH_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_HIGH_CNT_MAX_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_HIGH_CNT_MAX_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_HIGH_CNT_MAX_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define DEFM_SN_DATA_HIGH_CNT_INCVAL_ADDR 0x603c /* 24636 */
++#define DEFM_SN_DATA_HIGH_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_DATA_HIGH_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define DEFM_SN_DATA_HIGH_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define DEFM_SN_DATA_HIGH_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_LOW_CNT_MIN_ADDR 0x6050 /* 24656 */
++#define DEFM_SN_CTRL_LOW_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_LOW_CNT_MIN_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_LOW_CNT_MIN_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_LOW_CNT_MIN_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_LOW_CNT_MAX_ADDR 0x6054 /* 24660 */
++#define DEFM_SN_CTRL_LOW_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_LOW_CNT_MAX_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_LOW_CNT_MAX_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_LOW_CNT_MAX_DEFAULT 0x78 /* 120 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_LOW_CNT_INCVAL_ADDR 0x605c /* 24668 */
++#define DEFM_SN_CTRL_LOW_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_LOW_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_LOW_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_LOW_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_HIGH_CNT_MIN_ADDR 0x6060 /* 24672 */
++#define DEFM_SN_CTRL_HIGH_CNT_MIN_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_HIGH_CNT_MIN_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_HIGH_CNT_MIN_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_HIGH_CNT_MIN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_HIGH_CNT_MAX_ADDR 0x6064 /* 24676 */
++#define DEFM_SN_CTRL_HIGH_CNT_MAX_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_HIGH_CNT_MAX_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_HIGH_CNT_MAX_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_HIGH_CNT_MAX_DEFAULT 0x4f /* 79 */
++
++/* Type = rw */
++#define DEFM_SN_CTRL_HIGH_CNT_INCVAL_ADDR 0x606c /* 24684 */
++#define DEFM_SN_CTRL_HIGH_CNT_INCVAL_MASK 0xffffffff /* 4294967295 */
++#define DEFM_SN_CTRL_HIGH_CNT_INCVAL_OFFSET 0x0 /* 0 */
++#define DEFM_SN_CTRL_HIGH_CNT_INCVAL_WIDTH 0x20 /* 32 */
++#define DEFM_SN_CTRL_HIGH_CNT_INCVAL_DEFAULT 0x1 /* 1 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W0_31_0_ADDR 0x6100 /* 24832 */
++#define DEFM_USER_DATA_FILTER_W0_31_0_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W0_31_0_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W0_31_0_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W0_31_0_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W0_63_32_ADDR 0x6104 /* 24836 */
++#define DEFM_USER_DATA_FILTER_W0_63_32_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W0_63_32_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W0_63_32_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W0_63_32_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W0_95_64_ADDR 0x6108 /* 24840 */
++#define DEFM_USER_DATA_FILTER_W0_95_64_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W0_95_64_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W0_95_64_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W0_95_64_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W0_127_96_ADDR 0x610c /* 24844 */
++#define DEFM_USER_DATA_FILTER_W0_127_96_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W0_127_96_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W0_127_96_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W0_127_96_DEFAULT 0xfffffeae /* 4294966958 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W0_MASK_ADDR 0x6110 /* 24848 */
++#define DEFM_USER_DATA_FILTER_W0_MASK_MASK 0xffff /* 65535 */
++#define DEFM_USER_DATA_FILTER_W0_MASK_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W0_MASK_WIDTH 0x10 /* 16 */
++#define DEFM_USER_DATA_FILTER_W0_MASK_DEFAULT 0xcfff /* 53247 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W1_31_0_ADDR 0x6120 /* 24864 */
++#define DEFM_USER_DATA_FILTER_W1_31_0_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W1_31_0_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W1_31_0_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W1_31_0_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W1_63_32_ADDR 0x6124 /* 24868 */
++#define DEFM_USER_DATA_FILTER_W1_63_32_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W1_63_32_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W1_63_32_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W1_63_32_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W1_95_64_ADDR 0x6128 /* 24872 */
++#define DEFM_USER_DATA_FILTER_W1_95_64_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W1_95_64_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W1_95_64_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W1_95_64_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W1_127_96_ADDR 0x612c /* 24876 */
++#define DEFM_USER_DATA_FILTER_W1_127_96_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W1_127_96_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W1_127_96_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W1_127_96_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W1_MASK_ADDR 0x6130 /* 24880 */
++#define DEFM_USER_DATA_FILTER_W1_MASK_MASK 0xffff /* 65535 */
++#define DEFM_USER_DATA_FILTER_W1_MASK_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W1_MASK_WIDTH 0x10 /* 16 */
++#define DEFM_USER_DATA_FILTER_W1_MASK_DEFAULT 0xffff /* 65535 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W2_31_0_ADDR 0x6140 /* 24896 */
++#define DEFM_USER_DATA_FILTER_W2_31_0_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W2_31_0_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W2_31_0_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W2_31_0_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W2_63_32_ADDR 0x6144 /* 24900 */
++#define DEFM_USER_DATA_FILTER_W2_63_32_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W2_63_32_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W2_63_32_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W2_63_32_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W2_95_64_ADDR 0x6148 /* 24904 */
++#define DEFM_USER_DATA_FILTER_W2_95_64_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W2_95_64_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W2_95_64_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W2_95_64_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W2_127_96_ADDR 0x614c /* 24908 */
++#define DEFM_USER_DATA_FILTER_W2_127_96_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W2_127_96_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W2_127_96_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W2_127_96_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W2_MASK_ADDR 0x6150 /* 24912 */
++#define DEFM_USER_DATA_FILTER_W2_MASK_MASK 0xffff /* 65535 */
++#define DEFM_USER_DATA_FILTER_W2_MASK_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W2_MASK_WIDTH 0x10 /* 16 */
++#define DEFM_USER_DATA_FILTER_W2_MASK_DEFAULT 0xffff /* 65535 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W3_31_0_ADDR 0x6160 /* 24928 */
++#define DEFM_USER_DATA_FILTER_W3_31_0_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W3_31_0_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W3_31_0_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W3_31_0_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W3_63_32_ADDR 0x6164 /* 24932 */
++#define DEFM_USER_DATA_FILTER_W3_63_32_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W3_63_32_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W3_63_32_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W3_63_32_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W3_95_64_ADDR 0x6168 /* 24936 */
++#define DEFM_USER_DATA_FILTER_W3_95_64_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W3_95_64_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W3_95_64_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W3_95_64_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W3_127_96_ADDR 0x616c /* 24940 */
++#define DEFM_USER_DATA_FILTER_W3_127_96_MASK 0xffffffff /* 4294967295 */
++#define DEFM_USER_DATA_FILTER_W3_127_96_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W3_127_96_WIDTH 0x20 /* 32 */
++#define DEFM_USER_DATA_FILTER_W3_127_96_DEFAULT 0xffffffff /* 4294967295 */
++
++/* Type = rwpdef */
++#define DEFM_USER_DATA_FILTER_W3_MASK_ADDR 0x6170 /* 24944 */
++#define DEFM_USER_DATA_FILTER_W3_MASK_MASK 0xffff /* 65535 */
++#define DEFM_USER_DATA_FILTER_W3_MASK_OFFSET 0x0 /* 0 */
++#define DEFM_USER_DATA_FILTER_W3_MASK_WIDTH 0x10 /* 16 */
++#define DEFM_USER_DATA_FILTER_W3_MASK_DEFAULT 0xffff /* 65535 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_defm_drp
++ * with prefix defm_drp @ address 0x8000
++ *------------------------------------------------------------------------------
++ */
++/* Type = rw */
++#define DEFM_DRPDEFM_DATA_PC_ID_ADDR 0x8000 /* 32768 */
++#define DEFM_DRPDEFM_DATA_PC_ID_MASK 0xffff /* 65535 */
++#define DEFM_DRPDEFM_DATA_PC_ID_OFFSET 0x0 /* 0 */
++#define DEFM_DRPDEFM_DATA_PC_ID_WIDTH 0x10 /* 16 */
++#define DEFM_DRPDEFM_DATA_PC_ID_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define DEFM_DRPDEFM_CTRL_PC_ID_ADDR 0x8400 /* 33792 */
++#define DEFM_DRPDEFM_CTRL_PC_ID_MASK 0xffff /* 65535 */
++#define DEFM_DRPDEFM_CTRL_PC_ID_OFFSET 0x0 /* 0 */
++#define DEFM_DRPDEFM_CTRL_PC_ID_WIDTH 0x10 /* 16 */
++#define DEFM_DRPDEFM_CTRL_PC_ID_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_LATENCY_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_LATENCY_MASK 0xffffff /* 16777215 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_LATENCY_OFFSET 0x0 /* 0 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_LATENCY_WIDTH 0x18 /* 24 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_LATENCY_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_ALIGNMENT_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_ALIGNMENT_MASK 0x1000000 /* 16777216 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_ALIGNMENT_OFFSET 0x18 /* 24 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_ALIGNMENT_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_ALIGNMENT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_OVERFLOW_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_OVERFLOW_MASK 0x2000000 /* 33554432 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_OVERFLOW_OFFSET 0x19 /* 25 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_OVERFLOW_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_OVERFLOW_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_UNDERFLOW_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_UNDERFLOW_MASK 0x4000000 /* 67108864 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_UNDERFLOW_OFFSET 0x1a /* 26 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_UNDERFLOW_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_UNDERFLOW_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_REGULAR_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_REGULAR_MASK 0x8000000 /* 134217728 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_REGULAR_OFFSET 0x1b /* 27 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_REGULAR_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_REGULAR_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_RWIN_ADDR 0x8800 /* 34816 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_RWIN_MASK 0xf0000000 /* 4026531840 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_RWIN_OFFSET 0x1c /* 28 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_RWIN_WIDTH 0x4 /* 4 */
++#define DEFM_DRPDEFM_DATA_BUFFER_STATE_RWIN_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_LATENCY_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_LATENCY_MASK 0xffffff /* 16777215 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_LATENCY_OFFSET 0x0 /* 0 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_LATENCY_WIDTH 0x18 /* 24 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_LATENCY_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_ALIGNMENT_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_ALIGNMENT_MASK 0x1000000 /* 16777216 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_ALIGNMENT_OFFSET 0x18 /* 24 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_ALIGNMENT_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_ALIGNMENT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_OVERFLOW_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_OVERFLOW_MASK 0x2000000 /* 33554432 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_OVERFLOW_OFFSET 0x19 /* 25 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_OVERFLOW_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_OVERFLOW_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_UNDERFLOW_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_UNDERFLOW_MASK 0x4000000 /* 67108864 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_UNDERFLOW_OFFSET 0x1a /* 26 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_UNDERFLOW_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_UNDERFLOW_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_REGULAR_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_REGULAR_MASK 0x8000000 /* 134217728 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_REGULAR_OFFSET 0x1b /* 27 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_REGULAR_WIDTH 0x1 /* 1 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_REGULAR_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_RWIN_ADDR 0x9800 /* 38912 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_RWIN_MASK 0xf0000000 /* 4026531840 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_RWIN_OFFSET 0x1c /* 28 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_RWIN_WIDTH 0x4 /* 4 */
++#define DEFM_DRPDEFM_CTRL_BUFFER_STATE_RWIN_DEFAULT 0x0 /* 0 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_eth
++ * with prefix eth_ @ address 0xa000
++ *------------------------------------------------------------------------------
++ */
++/* Type = rwpdef */
++#define ETH_DEST_ADDR_31_0_ADDR 0xa000 /* 40960 */
++#define ETH_DEST_ADDR_31_0_MASK 0xffffffff /* 4294967295 */
++#define ETH_DEST_ADDR_31_0_OFFSET 0x0 /* 0 */
++#define ETH_DEST_ADDR_31_0_WIDTH 0x20 /* 32 */
++#define ETH_DEST_ADDR_31_0_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_DEST_ADDR_47_32_ADDR 0xa004 /* 40964 */
++#define ETH_DEST_ADDR_47_32_MASK 0xffff /* 65535 */
++#define ETH_DEST_ADDR_47_32_OFFSET 0x0 /* 0 */
++#define ETH_DEST_ADDR_47_32_WIDTH 0x10 /* 16 */
++#define ETH_DEST_ADDR_47_32_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_SRC_ADDR_31_0_ADDR 0xa008 /* 40968 */
++#define ETH_SRC_ADDR_31_0_MASK 0xffffffff /* 4294967295 */
++#define ETH_SRC_ADDR_31_0_OFFSET 0x0 /* 0 */
++#define ETH_SRC_ADDR_31_0_WIDTH 0x20 /* 32 */
++#define ETH_SRC_ADDR_31_0_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_SRC_ADDR_47_32_ADDR 0xa00c /* 40972 */
++#define ETH_SRC_ADDR_47_32_MASK 0xffff /* 65535 */
++#define ETH_SRC_ADDR_47_32_OFFSET 0x0 /* 0 */
++#define ETH_SRC_ADDR_47_32_WIDTH 0x10 /* 16 */
++#define ETH_SRC_ADDR_47_32_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_VLAN_ID_ADDR 0xa010 /* 40976 */
++#define ETH_VLAN_ID_MASK 0xfff /* 4095 */
++#define ETH_VLAN_ID_OFFSET 0x0 /* 0 */
++#define ETH_VLAN_ID_WIDTH 0xc /* 12 */
++#define ETH_VLAN_ID_DEFAULT 0x1 /* 1 */
++
++/* Type = rwpdef */
++#define ETH_VLAN_DEI_ADDR 0xa010 /* 40976 */
++#define ETH_VLAN_DEI_MASK 0x1000 /* 4096 */
++#define ETH_VLAN_DEI_OFFSET 0xc /* 12 */
++#define ETH_VLAN_DEI_WIDTH 0x1 /* 1 */
++#define ETH_VLAN_DEI_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_VLAN_PCP_ADDR 0xa010 /* 40976 */
++#define ETH_VLAN_PCP_MASK 0xe000 /* 57344 */
++#define ETH_VLAN_PCP_OFFSET 0xd /* 13 */
++#define ETH_VLAN_PCP_WIDTH 0x3 /* 3 */
++#define ETH_VLAN_PCP_DEFAULT 0x7 /* 7 */
++
++/* Type = rw */
++#define ETH_IPV4_VERSION_ADDR 0xa030 /* 41008 */
++#define ETH_IPV4_VERSION_MASK 0xf /* 15 */
++#define ETH_IPV4_VERSION_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_VERSION_WIDTH 0x4 /* 4 */
++#define ETH_IPV4_VERSION_DEFAULT 0x4 /* 4 */
++
++/* Type = rw */
++#define ETH_IPV4_IHL_ADDR 0xa030 /* 41008 */
++#define ETH_IPV4_IHL_MASK 0xf0 /* 240 */
++#define ETH_IPV4_IHL_OFFSET 0x4 /* 4 */
++#define ETH_IPV4_IHL_WIDTH 0x4 /* 4 */
++#define ETH_IPV4_IHL_DEFAULT 0x5 /* 5 */
++
++/* Type = rw */
++#define ETH_IPV4_DSCP_ADDR 0xa034 /* 41012 */
++#define ETH_IPV4_DSCP_MASK 0x3f /* 63 */
++#define ETH_IPV4_DSCP_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_DSCP_WIDTH 0x6 /* 6 */
++#define ETH_IPV4_DSCP_DEFAULT 0x2e /* 46 */
++
++/* Type = rw */
++#define ETH_IPV4_ECN_ADDR 0xa034 /* 41012 */
++#define ETH_IPV4_ECN_MASK 0xc0 /* 192 */
++#define ETH_IPV4_ECN_OFFSET 0x6 /* 6 */
++#define ETH_IPV4_ECN_WIDTH 0x2 /* 2 */
++#define ETH_IPV4_ECN_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_IPV4_ID_ADDR 0xa038 /* 41016 */
++#define ETH_IPV4_ID_MASK 0xffff /* 65535 */
++#define ETH_IPV4_ID_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_ID_WIDTH 0x10 /* 16 */
++#define ETH_IPV4_ID_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_IPV4_FLAGS_ADDR 0xa03c /* 41020 */
++#define ETH_IPV4_FLAGS_MASK 0x7 /* 7 */
++#define ETH_IPV4_FLAGS_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_FLAGS_WIDTH 0x3 /* 3 */
++#define ETH_IPV4_FLAGS_DEFAULT 0x2 /* 2 */
++
++/* Type = rw */
++#define ETH_IPV4_FRAGMENT_OFFSET_ADDR 0xa03c /* 41020 */
++#define ETH_IPV4_FRAGMENT_OFFSET_MASK 0x1fff8 /* 131064 */
++#define ETH_IPV4_FRAGMENT_OFFSET_OFFSET 0x3 /* 3 */
++#define ETH_IPV4_FRAGMENT_OFFSET_WIDTH 0xe /* 14 */
++#define ETH_IPV4_FRAGMENT_OFFSET_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_IPV4_TIME_TO_LIVE_ADDR 0xa040 /* 41024 */
++#define ETH_IPV4_TIME_TO_LIVE_MASK 0xff /* 255 */
++#define ETH_IPV4_TIME_TO_LIVE_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_TIME_TO_LIVE_WIDTH 0x8 /* 8 */
++#define ETH_IPV4_TIME_TO_LIVE_DEFAULT 0x40 /* 64 */
++
++/* Type = rw */
++#define ETH_IPV4_PROTOCOL_ADDR 0xa044 /* 41028 */
++#define ETH_IPV4_PROTOCOL_MASK 0xff /* 255 */
++#define ETH_IPV4_PROTOCOL_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_PROTOCOL_WIDTH 0x8 /* 8 */
++#define ETH_IPV4_PROTOCOL_DEFAULT 0x11 /* 17 */
++
++/* Type = rwpdef */
++#define ETH_IPV4_SOURCE_ADD_ADDR 0xa048 /* 41032 */
++#define ETH_IPV4_SOURCE_ADD_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV4_SOURCE_ADD_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_SOURCE_ADD_WIDTH 0x20 /* 32 */
++#define ETH_IPV4_SOURCE_ADD_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV4_DESTINATION_ADD_ADDR 0xa04c /* 41036 */
++#define ETH_IPV4_DESTINATION_ADD_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV4_DESTINATION_ADD_OFFSET 0x0 /* 0 */
++#define ETH_IPV4_DESTINATION_ADD_WIDTH 0x20 /* 32 */
++#define ETH_IPV4_DESTINATION_ADD_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_UDP_SOURCE_PORT_ADDR 0xa050 /* 41040 */
++#define ETH_UDP_SOURCE_PORT_MASK 0xffff /* 65535 */
++#define ETH_UDP_SOURCE_PORT_OFFSET 0x0 /* 0 */
++#define ETH_UDP_SOURCE_PORT_WIDTH 0x10 /* 16 */
++#define ETH_UDP_SOURCE_PORT_DEFAULT 0x8000 /* 32768 */
++
++/* Type = rw */
++#define ETH_UDP_DESTINATION_PORT_ADDR 0xa050 /* 41040 */
++#define ETH_UDP_DESTINATION_PORT_MASK 0xffff0000 /* 4294901760 */
++#define ETH_UDP_DESTINATION_PORT_OFFSET 0x10 /* 16 */
++#define ETH_UDP_DESTINATION_PORT_WIDTH 0x10 /* 16 */
++#define ETH_UDP_DESTINATION_PORT_DEFAULT 0xc000 /* 49152 */
++
++/* Type = rw */
++#define ETH_IPV6_V_ADDR 0xa080 /* 41088 */
++#define ETH_IPV6_V_MASK 0xf /* 15 */
++#define ETH_IPV6_V_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_V_WIDTH 0x4 /* 4 */
++#define ETH_IPV6_V_DEFAULT 0x6 /* 6 */
++
++/* Type = rw */
++#define ETH_IPV6_TRAFFIC_CLASS_ADDR 0xa084 /* 41092 */
++#define ETH_IPV6_TRAFFIC_CLASS_MASK 0xff /* 255 */
++#define ETH_IPV6_TRAFFIC_CLASS_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_TRAFFIC_CLASS_WIDTH 0x8 /* 8 */
++#define ETH_IPV6_TRAFFIC_CLASS_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_IPV6_FLOW_LABEL_ADDR 0xa088 /* 41096 */
++#define ETH_IPV6_FLOW_LABEL_MASK 0xfffff /* 1048575 */
++#define ETH_IPV6_FLOW_LABEL_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_FLOW_LABEL_WIDTH 0x14 /* 20 */
++#define ETH_IPV6_FLOW_LABEL_DEFAULT 0x0 /* 0 */
++
++/* Type = rw */
++#define ETH_IPV6_NEXT_HEADER_ADDR 0xa08c /* 41100 */
++#define ETH_IPV6_NEXT_HEADER_MASK 0xff /* 255 */
++#define ETH_IPV6_NEXT_HEADER_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_NEXT_HEADER_WIDTH 0x8 /* 8 */
++#define ETH_IPV6_NEXT_HEADER_DEFAULT 0x11 /* 17 */
++
++/* Type = rw */
++#define ETH_IPV6_HOP_LIMIT_ADDR 0xa090 /* 41104 */
++#define ETH_IPV6_HOP_LIMIT_MASK 0xff /* 255 */
++#define ETH_IPV6_HOP_LIMIT_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_HOP_LIMIT_WIDTH 0x8 /* 8 */
++#define ETH_IPV6_HOP_LIMIT_DEFAULT 0x40 /* 64 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_SOURCE_ADD_31_0_ADDR 0xa094 /* 41108 */
++#define ETH_IPV6_SOURCE_ADD_31_0_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_SOURCE_ADD_31_0_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_SOURCE_ADD_31_0_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_SOURCE_ADD_31_0_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_SOURCE_ADD_63_32_ADDR 0xa098 /* 41112 */
++#define ETH_IPV6_SOURCE_ADD_63_32_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_SOURCE_ADD_63_32_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_SOURCE_ADD_63_32_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_SOURCE_ADD_63_32_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_SOURCE_ADD_95_64_ADDR 0xa09c /* 41116 */
++#define ETH_IPV6_SOURCE_ADD_95_64_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_SOURCE_ADD_95_64_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_SOURCE_ADD_95_64_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_SOURCE_ADD_95_64_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_SOURCE_ADD_127_96_ADDR 0xa0a0 /* 41120 */
++#define ETH_IPV6_SOURCE_ADD_127_96_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_SOURCE_ADD_127_96_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_SOURCE_ADD_127_96_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_SOURCE_ADD_127_96_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_DEST_ADD_31_0_ADDR 0xa0a4 /* 41124 */
++#define ETH_IPV6_DEST_ADD_31_0_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_DEST_ADD_31_0_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_DEST_ADD_31_0_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_DEST_ADD_31_0_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_DEST_ADD_63_32_ADDR 0xa0a8 /* 41128 */
++#define ETH_IPV6_DEST_ADD_63_32_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_DEST_ADD_63_32_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_DEST_ADD_63_32_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_DEST_ADD_63_32_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_DEST_ADD_95_64_ADDR 0xa0ac /* 41132 */
++#define ETH_IPV6_DEST_ADD_95_64_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_DEST_ADD_95_64_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_DEST_ADD_95_64_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_DEST_ADD_95_64_DEFAULT 0x0 /* 0 */
++
++/* Type = rwpdef */
++#define ETH_IPV6_DEST_ADD_127_96_ADDR 0xa0b0 /* 41136 */
++#define ETH_IPV6_DEST_ADD_127_96_MASK 0xffffffff /* 4294967295 */
++#define ETH_IPV6_DEST_ADD_127_96_OFFSET 0x0 /* 0 */
++#define ETH_IPV6_DEST_ADD_127_96_WIDTH 0x20 /* 32 */
++#define ETH_IPV6_DEST_ADD_127_96_DEFAULT 0x0 /* 0 */
++
++/*-----------------------------------------------------------------------------
++ * C Header bank register definitions for bank roe_framer_v1_0_stats
++ * with prefix stats_ @ address 0xc000
++ *------------------------------------------------------------------------------
++ */
++/* Type = roSig */
++#define STATS_TOTAL_RX_GOOD_PKT_CNT_ADDR 0xc000 /* 49152 */
++#define STATS_TOTAL_RX_GOOD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_TOTAL_RX_GOOD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_TOTAL_RX_GOOD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_TOTAL_RX_GOOD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_TOTAL_RX_BAD_PKT_CNT_ADDR 0xc004 /* 49156 */
++#define STATS_TOTAL_RX_BAD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_TOTAL_RX_BAD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_TOTAL_RX_BAD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_TOTAL_RX_BAD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_TOTAL_RX_BAD_FCS_CNT_ADDR 0xc008 /* 49160 */
++#define STATS_TOTAL_RX_BAD_FCS_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_TOTAL_RX_BAD_FCS_CNT_OFFSET 0x0 /* 0 */
++#define STATS_TOTAL_RX_BAD_FCS_CNT_WIDTH 0x20 /* 32 */
++#define STATS_TOTAL_RX_BAD_FCS_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_DATA_RX_PACKETS_CNT_ADDR 0xc00c /* 49164 */
++#define STATS_USER_DATA_RX_PACKETS_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_DATA_RX_PACKETS_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_DATA_RX_PACKETS_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_DATA_RX_PACKETS_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_DATA_RX_GOOD_PKT_CNT_ADDR 0xc010 /* 49168 */
++#define STATS_USER_DATA_RX_GOOD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_DATA_RX_GOOD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_DATA_RX_GOOD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_DATA_RX_GOOD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_DATA_RX_BAD_PKT_CNT_ADDR 0xc014 /* 49172 */
++#define STATS_USER_DATA_RX_BAD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_DATA_RX_BAD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_DATA_RX_BAD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_DATA_RX_BAD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_DATA_RX_BAD_FCS_CNT_ADDR 0xc018 /* 49176 */
++#define STATS_USER_DATA_RX_BAD_FCS_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_DATA_RX_BAD_FCS_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_DATA_RX_BAD_FCS_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_DATA_RX_BAD_FCS_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_CTRL_RX_PACKETS_CNT_ADDR 0xc01c /* 49180 */
++#define STATS_USER_CTRL_RX_PACKETS_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_CTRL_RX_PACKETS_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_CTRL_RX_PACKETS_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_CTRL_RX_PACKETS_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_CTRL_RX_GOOD_PKT_CNT_ADDR 0xc020 /* 49184 */
++#define STATS_USER_CTRL_RX_GOOD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_CTRL_RX_GOOD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_CTRL_RX_GOOD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_CTRL_RX_GOOD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_CTRL_RX_BAD_PKT_CNT_ADDR 0xc024 /* 49188 */
++#define STATS_USER_CTRL_RX_BAD_PKT_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_CTRL_RX_BAD_PKT_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_CTRL_RX_BAD_PKT_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_CTRL_RX_BAD_PKT_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_CTRL_RX_BAD_FCS_CNT_ADDR 0xc028 /* 49192 */
++#define STATS_USER_CTRL_RX_BAD_FCS_CNT_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_CTRL_RX_BAD_FCS_CNT_OFFSET 0x0 /* 0 */
++#define STATS_USER_CTRL_RX_BAD_FCS_CNT_WIDTH 0x20 /* 32 */
++#define STATS_USER_CTRL_RX_BAD_FCS_CNT_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_DATA_RX_PKTS_RATE_ADDR 0xc02c /* 49196 */
++#define STATS_USER_DATA_RX_PKTS_RATE_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_DATA_RX_PKTS_RATE_OFFSET 0x0 /* 0 */
++#define STATS_USER_DATA_RX_PKTS_RATE_WIDTH 0x20 /* 32 */
++#define STATS_USER_DATA_RX_PKTS_RATE_DEFAULT 0x0 /* 0 */
++
++/* Type = roSig */
++#define STATS_USER_CTRL_RX_PKTS_RATE_ADDR 0xc030 /* 49200 */
++#define STATS_USER_CTRL_RX_PKTS_RATE_MASK 0xffffffff /* 4294967295 */
++#define STATS_USER_CTRL_RX_PKTS_RATE_OFFSET 0x0 /* 0 */
++#define STATS_USER_CTRL_RX_PKTS_RATE_WIDTH 0x20 /* 32 */
++#define STATS_USER_CTRL_RX_PKTS_RATE_DEFAULT 0x0 /* 0 */
+diff --git a/drivers/staging/xroeframer/sysfs_xroe.c b/drivers/staging/xroeframer/sysfs_xroe.c
+new file mode 100644
+index 000000000..9caf5e50b
+--- /dev/null
++++ b/drivers/staging/xroeframer/sysfs_xroe.c
+@@ -0,0 +1,562 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++#include <linux/init.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include "xroe_framer.h"
++
++enum { XROE_SIZE_MAX = 15 };
++static int xroe_size;
++static char xroe_tmp[XROE_SIZE_MAX];
++
++/**
++ * version_show - Returns the block's revision number
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the revision string
++ *
++ * Returns the block's major, minor & version revision numbers
++ * in a %d.%d.%d format
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
++			    char *buff)
++{
++	u32 major_rev;
++	u32 minor_rev;
++	u32 version_rev;
++
++	major_rev = utils_sysfs_show_wrapper(CFG_MAJOR_REVISION_ADDR,
++					     CFG_MAJOR_REVISION_OFFSET,
++					     CFG_MAJOR_REVISION_MASK, kobj);
++	minor_rev = utils_sysfs_show_wrapper(CFG_MINOR_REVISION_ADDR,
++					     CFG_MINOR_REVISION_OFFSET,
++					     CFG_MINOR_REVISION_MASK, kobj);
++	version_rev = utils_sysfs_show_wrapper(CFG_VERSION_REVISION_ADDR,
++					       CFG_VERSION_REVISION_OFFSET,
++					       CFG_VERSION_REVISION_MASK, kobj);
++	sprintf(buff, "%d.%d.%d\n", major_rev, minor_rev, version_rev);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * version_store - Writes to the framer version sysfs entry (not permitted)
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the revision string
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the framer version sysfs entry (not permitted)
++ *
++ * Return: 0
++ */
++static ssize_t version_store(struct  kobject *kobj, struct kobj_attribute *attr,
++			     const char *buff, size_t count)
++{
++	return 0;
++}
++
++/**
++ * enable_show - Returns the framer's enable status
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the enable status
++ *
++ * Reads and writes the framer's enable status to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t enable_show(struct kobject *kobj, struct kobj_attribute *attr,
++			   char *buff)
++{
++	u32 enable;
++
++	enable = utils_sysfs_show_wrapper(CFG_MASTER_INT_ENABLE_ADDR,
++					  CFG_MASTER_INT_ENABLE_OFFSET,
++					  CFG_MASTER_INT_ENABLE_MASK, kobj);
++	if (enable)
++		sprintf(buff, "true\n");
++	else
++		sprintf(buff, "false\n");
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * version_store - Writes to the framer's enable status register
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the enable status
++ * @count:	The number of characters typed by the user
++ *
++ * Reads the user input and accordingly writes the framer's enable status
++ * to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t enable_store(struct kobject *kobj, struct kobj_attribute *attr,
++			    const char *buff, size_t count)
++{
++	u32 enable = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (strncmp(xroe_tmp, "true", xroe_size) == 0)
++		enable = 1;
++	else if (strncmp(xroe_tmp, "false", xroe_size) == 0)
++		enable = 0;
++	utils_sysfs_store_wrapper(CFG_MASTER_INT_ENABLE_ADDR,
++				  CFG_MASTER_INT_ENABLE_OFFSET,
++				  CFG_MASTER_INT_ENABLE_MASK, enable, kobj);
++	return xroe_size;
++}
++
++/**
++ * framer_restart_show - Returns the framer's restart status
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the restart status
++ *
++ * Reads and writes the framer's restart status to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t framer_restart_show(struct kobject *kobj,
++				   struct kobj_attribute *attr, char *buff)
++{
++	u32 restart;
++
++	restart = utils_sysfs_show_wrapper(FRAM_DISABLE_ADDR,
++					   FRAM_DISABLE_OFFSET,
++					   FRAM_DISABLE_MASK, kobj);
++	if (restart)
++		sprintf(buff, "true\n");
++
++	else
++		sprintf(buff, "false\n");
++
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * framer_restart_store - Writes to the framer's restart status register
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the restart status
++ * @count:	The number of characters typed by the user
++ *
++ * Reads the user input and accordingly writes the framer's restart status
++ * to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t framer_restart_store(struct  kobject *kobj,
++				    struct kobj_attribute *attr,
++				    const char *buff, size_t count)
++{
++	u32 restart = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (strncmp(xroe_tmp, "true", xroe_size) == 0)
++		restart = 0x01;
++	else if (strncmp(xroe_tmp, "false", xroe_size) == 0)
++		restart = 0x00;
++	utils_sysfs_store_wrapper(FRAM_DISABLE_ADDR, FRAM_DISABLE_OFFSET,
++				  FRAM_DISABLE_MASK, restart, kobj);
++	return xroe_size;
++}
++
++/**
++ * deframer_restart_show - Returns the deframer's restart status
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the restart status
++ *
++ * Reads and writes the deframer's restart status to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t deframer_restart_show(struct kobject *kobj,
++				     struct kobj_attribute *attr, char *buff)
++{
++	u32 offset = DEFM_RESTART_OFFSET;
++	u32 mask = DEFM_RESTART_MASK;
++	u32 buffer = 0;
++	u32 restart = 0;
++	void __iomem *working_address = ((u8 *)lp->base_addr
++	+ DEFM_RESTART_ADDR);
++
++	buffer = ioread32(working_address);
++	restart = (buffer & mask) >> offset;
++
++	if (restart)
++		sprintf(buff, "true\n");
++
++	else
++		sprintf(buff, "false\n");
++
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * deframer_restart_store - Writes to the deframer's restart status register
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the restart status
++ * @count:	The number of characters typed by the user
++ *
++ * Reads the user input and accordingly writes the deframer's restart status
++ * to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t deframer_restart_store(struct kobject *kobj,
++				      struct kobj_attribute *attr,
++				      const char *buff, size_t count)
++{
++	u32 offset = DEFM_RESTART_OFFSET;
++	u32 mask = DEFM_RESTART_MASK;
++	void __iomem *working_address = ((u8 *)lp->base_addr
++	+ DEFM_RESTART_ADDR);
++	u32 restart = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (strncmp(xroe_tmp, "true", xroe_size) == 0) {
++		restart = 0x01;
++		utils_write32withmask(working_address, restart,
++				      mask, offset);
++	} else if (strncmp(xroe_tmp, "false", xroe_size) == 0) {
++		restart = 0x00;
++		utils_write32withmask(working_address, restart,
++				      mask, offset);
++	}
++
++	return xroe_size;
++}
++
++/**
++ * xxv_reset_show - Returns the XXV's reset status
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the reset status
++ *
++ * Reads and writes the XXV's reset status to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t xxv_reset_show(struct kobject *kobj, struct kobj_attribute *attr,
++			      char *buff)
++{
++	u32 offset = CFG_USER_RW_OUT_OFFSET;
++	u32 mask = CFG_USER_RW_OUT_MASK;
++	u32 buffer = 0;
++	u32 restart = 0;
++	void __iomem *working_address = ((u8 *)lp->base_addr +
++	CFG_USER_RW_OUT_ADDR);
++
++	buffer = ioread32(working_address);
++	restart = (buffer & mask) >> offset;
++	if (restart)
++		sprintf(buff, "true\n");
++	else
++		sprintf(buff, "false\n");
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * xxv_reset_store - Writes to the XXV's reset register
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the reset status
++ * @count:	The number of characters typed by the user
++ *
++ * Reads the user input and accordingly writes the XXV's reset status
++ * to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t xxv_reset_store(struct  kobject *kobj,
++			       struct kobj_attribute *attr,
++			       const char *buff, size_t count)
++{
++	u32 offset = CFG_USER_RW_OUT_OFFSET;
++	u32 mask = CFG_USER_RW_OUT_MASK;
++	void __iomem *working_address = ((u8 *)lp->base_addr +
++	CFG_USER_RW_OUT_ADDR);
++	u32 restart = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++
++	if (strncmp(xroe_tmp, "true", xroe_size) == 0) {
++		restart = 0x01;
++		utils_write32withmask(working_address, restart,
++				      mask, offset);
++	} else if (strncmp(xroe_tmp, "false", xroe_size) == 0) {
++		restart = 0x00;
++		utils_write32withmask(working_address, restart,
++				      mask, offset);
++	}
++	return xroe_size;
++}
++
++/**
++ * framing_show - Returns the current framing
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the reset status
++ *
++ * Reads and writes the current framing type to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t framing_show(struct kobject *kobj, struct kobj_attribute *attr,
++			    char *buff)
++{
++	u32 offset = (DEFM_DATA_PKT_MESSAGE_TYPE_ADDR +
++	DEFM_DATA_PKT_MESSAGE_TYPE_OFFSET);
++	u8 buffer = 0;
++	u8 framing = 0xff;
++	void __iomem *working_address = ((u8 *)lp->base_addr + offset);
++
++	buffer = ioread8(working_address);
++	framing = buffer;
++	if (framing == 0)
++		sprintf(buff, "eCPRI\n");
++	else if (framing == 1)
++		sprintf(buff, "1914.3\n");
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * framing_store - Writes to the current framing register
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the reset status
++ * @count:	The number of characters typed by the user
++ *
++ * Reads the user input and accordingly writes the current framing
++ * to the sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t framing_store(struct kobject *kobj, struct kobj_attribute *attr,
++			     const char *buff, size_t count)
++{
++	u32 offset = (DEFM_DATA_PKT_MESSAGE_TYPE_ADDR +
++	DEFM_DATA_PKT_MESSAGE_TYPE_OFFSET);
++	void __iomem *working_address = ((u8 *)lp->base_addr + offset);
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (strncmp(xroe_tmp, "eCPRI", xroe_size) == 0)
++		iowrite8(0, working_address);
++	else if (strncmp(xroe_tmp, "1914.3", xroe_size) == 0)
++		iowrite8(1, working_address);
++	return xroe_size;
++}
++
++/* TODO Use DEVICE_ATTR/_RW/_RO macros */
++
++static struct kobj_attribute version_attribute =
++	__ATTR(version, 0444, version_show, version_store);
++
++static struct kobj_attribute enable_attribute =
++	__ATTR(enable, 0660, enable_show, enable_store);
++
++static struct kobj_attribute framer_restart =
++	__ATTR(framer_restart, 0660, framer_restart_show, framer_restart_store);
++
++static struct kobj_attribute deframer_restart =
++	__ATTR(deframer_restart, 0660, deframer_restart_show,
++	       deframer_restart_store);
++
++static struct kobj_attribute xxv_reset =
++	__ATTR(xxv_reset, 0660, xxv_reset_show, xxv_reset_store);
++
++static struct kobj_attribute framing_attribute =
++	__ATTR(framing, 0660, framing_show, framing_store);
++
++static struct attribute *attrs[] = {
++	&version_attribute.attr,
++	&enable_attribute.attr,
++	&framer_restart.attr,
++	&deframer_restart.attr,
++	&xxv_reset.attr,
++	&framing_attribute.attr,
++	NULL,
++};
++
++static struct attribute_group attr_group = {
++	.attrs = attrs,
++};
++
++struct kobject *root_xroe_kobj;
++
++/**
++ * xroe_sysfs_init - Creates the xroe sysfs directory and entries
++ *
++ * Return: 0 on success, negative value in case of failure to
++ * create the sysfs group
++ *
++ * Creates the xroe sysfs directory and entries, as well as the
++ * subdirectories for IPv4, IPv6 & UDP
++ */
++int xroe_sysfs_init(void)
++{
++	int ret;
++
++	root_xroe_kobj = kobject_create_and_add("xroe", kernel_kobj);
++	if (!root_xroe_kobj)
++		return -ENOMEM;
++	ret = sysfs_create_group(root_xroe_kobj, &attr_group);
++	if (ret)
++		kobject_put(root_xroe_kobj);
++	ret = xroe_sysfs_ipv4_init();
++	if (ret)
++		return ret;
++	ret = xroe_sysfs_ipv6_init();
++	if (ret)
++		return ret;
++	ret = xroe_sysfs_udp_init();
++	if (ret)
++		return ret;
++	ret = xroe_sysfs_stats_init();
++	return ret;
++}
++
++/**
++ * xroe_sysfs_exit - Deletes the xroe sysfs directory and entries
++ *
++ * Deletes the xroe sysfs directory and entries, as well as the
++ * subdirectories for IPv4, IPv6 & UDP
++ *
++ */
++void xroe_sysfs_exit(void)
++{
++	int i;
++
++	xroe_sysfs_ipv4_exit();
++	xroe_sysfs_ipv6_exit();
++	xroe_sysfs_udp_exit();
++	xroe_sysfs_stats_exit();
++	for (i = 0; i < MAX_NUM_ETH_PORTS; i++)
++		kobject_put(kobj_eth_ports[i]);
++	kobject_put(kobj_framer);
++	kobject_put(root_xroe_kobj);
++}
++
++/**
++ * utils_write32withmask - Writes a masked 32-bit value
++ * @working_address:	The starting address to write
++ * @value:			The value to be written
++ * @mask:			The mask to be used
++ * @offset:			The offset from the provided starting address
++ *
++ * Writes a 32-bit value to the provided address with the input mask
++ *
++ * Return: 0 on success
++ */
++int utils_write32withmask(void __iomem *working_address, u32 value,
++			  u32 mask, u32 offset)
++{
++	u32 read_register_value = 0;
++	u32 register_value_to_write = 0;
++	u32 delta = 0, buffer = 0;
++
++	read_register_value = ioread32(working_address);
++	buffer = (value << offset);
++	register_value_to_write = read_register_value & ~mask;
++	delta = buffer & mask;
++	register_value_to_write |= delta;
++	iowrite32(register_value_to_write, working_address);
++	return 0;
++}
++
++/**
++ * utils_sysfs_path_to_eth_port_num - Get the current ethernet port
++ * @kobj:	The kobject of the entry calling the function
++ *
++ * Extracts the number of the current ethernet port instance
++ *
++ * Return: The number of the ethernet port instance (0 - MAX_NUM_ETH_PORTS) on
++ * success, -1 otherwise
++ */
++static int utils_sysfs_path_to_eth_port_num(struct kobject *kobj)
++{
++	char *current_path = NULL;
++	int port;
++	int ret;
++
++	current_path = kobject_get_path(kobj, GFP_KERNEL);
++	ret = sscanf(current_path, "/kernel/xroe/framer/eth_port_%d/", &port);
++	/* if sscanf() returns 0, no fields were assigned, therefore no
++	 * adjustments will be made for port number
++	 */
++	if (ret == 0)
++		port = 0;
++//	printk(KERN_ALERT "current_path: %s port: %d\n", current_path, port);
++	kfree(current_path);
++	return port;
++}
++
++/**
++ * utils_sysfs_store_wrapper - Wraps the storing function for sysfs entries
++ * @address:	The address of the register to be written
++ * @offset:	The offset from the address of the register
++ * @mask:	The mask to be used on the value to be written
++ * @value:	The value to be written to the register
++ * @kobj:	The kobject of the entry calling the function
++ *
++ * Wraps the core functionality of all "store" functions of sysfs entries.
++ * After calculating the ethernet port number (in N/A cases, it's 0), the value
++ * is written to the designated register
++ *
++ */
++void utils_sysfs_store_wrapper(u32 address, u32 offset, u32 mask, u32 value,
++			       struct kobject *kobj)
++{
++	int port;
++	void __iomem *working_address;
++
++	port = utils_sysfs_path_to_eth_port_num(kobj);
++	working_address = (void __iomem *)(lp->base_addr +
++			  (address + (0x100 * port)));
++	utils_write32withmask(working_address, value, mask, offset);
++}
++
++/**
++ * utils_sysfs_store_wrapper - Wraps the storing function for sysfs entries
++ * @address:	The address of the register to be read
++ * @offset:	The offset from the address of the register
++ * @mask:	The mask to be used on the value to be read
++ * @kobj:	The kobject of the entry calling the function
++ *
++ * Wraps the core functionality of all "show" functions of sysfs entries.
++ * After calculating the ethernet port number (in N/A cases, it's 0), the value
++ * is read from the designated register and returned.
++ *
++ * Return: The value designated by the address, offset and mask
++ */
++u32 utils_sysfs_show_wrapper(u32 address, u32 offset, u32 mask,
++			     struct kobject *kobj)
++{
++	int port;
++	void __iomem *working_address;
++	u32 buffer;
++
++	port = utils_sysfs_path_to_eth_port_num(kobj);
++	working_address = (void __iomem *)(lp->base_addr +
++			  (address + (0x100 * port)));
++	buffer = ioread32(working_address);
++	return (buffer & mask) >> offset;
++}
+diff --git a/drivers/staging/xroeframer/sysfs_xroe_framer_ipv4.c b/drivers/staging/xroeframer/sysfs_xroe_framer_ipv4.c
+new file mode 100644
+index 000000000..aaaefb10c
+--- /dev/null
++++ b/drivers/staging/xroeframer/sysfs_xroe_framer_ipv4.c
+@@ -0,0 +1,718 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++
++#include <linux/init.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include "xroe_framer.h"
++
++enum { XROE_SIZE_MAX = 15 };
++static int xroe_size;
++static char xroe_tmp[XROE_SIZE_MAX];
++
++static void utils_ipv4addr_hextochar(u32 ip, unsigned char *bytes);
++static int utils_ipv4addr_chartohex(char *ip_addr, uint32_t *p_ip_addr);
++
++/**
++ * ipv4_version_show - Returns the IPv4 version number
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 version number
++ *
++ * Returns the IPv4 version number
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_version_show(struct kobject *kobj,
++				 struct kobj_attribute *attr, char *buff)
++{
++	u32 version;
++
++	version = utils_sysfs_show_wrapper(ETH_IPV4_VERSION_ADDR,
++					   ETH_IPV4_VERSION_OFFSET,
++					   ETH_IPV4_VERSION_MASK, kobj);
++	sprintf(buff, "%d\n", version);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_version_store - Writes to the IPv4 version number sysfs entry
++ * (not permitted)
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 version
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 version number sysfs entry (not permitted)
++ *
++ * Return: 0
++ */
++static ssize_t ipv4_version_store(struct kobject *kobj,
++				  struct kobj_attribute *attr, const char *buff,
++				  size_t count)
++{
++	return 0;
++}
++
++/**
++ * ipv4_ihl_show - Returns the IPv4 IHL
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 IHL
++ *
++ * Returns the IPv4 IHL
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_ihl_show(struct kobject *kobj,
++			     struct kobj_attribute *attr, char *buff)
++{
++	u32 ihl;
++
++	ihl = utils_sysfs_show_wrapper(ETH_IPV4_IHL_ADDR, ETH_IPV4_IHL_OFFSET,
++				       ETH_IPV4_IHL_MASK, kobj);
++	sprintf(buff, "%d\n", ihl);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_ihl_store - Writes to the IPv4 IHL sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 IHL
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 IHL sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_ihl_store(struct kobject *kobj,
++			      struct kobj_attribute *attr, const char *buff,
++			      size_t count)
++{
++	int ret;
++	u32 ihl;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &ihl);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_IHL_ADDR, ETH_IPV4_IHL_OFFSET,
++				  ETH_IPV4_IHL_MASK, ihl, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_dscp_show - Returns the IPv4 DSCP
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 DSCP
++ *
++ * Returns the IPv4 DSCP
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_dscp_show(struct kobject *kobj,
++			      struct kobj_attribute *attr, char *buff)
++{
++	u32 dscp;
++
++	dscp = utils_sysfs_show_wrapper(ETH_IPV4_DSCP_ADDR,
++					ETH_IPV4_DSCP_OFFSET,
++					ETH_IPV4_DSCP_MASK, kobj);
++	sprintf(buff, "%d\n", dscp);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_dscp_store - Writes to the IPv4 DSCP sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 DSCP
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 DSCP sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_dscp_store(struct kobject *kobj,
++			       struct kobj_attribute *attr, const char *buff,
++			       size_t count)
++{
++	int ret;
++	u32 dscp;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &dscp);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_DSCP_ADDR, ETH_IPV4_DSCP_OFFSET,
++				  ETH_IPV4_DSCP_MASK, dscp, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_ecn_show - Returns the IPv4 ECN
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 ECN
++ *
++ * Returns the IPv4 ECN
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_ecn_show(struct kobject *kobj,
++			     struct kobj_attribute *attr, char *buff)
++{
++	u32 ecn;
++
++	ecn = utils_sysfs_show_wrapper(ETH_IPV4_ECN_ADDR, ETH_IPV4_ECN_OFFSET,
++				       ETH_IPV4_ECN_MASK, kobj);
++	sprintf(buff, "%d\n", ecn);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_ecn_store - Writes to the IPv4 ECN sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 ECN
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 ECN sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_ecn_store(struct kobject *kobj,
++			      struct kobj_attribute *attr, const char *buff,
++			      size_t count)
++{
++	int ret;
++	u32 ecn;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &ecn);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_ECN_ADDR, ETH_IPV4_ECN_OFFSET,
++				  ETH_IPV4_ECN_MASK, ecn, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_id_show - Returns the IPv4 ID
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 ID
++ *
++ * Returns the IPv4 ID
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_id_show(struct kobject *kobj,
++			    struct kobj_attribute *attr, char *buff)
++{
++	u32 id;
++
++	id = utils_sysfs_show_wrapper(ETH_IPV4_ID_ADDR, ETH_IPV4_ID_OFFSET,
++				      ETH_IPV4_ID_MASK, kobj);
++	sprintf(buff, "%d\n", id);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_id_store - Writes to the IPv4 ID sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 ID
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 ID sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_id_store(struct kobject *kobj,
++			     struct kobj_attribute *attr, const char *buff,
++			     size_t count)
++{
++	int ret;
++	u32 id;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &id);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_ID_ADDR, ETH_IPV4_ID_OFFSET,
++				  ETH_IPV4_ID_MASK, id, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_flags_show - Returns the IPv4 flags
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 flags
++ *
++ * Returns the IPv4 flags
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_flags_show(struct kobject *kobj,
++			       struct kobj_attribute *attr, char *buff)
++{
++	u32 flags;
++
++	flags = utils_sysfs_show_wrapper(ETH_IPV4_FLAGS_ADDR,
++					 ETH_IPV4_FLAGS_OFFSET,
++					 ETH_IPV4_FLAGS_MASK, kobj);
++	sprintf(buff, "%d\n", flags);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_flags_store - Writes to the IPv4 flags sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 flags
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 flags sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_flags_store(struct kobject *kobj,
++				struct kobj_attribute *attr, const char *buff,
++				size_t count)
++{
++	int ret;
++	u32 flags;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &flags);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_FLAGS_ADDR, ETH_IPV4_FLAGS_OFFSET,
++				  ETH_IPV4_FLAGS_MASK, flags, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_fragment_offset_show - Returns the IPv4 fragment offset
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 fragment offset
++ *
++ * Returns the IPv4 fragment offset
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_fragment_offset_show
++(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
++{
++	u32 fragment;
++
++	fragment = utils_sysfs_show_wrapper(ETH_IPV4_FRAGMENT_OFFSET_ADDR,
++					    ETH_IPV4_FRAGMENT_OFFSET_OFFSET,
++					    ETH_IPV4_FRAGMENT_OFFSET_MASK,
++					    kobj);
++	sprintf(buff, "%d\n", fragment);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_fragment_offset_store - Writes to the IPv4 fragment offset sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 fragment offset
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 fragment offset sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_fragment_offset_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	int ret;
++	u32 fragment;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &fragment);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_FRAGMENT_OFFSET_ADDR,
++				  ETH_IPV4_FRAGMENT_OFFSET_OFFSET,
++				  ETH_IPV4_FRAGMENT_OFFSET_MASK, fragment,
++				  kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_ttl_show - Returns the IPv4 TTL
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 TTL
++ *
++ * Returns the IPv4 TTL
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_ttl_show(struct kobject *kobj, struct kobj_attribute *attr,
++			     char *buff)
++{
++	u32 ttl;
++
++	ttl = utils_sysfs_show_wrapper(ETH_IPV4_TIME_TO_LIVE_ADDR,
++				       ETH_IPV4_TIME_TO_LIVE_OFFSET,
++				       ETH_IPV4_TIME_TO_LIVE_MASK, kobj);
++	sprintf(buff, "%d\n", ttl);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_ttl_store - Writes to the IPv4 TTL sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 TTL
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 TTL sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_ttl_store(struct kobject *kobj,
++			      struct kobj_attribute *attr, const char *buff,
++			      size_t count)
++{
++	int ret;
++	u32 ttl;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &ttl);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_TIME_TO_LIVE_ADDR,
++				  ETH_IPV4_TIME_TO_LIVE_OFFSET,
++				  ETH_IPV4_TIME_TO_LIVE_MASK, ttl, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_protocol_show - Returns the IPv4 protocol
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 protocol
++ *
++ * Returns the IPv4 protocol
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_protocol_show(struct kobject *kobj,
++				  struct kobj_attribute *attr, char *buff)
++{
++	u32 protocol;
++
++	protocol = utils_sysfs_show_wrapper(ETH_IPV4_PROTOCOL_ADDR,
++					    ETH_IPV4_PROTOCOL_OFFSET,
++					    ETH_IPV4_PROTOCOL_MASK, kobj);
++	sprintf(buff, "%d\n", protocol);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_protocol_store - Writes to the IPv4 protocol sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 protocol
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 protocol sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_protocol_store(struct kobject *kobj,
++				   struct kobj_attribute *attr,
++				   const char *buff, size_t count)
++{
++	int ret;
++	u32 protocol;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &protocol);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV4_PROTOCOL_ADDR,
++				  ETH_IPV4_PROTOCOL_OFFSET,
++				  ETH_IPV4_PROTOCOL_MASK, protocol, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_source_address_show - Returns the IPv4 source address
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 source address
++ *
++ * Returns the IPv4 source address in x.x.x.x format
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_source_address_show
++(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
++{
++	u32 source_add = 0;
++	unsigned char ip_addr_char[4];
++
++	source_add = utils_sysfs_show_wrapper(ETH_IPV4_SOURCE_ADD_ADDR,
++					      ETH_IPV4_SOURCE_ADD_OFFSET,
++					      ETH_IPV4_SOURCE_ADD_MASK, kobj);
++	utils_ipv4addr_hextochar(source_add, ip_addr_char);
++	sprintf(buff, "%d.%d.%d.%d\n", ip_addr_char[3], ip_addr_char[2],
++		ip_addr_char[1], ip_addr_char[0]);
++
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_source_address_store - Writes to the IPv4 source address sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 source address
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 source address sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_source_address_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	u32 source_add = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (utils_ipv4addr_chartohex(xroe_tmp, &source_add) == 4)
++		utils_sysfs_store_wrapper(ETH_IPV4_SOURCE_ADD_ADDR,
++					  ETH_IPV4_SOURCE_ADD_OFFSET,
++					  ETH_IPV4_SOURCE_ADD_MASK, source_add,
++					  kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv4_destination_address_show - Returns the IPv4 destination address
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 destination address
++ *
++ * Returns the IPv4 destination address in x.x.x.x format
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv4_destination_address_show
++(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
++{
++	u32 dest_add = 0;
++	unsigned char ip_addr_char[4];
++
++	dest_add = utils_sysfs_show_wrapper(ETH_IPV4_DESTINATION_ADD_ADDR,
++					    ETH_IPV4_DESTINATION_ADD_OFFSET,
++					    ETH_IPV4_DESTINATION_ADD_MASK,
++					    kobj);
++	utils_ipv4addr_hextochar(dest_add, ip_addr_char);
++	sprintf(buff, "%d.%d.%d.%d\n", ip_addr_char[3], ip_addr_char[2],
++		ip_addr_char[1], ip_addr_char[0]);
++
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv4_destination_address_store - Writes to the IPv4 destination address
++ * sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 destination address
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv4 destination address sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv4_destination_address_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	u32 dest_add = 0;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (utils_ipv4addr_chartohex(xroe_tmp, &dest_add) == 4)
++		utils_sysfs_store_wrapper(ETH_IPV4_DESTINATION_ADD_ADDR,
++					  ETH_IPV4_DESTINATION_ADD_OFFSET,
++					  ETH_IPV4_DESTINATION_ADD_MASK,
++					  dest_add, kobj);
++	return xroe_size;
++}
++
++/* TODO Use DEVICE_ATTR/_RW/_RO macros */
++
++static struct kobj_attribute version_attribute =
++	__ATTR(version, 0444, ipv4_version_show, ipv4_version_store);
++static struct kobj_attribute ihl_attribute =
++	__ATTR(ihl, 0660, ipv4_ihl_show, ipv4_ihl_store);
++static struct kobj_attribute dscp_attribute =
++	__ATTR(dscp, 0660, ipv4_dscp_show, ipv4_dscp_store);
++static struct kobj_attribute ecn_attribute =
++	__ATTR(ecn, 0660, ipv4_ecn_show, ipv4_ecn_store);
++static struct kobj_attribute id_attribute =
++	__ATTR(id, 0660, ipv4_id_show, ipv4_id_store);
++static struct kobj_attribute flags_attribute =
++	__ATTR(flags, 0660, ipv4_flags_show, ipv4_flags_store);
++static struct kobj_attribute fragment_offset_attribute =
++	__ATTR(fragment_offset, 0660, ipv4_fragment_offset_show,
++	       ipv4_fragment_offset_store);
++static struct kobj_attribute ttl_attribute =
++	__ATTR(ttl, 0660, ipv4_ttl_show, ipv4_ttl_store);
++static struct kobj_attribute protocol_attribute =
++	__ATTR(protocol, 0660, ipv4_protocol_show, ipv4_protocol_store);
++static struct kobj_attribute source_add_attribute =
++	__ATTR(source_add, 0660, ipv4_source_address_show,
++	       ipv4_source_address_store);
++static struct kobj_attribute destination_add_attribute =
++	__ATTR(dest_add, 0660, ipv4_destination_address_show,
++	       ipv4_destination_address_store);
++
++static struct attribute *attrs[] = {
++	&version_attribute.attr,
++	&ihl_attribute.attr,
++	&dscp_attribute.attr,
++	&ecn_attribute.attr,
++	&id_attribute.attr,
++	&flags_attribute.attr,
++	&fragment_offset_attribute.attr,
++	&ttl_attribute.attr,
++	&protocol_attribute.attr,
++	&source_add_attribute.attr,
++	&destination_add_attribute.attr,
++	NULL,
++};
++
++static struct attribute_group attr_group = {
++	.attrs = attrs,
++};
++
++struct kobject *kobj_framer;
++static struct kobject *kobj_ipv4[MAX_NUM_ETH_PORTS];
++struct kobject *kobj_eth_ports[MAX_NUM_ETH_PORTS];
++
++/**
++ * xroe_sysfs_ipv4_init - Creates the xroe sysfs "ipv4" subdirectory & entries
++ *
++ * Return: 0 on success, negative value in case of failure to
++ * create the sysfs group
++ *
++ * Creates the xroe sysfs "ipv4" subdirectory and entries under "xroe"
++ */
++int xroe_sysfs_ipv4_init(void)
++{
++	int ret;
++	int i;
++	char eth_port_dir_name[11];
++
++	kobj_framer = kobject_create_and_add("framer", root_xroe_kobj);
++	if (!kobj_framer)
++		return -ENOMEM;
++	for (i = 0; i < 4; i++) {
++		snprintf(eth_port_dir_name, sizeof(eth_port_dir_name),
++			 "eth_port_%d", i);
++		kobj_eth_ports[i] = kobject_create_and_add(eth_port_dir_name,
++							   kobj_framer);
++		if (!kobj_eth_ports[i])
++			return -ENOMEM;
++		kobj_ipv4[i] = kobject_create_and_add("ipv4",
++						      kobj_eth_ports[i]);
++		if (!kobj_ipv4[i])
++			return -ENOMEM;
++		ret = sysfs_create_group(kobj_ipv4[i], &attr_group);
++		if (ret)
++			kobject_put(kobj_ipv4[i]);
++	}
++	return ret;
++}
++
++/**
++ * xroe_sysfs_ipv4_exit - Deletes the xroe sysfs "ipv4" subdirectory & entries
++ *
++ * Deletes the xroe sysfs "ipv4" subdirectory and entries,
++ * under the "xroe" entry
++ */
++void xroe_sysfs_ipv4_exit(void)
++{
++	int i;
++
++	for (i = 0; i < MAX_NUM_ETH_PORTS; i++)
++		kobject_put(kobj_ipv4[i]);
++}
++
++/**
++ * utils_ipv4addr_hextochar - Integer to char array for IPv4 addresses
++ * @ip:		The IP address in integer format
++ * @bytes:	The IP address in a 4-byte array
++ *
++ * Coverts an IPv4 address given in unsigned integer format to a character array
++ */
++static void utils_ipv4addr_hextochar(u32 ip, unsigned char *bytes)
++{
++	bytes[0] = ip & 0xFF;
++	bytes[1] = (ip >> 8) & 0xFF;
++	bytes[2] = (ip >> 16) & 0xFF;
++	bytes[3] = (ip >> 24) & 0xFF;
++}
++
++/**
++ * utils_ipv4addr_chartohex - Character to char array for IPv4 addresses
++ * @ip_addr:	The character array containing the IP address
++ * @p_ip_addr:	The converted IPv4 address
++ *
++ * Coverts an IPv4 address given as a character array to integer format
++ *
++ * Return: 4 (the length of the resulting character array) on success,
++ * -1 in case of wrong input
++ */
++static int utils_ipv4addr_chartohex(char *ip_addr, uint32_t *p_ip_addr)
++{
++	int count = 0, ret = -1;
++	char *string;
++	unsigned char *found;
++	u32 byte_array[4];
++	u32 byte = 0;
++
++	string = ip_addr;
++	while ((found = (unsigned char *)strsep(&string, ".")) != NULL) {
++		if (count <= 4) {
++			ret = kstrtouint(found, 10, &byte);
++			if (ret)
++				return ret;
++			byte_array[count] = byte;
++		} else {
++			break;
++		}
++		count++;
++	}
++
++	if (count == 4) {
++		ret = count;
++		*p_ip_addr = byte_array[3] | (byte_array[2] << 8)
++		| (byte_array[1] << 16) | (byte_array[0] << 24);
++	}
++	return ret;
++}
+diff --git a/drivers/staging/xroeframer/sysfs_xroe_framer_ipv6.c b/drivers/staging/xroeframer/sysfs_xroe_framer_ipv6.c
+new file mode 100644
+index 000000000..c26eae426
+--- /dev/null
++++ b/drivers/staging/xroeframer/sysfs_xroe_framer_ipv6.c
+@@ -0,0 +1,571 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++
++#include <linux/init.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include "xroe_framer.h"
++
++enum { XROE_SIZE_MAX = 60 };
++static int xroe_size;
++static char xroe_tmp[XROE_SIZE_MAX];
++
++static void utils_ipv6addr_32to16(u32 *ip32, uint16_t *ip16);
++static int utils_ipv6addr_chartohex(char *ip_addr, uint32_t *p_ip_addr);
++
++/**
++ * ipv6_version_show - Returns the IPv6 version number
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 version number
++ *
++ * Returns the IPv6 version number
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_version_show(struct kobject *kobj,
++				 struct kobj_attribute *attr, char *buff)
++{
++	u32 version;
++
++	version = utils_sysfs_show_wrapper(ETH_IPV6_V_ADDR, ETH_IPV6_V_OFFSET,
++					   ETH_IPV6_V_MASK, kobj);
++	sprintf(buff, "%d\n", version);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_version_store - Writes to the IPv6 version number sysfs entry
++ * (not permitted)
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 version
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 version number sysfs entry (not permitted)
++ *
++ * Return: 0
++ */
++static ssize_t ipv6_version_store(struct kobject *kobj,
++				  struct kobj_attribute *attr,
++				  const char *buff, size_t count)
++{
++	return 0;
++}
++
++/**
++ * ipv6_traffic_class_show - Returns the IPv6 traffic class
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 traffic class
++ *
++ * Returns the IPv6 traffic class
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_traffic_class_show(struct kobject *kobj,
++				       struct kobj_attribute *attr, char *buff)
++{
++	u32 traffic_class;
++
++	traffic_class = utils_sysfs_show_wrapper(ETH_IPV6_TRAFFIC_CLASS_ADDR,
++						 ETH_IPV6_TRAFFIC_CLASS_OFFSET,
++						 ETH_IPV6_TRAFFIC_CLASS_MASK,
++						 kobj);
++	sprintf(buff, "%d\n", traffic_class);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_traffic_class_store - Writes to the IPv6 traffic class
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 traffic class
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 traffic class sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_traffic_class_store(struct kobject *kobj,
++					struct kobj_attribute *attr,
++					const char *buff, size_t count)
++{
++	int ret;
++	u32 traffic_class;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &traffic_class);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV6_TRAFFIC_CLASS_ADDR,
++				  ETH_IPV6_TRAFFIC_CLASS_OFFSET,
++				  ETH_IPV6_TRAFFIC_CLASS_MASK, traffic_class,
++				  kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv6_flow_label_show - Returns the IPv6 flow label
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 flow label
++ *
++ * Returns the IPv6 flow label
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_flow_label_show(struct kobject *kobj,
++				    struct kobj_attribute *attr, char *buff)
++{
++	u32 flow_label;
++
++	flow_label = utils_sysfs_show_wrapper(ETH_IPV6_FLOW_LABEL_ADDR,
++					      ETH_IPV6_FLOW_LABEL_OFFSET,
++					      ETH_IPV6_FLOW_LABEL_MASK, kobj);
++	sprintf(buff, "%d\n", flow_label);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_flow_label_store - Writes to the IPv6 flow label
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 flow label
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 flow label sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_flow_label_store(struct kobject *kobj,
++				     struct kobj_attribute *attr,
++				     const char *buff, size_t count)
++{
++	int ret;
++	u32 flow_label;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &flow_label);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV6_FLOW_LABEL_ADDR,
++				  ETH_IPV6_FLOW_LABEL_OFFSET,
++				  ETH_IPV6_FLOW_LABEL_MASK, flow_label, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv6_next_header_show - Returns the IPv6 next header
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 next header
++ *
++ * Returns the IPv6 next header
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_next_header_show(struct kobject *kobj,
++				     struct kobj_attribute *attr,
++				     char *buff)
++{
++	u32 next_header;
++
++	next_header = utils_sysfs_show_wrapper(ETH_IPV6_NEXT_HEADER_ADDR,
++					       ETH_IPV6_NEXT_HEADER_OFFSET,
++					       ETH_IPV6_NEXT_HEADER_MASK, kobj);
++	sprintf(buff, "%d\n", next_header);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_next_header_store - Writes to the IPv6 next header
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 next header
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 next header sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_next_header_store(struct kobject *kobj,
++				      struct kobj_attribute *attr,
++				      const char *buff, size_t count)
++{
++	int ret;
++	u32 next_header;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &next_header);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV6_NEXT_HEADER_ADDR,
++				  ETH_IPV6_NEXT_HEADER_OFFSET,
++				  ETH_IPV6_NEXT_HEADER_MASK, next_header, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv6_hop_limit_show - Returns the IPv6 hop limit
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 hop limit
++ *
++ * Returns the IPv6 hop limit
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_hop_limit_show(struct kobject *kobj,
++				   struct kobj_attribute *attr, char *buff)
++{
++	u32 hop_limit;
++
++	hop_limit = utils_sysfs_show_wrapper(ETH_IPV6_HOP_LIMIT_ADDR,
++					     ETH_IPV6_HOP_LIMIT_OFFSET,
++					     ETH_IPV6_HOP_LIMIT_MASK, kobj);
++	sprintf(buff, "%d\n", hop_limit);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_hop_limit_store - Writes to the IPv6 hop limit
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv6 hop limit
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 hop limit sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_hop_limit_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	int ret;
++	u32 hop_limit;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &hop_limit);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_IPV6_HOP_LIMIT_ADDR,
++				  ETH_IPV6_HOP_LIMIT_OFFSET,
++				  ETH_IPV6_HOP_LIMIT_MASK, hop_limit, kobj);
++	return xroe_size;
++}
++
++/**
++ * ipv6_source_address_show - Returns the IPv6 source address
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 source address
++ *
++ * Returns the IPv6 source address in xxxx.xxxx.xxxx.xxxx.xxxx.xxxx.xxxx.xxxx
++ * format
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_source_address_show
++(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
++{
++	u32 source[4];
++	u16 source_add16[8];
++
++	source[0] = utils_sysfs_show_wrapper(ETH_IPV6_SOURCE_ADD_31_0_ADDR,
++					     ETH_IPV6_SOURCE_ADD_31_0_OFFSET,
++					     ETH_IPV6_SOURCE_ADD_31_0_MASK,
++					     kobj);
++	source[1] = utils_sysfs_show_wrapper(ETH_IPV6_SOURCE_ADD_63_32_ADDR,
++					     ETH_IPV6_SOURCE_ADD_63_32_OFFSET,
++					     ETH_IPV6_SOURCE_ADD_63_32_MASK,
++					     kobj);
++	source[2] = utils_sysfs_show_wrapper(ETH_IPV6_SOURCE_ADD_95_64_ADDR,
++					     ETH_IPV6_SOURCE_ADD_95_64_OFFSET,
++					     ETH_IPV6_SOURCE_ADD_95_64_MASK,
++					     kobj);
++	source[3] = utils_sysfs_show_wrapper(ETH_IPV6_SOURCE_ADD_127_96_ADDR,
++					     ETH_IPV6_SOURCE_ADD_127_96_OFFSET,
++					     ETH_IPV6_SOURCE_ADD_127_96_MASK,
++					     kobj);
++
++	utils_ipv6addr_32to16(source, source_add16);
++	sprintf(buff, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
++		source_add16[0], source_add16[1], source_add16[2],
++		source_add16[3],
++		source_add16[4], source_add16[5], source_add16[6],
++		source_add16[7]);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_source_address_store - Writes to the IPv6 source address sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 source address
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 source address sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_source_address_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	u32 source_add[4];
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (utils_ipv6addr_chartohex(xroe_tmp, source_add) == 8) {
++		utils_sysfs_store_wrapper(ETH_IPV6_SOURCE_ADD_31_0_ADDR,
++					  ETH_IPV6_SOURCE_ADD_31_0_OFFSET,
++					  ETH_IPV6_SOURCE_ADD_31_0_MASK,
++					  source_add[0], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_SOURCE_ADD_63_32_ADDR,
++					  ETH_IPV6_SOURCE_ADD_63_32_OFFSET,
++					  ETH_IPV6_SOURCE_ADD_63_32_MASK,
++					  source_add[1], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_SOURCE_ADD_95_64_ADDR,
++					  ETH_IPV6_SOURCE_ADD_95_64_OFFSET,
++					  ETH_IPV6_SOURCE_ADD_95_64_MASK,
++					  source_add[2], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_SOURCE_ADD_127_96_ADDR,
++					  ETH_IPV6_SOURCE_ADD_127_96_OFFSET,
++					  ETH_IPV6_SOURCE_ADD_127_96_MASK,
++					  source_add[3], kobj);
++	}
++	return xroe_size;
++}
++
++/**
++ * ipv6_destination_address_show - Returns the IPv6 destination address
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 destination address
++ *
++ * Returns the IPv6 destination address in
++ * xxxx.xxxx.xxxx.xxxx.xxxx.xxxx.xxxx.xxxx format
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t ipv6_destination_address_show
++(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
++{
++	u32 dest[4];
++	u16 dest_add16[8];
++
++	dest[0] = utils_sysfs_show_wrapper(ETH_IPV6_DEST_ADD_31_0_ADDR,
++					   ETH_IPV6_DEST_ADD_31_0_OFFSET,
++					   ETH_IPV6_DEST_ADD_31_0_MASK,
++					   kobj);
++	dest[1] = utils_sysfs_show_wrapper(ETH_IPV6_DEST_ADD_63_32_ADDR,
++					   ETH_IPV6_DEST_ADD_63_32_OFFSET,
++					   ETH_IPV6_DEST_ADD_63_32_MASK,
++					   kobj);
++	dest[2] = utils_sysfs_show_wrapper(ETH_IPV6_DEST_ADD_95_64_ADDR,
++					   ETH_IPV6_DEST_ADD_95_64_OFFSET,
++					   ETH_IPV6_DEST_ADD_95_64_MASK,
++					   kobj);
++	dest[3] = utils_sysfs_show_wrapper(ETH_IPV6_DEST_ADD_127_96_ADDR,
++					   ETH_IPV6_DEST_ADD_127_96_OFFSET,
++					   ETH_IPV6_DEST_ADD_127_96_MASK,
++					   kobj);
++
++	utils_ipv6addr_32to16(dest, dest_add16);
++	sprintf(buff, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
++		dest_add16[0], dest_add16[1], dest_add16[2],
++		dest_add16[3],
++		dest_add16[4], dest_add16[5], dest_add16[6],
++		dest_add16[7]);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * ipv6_destination_address_store - Writes to the IPv6 destination address
++ * sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the IPv4 destination address
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the IPv6 destination address sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t ipv6_destination_address_store
++(struct kobject *kobj, struct kobj_attribute *attr, const char *buff,
++size_t count)
++{
++	u32 dest_add[4];
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	strncpy(xroe_tmp, buff, xroe_size);
++	if (utils_ipv6addr_chartohex(xroe_tmp, dest_add) == 8) {
++		utils_sysfs_store_wrapper(ETH_IPV6_DEST_ADD_31_0_ADDR,
++					  ETH_IPV6_DEST_ADD_31_0_OFFSET,
++					  ETH_IPV6_DEST_ADD_31_0_MASK,
++					  dest_add[0], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_DEST_ADD_63_32_ADDR,
++					  ETH_IPV6_DEST_ADD_63_32_OFFSET,
++					  ETH_IPV6_DEST_ADD_63_32_MASK,
++					  dest_add[1], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_DEST_ADD_95_64_ADDR,
++					  ETH_IPV6_DEST_ADD_95_64_OFFSET,
++					  ETH_IPV6_DEST_ADD_95_64_MASK,
++					  dest_add[2], kobj);
++		utils_sysfs_store_wrapper(ETH_IPV6_DEST_ADD_127_96_ADDR,
++					  ETH_IPV6_DEST_ADD_127_96_OFFSET,
++					  ETH_IPV6_DEST_ADD_127_96_MASK,
++					  dest_add[3], kobj);
++	}
++	return xroe_size;
++}
++
++/* TODO Use DEVICE_ATTR/_RW/_RO macros */
++
++static struct kobj_attribute version_attribute =
++	__ATTR(version, 0444, ipv6_version_show, ipv6_version_store);
++static struct kobj_attribute traffic_class =
++	__ATTR(traffic_class, 0660, ipv6_traffic_class_show,
++	       ipv6_traffic_class_store);
++static struct kobj_attribute flow_label =
++	__ATTR(flow_label, 0660, ipv6_flow_label_show, ipv6_flow_label_store);
++static struct kobj_attribute next_header =
++	__ATTR(next_header, 0660, ipv6_next_header_show,
++	       ipv6_next_header_store);
++static struct kobj_attribute hop_limit =
++	__ATTR(hop_limit, 0660, ipv6_hop_limit_show, ipv6_hop_limit_store);
++static struct kobj_attribute source_add_attribute =
++	__ATTR(source_add, 0660, ipv6_source_address_show,
++	       ipv6_source_address_store);
++static struct kobj_attribute dest_add_attribute =
++	__ATTR(dest_add, 0660, ipv6_destination_address_show,
++	       ipv6_destination_address_store);
++
++static struct attribute *attrs[] = {
++	&version_attribute.attr,
++	&traffic_class.attr,
++	&flow_label.attr,
++	&next_header.attr,
++	&hop_limit.attr,
++	&source_add_attribute.attr,
++	&dest_add_attribute.attr,
++	NULL,
++};
++
++static struct attribute_group attr_group = {
++	.attrs = attrs,
++};
++
++static struct kobject *kobj_ipv6[MAX_NUM_ETH_PORTS];
++
++/**
++ * xroe_sysfs_ipv6_init - Creates the xroe sysfs "ipv6" subdirectory & entries
++ *
++ * Return: 0 on success, negative value in case of failure to
++ * create the sysfs group
++ *
++ * Creates the xroe sysfs "ipv6" subdirectory and entries under "xroe"
++ */
++int xroe_sysfs_ipv6_init(void)
++{
++	int ret;
++	int i;
++
++	for (i = 0; i < 4; i++) {
++		kobj_ipv6[i] = kobject_create_and_add("ipv6",
++						      kobj_eth_ports[i]);
++		if (!kobj_ipv6[i])
++			return -ENOMEM;
++		ret = sysfs_create_group(kobj_ipv6[i], &attr_group);
++		if (ret)
++			kobject_put(kobj_ipv6[i]);
++	}
++	return ret;
++}
++
++/**
++ * xroe_sysfs_ipv4_exit - Deletes the xroe sysfs "ipv6" subdirectory & entries
++ *
++ * Deletes the xroe sysfs "ipv6" subdirectory and entries,
++ * under the "xroe" entry
++ *
++ */
++void xroe_sysfs_ipv6_exit(void)
++{
++	int i;
++
++	for (i = 0; i < MAX_NUM_ETH_PORTS; i++)
++		kobject_put(kobj_ipv6[i]);
++}
++
++/**
++ * utils_ipv6addr_32to16 - uint32_t to uint16_t for IPv6 addresses
++ * @ip32:	The IPv6 address in uint32_t format
++ * @ip16:	The IPv6 address in uint16_t format
++ *
++ * Coverts an IPv6 address given in uint32_t format to uint16_t
++ */
++static void utils_ipv6addr_32to16(u32 *ip32, uint16_t *ip16)
++{
++	ip16[0] = ip32[0] >> 16;
++	ip16[1] = ip32[0] & 0x0000FFFF;
++	ip16[2] = ip32[1] >> 16;
++	ip16[3] = ip32[1] & 0x0000FFFF;
++	ip16[4] = ip32[2] >> 16;
++	ip16[5] = ip32[2] & 0x0000FFFF;
++	ip16[6] = ip32[3] >> 16;
++	ip16[7] = ip32[3] & 0x0000FFFF;
++}
++
++/**
++ * utils_ipv6addr_chartohex - Character to char array for IPv6 addresses
++ * @ip_addr:	The character array containing the IP address
++ * @p_ip_addr:	The converted IPv4 address
++ *
++ * Coverts an IPv6 address given as a character array to integer format
++ *
++ * Return: 8 (the length of the resulting character array) on success,
++ * -1 in case of wrong input
++ */
++static int utils_ipv6addr_chartohex(char *ip_addr, uint32_t *p_ip_addr)
++{
++	int ret;
++	int count;
++	char *string;
++	unsigned char *found;
++	u16 ip_array_16[8];
++	u32 field;
++
++	ret = -1;
++	count = 0;
++	string = ip_addr;
++	while ((found = (unsigned char *)strsep(&string, ":")) != NULL) {
++		if (count <= 8) {
++			ret = kstrtouint(found, 16, &field);
++			if (ret)
++				return ret;
++			ip_array_16[count] = (uint16_t)field;
++		} else {
++			break;
++		}
++		count++;
++	}
++	if (count == 8) {
++		p_ip_addr[0] = ip_array_16[1] | (ip_array_16[0] << 16);
++		p_ip_addr[1] = ip_array_16[3] | (ip_array_16[2] << 16);
++		p_ip_addr[2] = ip_array_16[5] | (ip_array_16[4] << 16);
++		p_ip_addr[3] = ip_array_16[7] | (ip_array_16[6] << 16);
++		ret = count;
++	}
++	return ret;
++}
+diff --git a/drivers/staging/xroeframer/sysfs_xroe_framer_stats.c b/drivers/staging/xroeframer/sysfs_xroe_framer_stats.c
+new file mode 100644
+index 000000000..063664bb9
+--- /dev/null
++++ b/drivers/staging/xroeframer/sysfs_xroe_framer_stats.c
+@@ -0,0 +1,401 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2019 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++
++#include <linux/init.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include "xroe_framer.h"
++
++/**
++ * total_rx_good_pkt_show - Returns the total good rx packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total good rx packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_good_pkt_show(struct kobject *kobj,
++				      struct kobj_attribute *attr, char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_TOTAL_RX_GOOD_PKT_CNT_ADDR,
++					 STATS_TOTAL_RX_GOOD_PKT_CNT_OFFSET,
++					 STATS_TOTAL_RX_GOOD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_pkt_show - Returns the total bad rx packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad rx packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_pkt_show(struct kobject *kobj,
++				     struct kobj_attribute *attr, char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_TOTAL_RX_BAD_PKT_CNT_ADDR,
++					 STATS_TOTAL_RX_BAD_PKT_CNT_OFFSET,
++					 STATS_TOTAL_RX_BAD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_fcs_show - Returns the total bad fcs count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad frame check sequences count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_fcs_show(struct kobject *kobj,
++				     struct kobj_attribute *attr,
++				     char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_TOTAL_RX_BAD_FCS_CNT_ADDR,
++					 STATS_TOTAL_RX_BAD_FCS_CNT_OFFSET,
++					 STATS_TOTAL_RX_BAD_FCS_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_user_pkt_show - Returns the total user rx packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total user rx packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_user_pkt_show(struct kobject *kobj,
++				      struct kobj_attribute *attr,
++				      char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_DATA_RX_PACKETS_CNT_ADDR,
++					 STATS_USER_DATA_RX_PACKETS_CNT_OFFSET,
++					 STATS_USER_DATA_RX_PACKETS_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_good_user_pkt_show - Returns the total good user rx packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total good user rx packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_good_user_pkt_show(struct kobject *kobj,
++					   struct kobj_attribute *attr,
++					   char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_DATA_RX_GOOD_PKT_CNT_ADDR,
++					 STATS_USER_DATA_RX_GOOD_PKT_CNT_OFFSET,
++					 STATS_USER_DATA_RX_GOOD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_user_pkt_show - Returns the total bad user rx packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad user rx packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_user_pkt_show(struct kobject *kobj,
++					  struct kobj_attribute *attr,
++					  char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_DATA_RX_BAD_PKT_CNT_ADDR,
++					 STATS_USER_DATA_RX_BAD_PKT_CNT_OFFSET,
++					 STATS_USER_DATA_RX_BAD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_user_fcs_show - Returns the total bad user rx fcs count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad user frame check sequences count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_user_fcs_show(struct kobject *kobj,
++					  struct kobj_attribute *attr,
++					  char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_DATA_RX_BAD_FCS_CNT_ADDR,
++					 STATS_USER_DATA_RX_BAD_FCS_CNT_OFFSET,
++					 STATS_USER_DATA_RX_BAD_FCS_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_user_ctrl_pkt_show - Returns the total user rx control packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total user rx control packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_user_ctrl_pkt_show(struct kobject *kobj,
++					   struct kobj_attribute *attr,
++					   char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_CTRL_RX_PACKETS_CNT_ADDR,
++					 STATS_USER_CTRL_RX_PACKETS_CNT_OFFSET,
++					 STATS_USER_CTRL_RX_PACKETS_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_good_user_ctrl_pkt_show - Returns the total good user rx
++ * control packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total good user rx control packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_good_user_ctrl_pkt_show(struct kobject *kobj,
++						struct kobj_attribute *attr,
++						char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_CTRL_RX_GOOD_PKT_CNT_ADDR,
++					 STATS_USER_CTRL_RX_GOOD_PKT_CNT_OFFSET,
++					 STATS_USER_CTRL_RX_GOOD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_user_ctrl_pkt_show - Returns the total bad user rx
++ * control packet count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad user rx control packet count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_user_ctrl_pkt_show(struct kobject *kobj,
++					       struct kobj_attribute *attr,
++					       char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_CTRL_RX_BAD_PKT_CNT_ADDR,
++					 STATS_USER_CTRL_RX_BAD_PKT_CNT_OFFSET,
++					 STATS_USER_CTRL_RX_BAD_PKT_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * total_rx_bad_user_ctrl_fcs_show - Returns the total bad user rx
++ * control fcs count
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total bad user control frame check sequences count
++ *
++ * Return: The number of characters printed on success
++ */
++static ssize_t total_rx_bad_user_ctrl_fcs_show(struct kobject *kobj,
++					       struct kobj_attribute *attr,
++					       char *buff)
++{
++	u32 count;
++
++	count = utils_sysfs_show_wrapper(STATS_USER_CTRL_RX_BAD_FCS_CNT_ADDR,
++					 STATS_USER_CTRL_RX_BAD_FCS_CNT_OFFSET,
++					 STATS_USER_CTRL_RX_BAD_FCS_CNT_MASK,
++					 kobj);
++	return sprintf(buff, "%d\n", count);
++}
++
++/**
++ * rx_user_pkt_rate_show - Returns the rate of user packets
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total user rx packet count
++ *
++ * Return: Returns the rate of user packets
++ */
++static ssize_t rx_user_pkt_rate_show(struct kobject *kobj,
++				     struct kobj_attribute *attr, char *buff)
++{
++	u32 rate;
++
++	rate = utils_sysfs_show_wrapper(STATS_USER_DATA_RX_PKTS_RATE_ADDR,
++					STATS_USER_DATA_RX_PKTS_RATE_OFFSET,
++					STATS_USER_DATA_RX_PKTS_RATE_MASK,
++					kobj);
++	return sprintf(buff, "%d\n", rate);
++}
++
++/**
++ * rx_user_ctrl_pkt_rate_show - Returns the rate of user control packets
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer the value will be written to
++ *
++ * Returns the total user rx packet count
++ *
++ * Return: Returns the rate of user control packets
++ */
++static ssize_t rx_user_ctrl_pkt_rate_show(struct kobject *kobj,
++					  struct kobj_attribute *attr,
++					  char *buff)
++{
++	u32 rate;
++
++	rate = utils_sysfs_show_wrapper(STATS_USER_CTRL_RX_PKTS_RATE_ADDR,
++					STATS_USER_CTRL_RX_PKTS_RATE_OFFSET,
++					STATS_USER_CTRL_RX_PKTS_RATE_MASK,
++					kobj);
++	return sprintf(buff, "%d\n", rate);
++}
++
++/* TODO Use DEVICE_ATTR/_RW/_RO macros */
++static struct kobj_attribute total_rx_good_pkt_attribute =
++	__ATTR(total_rx_good_pkt, 0444, total_rx_good_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_pkt_attribute =
++	__ATTR(total_rx_bad_pkt, 0444, total_rx_bad_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_fcs_attribute =
++	__ATTR(total_rx_bad_fcs, 0444, total_rx_bad_fcs_show, NULL);
++static struct kobj_attribute total_rx_user_pkt_attribute =
++	__ATTR(total_rx_user_pkt, 0444, total_rx_user_pkt_show, NULL);
++static struct kobj_attribute total_rx_good_user_pkt_attribute =
++	__ATTR(total_rx_good_user_pkt, 0444, total_rx_good_user_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_user_pkt_attribute =
++	__ATTR(total_rx_bad_user_pkt, 0444, total_rx_bad_user_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_user_fcs_attribute =
++	__ATTR(total_rx_bad_user_fcs, 0444, total_rx_bad_user_fcs_show, NULL);
++static struct kobj_attribute total_rx_user_ctrl_pkt_attribute =
++	__ATTR(total_rx_user_ctrl_pkt, 0444, total_rx_user_ctrl_pkt_show, NULL);
++static struct kobj_attribute total_rx_good_user_ctrl_pkt_attribute =
++	__ATTR(total_rx_good_user_ctrl_pkt, 0444,
++	       total_rx_good_user_ctrl_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_user_ctrl_pkt_attribute =
++	__ATTR(total_rx_bad_user_ctrl_pkt, 0444,
++	       total_rx_bad_user_ctrl_pkt_show, NULL);
++static struct kobj_attribute total_rx_bad_user_ctrl_fcs_attribute =
++	__ATTR(total_rx_bad_user_ctrl_fcs, 0444,
++	       total_rx_bad_user_ctrl_fcs_show, NULL);
++static struct kobj_attribute rx_user_pkt_rate_attribute =
++	__ATTR(rx_user_pkt_rate, 0444, rx_user_pkt_rate_show, NULL);
++static struct kobj_attribute rx_user_ctrl_pkt_rate_attribute =
++	__ATTR(rx_user_ctrl_pkt_rate, 0444, rx_user_ctrl_pkt_rate_show, NULL);
++
++static struct attribute *attrs[] = {
++	&total_rx_good_pkt_attribute.attr,
++	&total_rx_bad_pkt_attribute.attr,
++	&total_rx_bad_fcs_attribute.attr,
++	&total_rx_user_pkt_attribute.attr,
++	&total_rx_good_user_pkt_attribute.attr,
++	&total_rx_bad_user_pkt_attribute.attr,
++	&total_rx_bad_user_fcs_attribute.attr,
++	&total_rx_user_ctrl_pkt_attribute.attr,
++	&total_rx_good_user_ctrl_pkt_attribute.attr,
++	&total_rx_bad_user_ctrl_pkt_attribute.attr,
++	&total_rx_bad_user_ctrl_fcs_attribute.attr,
++	&rx_user_pkt_rate_attribute.attr,
++	&rx_user_ctrl_pkt_rate_attribute.attr,
++	NULL,
++};
++
++static struct attribute_group attr_group = {
++	.attrs = attrs,
++};
++
++struct kobject *kobj_stats;
++
++/**
++ * xroe_sysfs_stats_init - Creates the xroe sysfs "stats" subdirectory & entries
++ *
++ * Return: 0 on success, negative value in case of failure to
++ * create the sysfs group
++ *
++ * Creates the xroe sysfs "stats" subdirectory and entries under "xroe"
++ */
++int xroe_sysfs_stats_init(void)
++{
++	int ret;
++
++	kobj_stats = kobject_create_and_add("stats", root_xroe_kobj);
++	if (!kobj_stats)
++		return -ENOMEM;
++
++	ret = sysfs_create_group(kobj_stats, &attr_group);
++	if (ret)
++		kobject_put(kobj_stats);
++
++	return ret;
++}
++
++/**
++ * xroe_sysfs_stats_exit - Deletes the xroe sysfs "ipv4" subdirectory & entries
++ *
++ * Deletes the xroe sysfs "stats" subdirectory and entries,
++ * under the "xroe" entry
++ */
++void xroe_sysfs_stats_exit(void)
++{
++	kobject_put(kobj_stats);
++}
+diff --git a/drivers/staging/xroeframer/sysfs_xroe_framer_udp.c b/drivers/staging/xroeframer/sysfs_xroe_framer_udp.c
+new file mode 100644
+index 000000000..8f8a77b25
+--- /dev/null
++++ b/drivers/staging/xroeframer/sysfs_xroe_framer_udp.c
+@@ -0,0 +1,181 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++
++#include <linux/init.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include "xroe_framer.h"
++
++enum { XROE_SIZE_MAX = 15 };
++static int xroe_size;
++
++/**
++ * udp_source_port_show - Returns the UDP source port
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the UDP source port
++ *
++ * Returns the UDP source port
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t udp_source_port_show(struct kobject *kobj,
++				    struct kobj_attribute *attr,
++				    char *buff)
++{
++	u32 source_port;
++
++	source_port = utils_sysfs_show_wrapper(ETH_UDP_SOURCE_PORT_ADDR,
++					       ETH_UDP_SOURCE_PORT_OFFSET,
++					       ETH_UDP_SOURCE_PORT_MASK, kobj);
++	sprintf(buff, "%d\n", source_port);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * udp_source_port_store - Writes to the UDP source port sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the UDP source port
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the UDP source port sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t udp_source_port_store(struct kobject *kobj,
++				     struct kobj_attribute *attr,
++				     const char *buff, size_t count)
++{
++	int ret;
++	u32 source_port;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &source_port);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_UDP_SOURCE_PORT_ADDR,
++				  ETH_UDP_SOURCE_PORT_OFFSET,
++				  ETH_UDP_SOURCE_PORT_MASK, source_port, kobj);
++	return xroe_size;
++}
++
++/**
++ * udp_destination_port_show - Returns the UDP destination port
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the UDP destination port
++ *
++ * Returns the UDP destination port
++ *
++ * Return: XROE_SIZE_MAX on success
++ */
++static ssize_t udp_destination_port_show(struct kobject *kobj,
++					 struct kobj_attribute *attr,
++					 char *buff)
++{
++	u32 dest_port;
++
++	dest_port = utils_sysfs_show_wrapper(ETH_UDP_DESTINATION_PORT_ADDR,
++					     ETH_UDP_DESTINATION_PORT_OFFSET,
++					     ETH_UDP_DESTINATION_PORT_MASK,
++					     kobj);
++	sprintf(buff, "%d\n", dest_port);
++	return XROE_SIZE_MAX;
++}
++
++/**
++ * udp_destination_port_store - Writes to the UDP destination port sysfs entry
++ * @kobj:	The kernel object of the entry
++ * @attr:	The attributes of the kernel object
++ * @buff:	The buffer containing the UDP destination port
++ * @count:	The number of characters typed by the user
++ *
++ * Writes to the UDP destination port sysfs entry
++ *
++ * Return: XROE_SIZE_MAX or the value of "count", if that's lesser, on success
++ */
++static ssize_t udp_destination_port_store(struct kobject *kobj,
++					  struct kobj_attribute *attr,
++					  const char *buff, size_t count)
++{
++	int ret;
++	u32 dest_port;
++
++	xroe_size = min_t(size_t, count, (size_t)XROE_SIZE_MAX);
++	ret = kstrtouint(buff, 10, &dest_port);
++	if (ret)
++		return ret;
++	utils_sysfs_store_wrapper(ETH_UDP_DESTINATION_PORT_ADDR,
++				  ETH_UDP_DESTINATION_PORT_OFFSET,
++				  ETH_UDP_DESTINATION_PORT_MASK, dest_port,
++				  kobj);
++	return xroe_size;
++}
++
++/* TODO Use DEVICE_ATTR/_RW/_RO macros */
++
++static struct kobj_attribute source_port =
++	__ATTR(source_port, 0660, udp_source_port_show,
++	       udp_source_port_store);
++static struct kobj_attribute dest_port =
++	__ATTR(dest_port, 0660, udp_destination_port_show,
++	       udp_destination_port_store);
++
++static struct attribute *attrs[] = {
++	&source_port.attr,
++	&dest_port.attr,
++	NULL,
++};
++
++static struct attribute_group attr_group = {
++	.attrs = attrs,
++};
++
++static struct kobject *kobj_udp[MAX_NUM_ETH_PORTS];
++
++/**
++ * xroe_sysfs_udp_init - Creates the xroe sysfs "udp" subdirectory and entries
++ *
++ * Return: 0 on success, negative value in case of failure to
++ * create the sysfs group
++ *
++ * Creates the xroe sysfs "udp" subdirectory and entries under "xroe"
++ */
++int xroe_sysfs_udp_init(void)
++{
++	int ret;
++	int i;
++
++	for (i = 0; i < 4; i++) {
++		kobj_udp[i] = kobject_create_and_add("udp",  kobj_eth_ports[i]);
++		if (!kobj_udp[i])
++			return -ENOMEM;
++		ret = sysfs_create_group(kobj_udp[i], &attr_group);
++		if (ret)
++			kobject_put(kobj_udp[i]);
++	}
++	return ret;
++}
++
++/**
++ * xroe_sysfs_ipv6_exit - Deletes the xroe sysfs "udp" subdirectory & entries
++ *
++ * Deletes the xroe sysfs "udp" subdirectory and entries,
++ * under the "xroe" entry
++ *
++ */
++void xroe_sysfs_udp_exit(void)
++{
++	int i;
++
++	for (i = 0; i < MAX_NUM_ETH_PORTS; i++)
++		kobject_put(kobj_udp[i]);
++}
+diff --git a/drivers/staging/xroeframer/xroe_framer.c b/drivers/staging/xroeframer/xroe_framer.c
+new file mode 100644
+index 000000000..7d4b6f447
+--- /dev/null
++++ b/drivers/staging/xroeframer/xroe_framer.c
+@@ -0,0 +1,155 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++#include <linux/cdev.h>
++#include <linux/device.h>
++#include <linux/errno.h>
++#include <linux/fs.h>
++#include <linux/init.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of_address.h>
++#include <linux/of_device.h>
++#include <linux/of_platform.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include "xroe_framer.h"
++
++#define DRIVER_NAME "framer"
++
++/*
++ * TODO: to be made static as well, so that multiple instances can be used. As
++ * of now, the "xroe_lp" structure is shared among the multiple source files
++ */
++struct framer_local *xroe_lp;
++static struct platform_driver framer_driver;
++/*
++ * TODO: placeholder for the IRQ once it's been implemented
++ * in the framer block
++ */
++static irqreturn_t framer_irq(int irq, void *xroe_lp)
++{
++	return IRQ_HANDLED;
++}
++
++/**
++ * framer_probe - Probes the device tree to locate the framer block
++ * @pdev:	The structure containing the device's details
++ *
++ * Probes the device tree to locate the framer block and maps it to
++ * the kernel virtual memory space
++ *
++ * Return: 0 on success or a negative errno on error.
++ */
++static int framer_probe(struct platform_device *pdev)
++{
++	struct resource *r_mem; /* IO mem resources */
++	struct resource *r_irq;
++	struct device *dev = &pdev->dev;
++	int rc = 0;
++
++	dev_dbg(dev, "Device Tree Probing\n");
++	xroe_lp = devm_kzalloc(&pdev->dev, sizeof(*xroe_lp), GFP_KERNEL);
++	if (!xroe_lp)
++		return -ENOMEM;
++
++	/* Get iospace for the device */
++	r_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	xroe_lp->base_addr = devm_ioremap_resource(&pdev->dev, r_mem);
++	if (IS_ERR(xroe_lp->base_addr))
++		return PTR_ERR(xroe_lp->base_addr);
++
++	dev_set_drvdata(dev, xroe_lp);
++	xroe_sysfs_init();
++	/* Get IRQ for the device */
++	/*
++	 * TODO: No IRQ *yet* in the DT from the framer block, as it's still
++	 * under development. To be added once it's in the block, and also
++	 * replace with platform_get_irq_byname()
++	 */
++	r_irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
++	if (IS_ERR(r_irq)) {
++		dev_info(dev, "no IRQ found\n");
++		/*
++		 * TODO: Return non-zero (error) code on no IRQ found.
++		 * To be implemented once the IRQ is in the block
++		 */
++		return 0;
++	}
++	rc = devm_request_irq(dev, xroe_lp->irq, &framer_irq, 0, DRIVER_NAME, xroe_lp);
++	if (rc) {
++		dev_err(dev, "testmodule: Could not allocate interrupt %d.\n",
++			xroe_lp->irq);
++		/*
++		 * TODO: Return non-zero (error) code on no IRQ found.
++		 * To be implemented once the IRQ is in the block
++		 */
++		return 0;
++	}
++
++	return rc;
++}
++
++/**
++ * framer_init - Registers the driver
++ *
++ * Return: 0 on success, -1 on allocation error
++ *
++ * Registers the framer driver and creates character device drivers
++ * for the whole block, as well as separate ones for stats and
++ * radio control.
++ */
++static int __init framer_init(void)
++{
++	int ret;
++
++	pr_debug("XROE framer driver init\n");
++
++	ret = platform_driver_register(&framer_driver);
++
++	return ret;
++}
++
++/**
++ * framer_exit - Destroys the driver
++ *
++ * Unregisters the framer driver and destroys the character
++ * device driver for the whole block, as well as the separate ones
++ * for stats and radio control. Returns 0 upon successful execution
++ */
++static void __exit framer_exit(void)
++{
++	xroe_sysfs_exit();
++	platform_driver_unregister(&framer_driver);
++	pr_info("XROE Framer exit\n");
++}
++
++module_init(framer_init);
++module_exit(framer_exit);
++
++static const struct of_device_id framer_of_match[] = {
++	{ .compatible = "xlnx,roe-framer-1.0", },
++	{ /* end of list */ },
++};
++MODULE_DEVICE_TABLE(of, framer_of_match);
++
++static struct platform_driver framer_driver = {
++	.driver = {
++		/*
++		 * TODO: .name shouldn't be necessary, though removing
++		 * it results in kernel panic. To investigate further
++		 */
++		.name = DRIVER_NAME,
++		.of_match_table = framer_of_match,
++	},
++	.probe = framer_probe,
++};
++
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Xilinx Inc.");
++MODULE_DESCRIPTION("framer - Xilinx Radio over Ethernet Framer driver");
+diff --git a/drivers/staging/xroeframer/xroe_framer.h b/drivers/staging/xroeframer/xroe_framer.h
+new file mode 100644
+index 000000000..03b8bb390
+--- /dev/null
++++ b/drivers/staging/xroeframer/xroe_framer.h
+@@ -0,0 +1,63 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Copyright (C) 2018 Xilinx, Inc.
++ *
++ * Vasileios Bimpikas <vasileios.bimpikas@xilinx.com>
++ */
++#include "roe_framer_ctrl.h"
++#include <linux/cdev.h>
++#include <linux/device.h>
++#include <linux/errno.h>
++#include <linux/init.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/ioctl.h>
++#include <linux/kernel.h>
++#include <linux/kobject.h>
++#include <linux/module.h>
++#include <linux/of_address.h>
++#include <linux/of_device.h>
++#include <linux/of_platform.h>
++#include <linux/slab.h>
++#include <linux/stat.h>
++#include <linux/string.h>
++#include <linux/sysfs.h>
++#include <linux/uaccess.h>
++#include <uapi/linux/stat.h> /* S_IRUSR, S_IWUSR */
++
++/* TODO: Remove hardcoded value of number of Ethernet ports and read the value
++ * from the device tree.
++ */
++#define MAX_NUM_ETH_PORTS 0x4
++/* TODO: to be made static as well, so that multiple instances can be used. As
++ * of now, the following 3 structures are shared among the multiple
++ * source files
++ */
++extern struct framer_local *lp;
++extern struct kobject *root_xroe_kobj;
++extern struct kobject *kobj_framer;
++extern struct kobject *kobj_eth_ports[MAX_NUM_ETH_PORTS];
++struct framer_local {
++	int irq;
++	unsigned long mem_start;
++	unsigned long mem_end;
++	void __iomem *base_addr;
++};
++
++int xroe_sysfs_init(void);
++int xroe_sysfs_ipv4_init(void);
++int xroe_sysfs_ipv6_init(void);
++int xroe_sysfs_udp_init(void);
++int xroe_sysfs_stats_init(void);
++void xroe_sysfs_exit(void);
++void xroe_sysfs_ipv4_exit(void);
++void xroe_sysfs_ipv6_exit(void);
++void xroe_sysfs_udp_exit(void);
++void xroe_sysfs_stats_exit(void);
++int utils_write32withmask(void __iomem *working_address, u32 value,
++			  u32 mask, u32 offset);
++int utils_check_address_offset(u32 offset, size_t device_size);
++void utils_sysfs_store_wrapper(u32 address, u32 offset, u32 mask, u32 value,
++			       struct kobject *kobj);
++u32 utils_sysfs_show_wrapper(u32 address, u32 offset, u32 mask,
++			     struct kobject *kobj);

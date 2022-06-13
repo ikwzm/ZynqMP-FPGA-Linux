@@ -1,0 +1,313 @@
+diff --git a/arch/arm/include/asm/xen/swiotlb-xen.h b/arch/arm/include/asm/xen/swiotlb-xen.h
+new file mode 100644
+index 000000000..455ade5d5
+--- /dev/null
++++ b/arch/arm/include/asm/xen/swiotlb-xen.h
+@@ -0,0 +1 @@
++#include <xen/arm/swiotlb-xen.h>
+diff --git a/arch/arm/xen/mm.c b/arch/arm/xen/mm.c
+index 467fa225c..e1b12b242 100644
+--- a/arch/arm/xen/mm.c
++++ b/arch/arm/xen/mm.c
+@@ -135,10 +135,22 @@ void xen_destroy_contiguous_region(phys_addr_t pstart, unsigned int order)
+ 	return;
+ }
+ 
++int xen_swiotlb_detect(void)
++{
++	if (!xen_domain())
++		return 0;
++	if (xen_feature(XENFEAT_direct_mapped))
++		return 1;
++	/* legacy case */
++	if (!xen_feature(XENFEAT_not_direct_mapped) && xen_initial_domain())
++		return 1;
++	return 0;
++}
++
+ static int __init xen_mm_init(void)
+ {
+ 	struct gnttab_cache_flush cflush;
+-	if (!xen_initial_domain())
++	if (!xen_swiotlb_detect())
+ 		return 0;
+ 	xen_swiotlb_init(1, false);
+ 
+diff --git a/arch/arm64/include/asm/xen/swiotlb-xen.h b/arch/arm64/include/asm/xen/swiotlb-xen.h
+new file mode 100644
+index 000000000..455ade5d5
+--- /dev/null
++++ b/arch/arm64/include/asm/xen/swiotlb-xen.h
+@@ -0,0 +1 @@
++#include <xen/arm/swiotlb-xen.h>
+diff --git a/arch/arm64/mm/dma-mapping.c b/arch/arm64/mm/dma-mapping.c
+index 93e87b287..4bf1dd3eb 100644
+--- a/arch/arm64/mm/dma-mapping.c
++++ b/arch/arm64/mm/dma-mapping.c
+@@ -53,7 +53,7 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
+ 		iommu_setup_dma_ops(dev, dma_base, size);
+ 
+ #ifdef CONFIG_XEN
+-	if (xen_initial_domain())
++	if (xen_swiotlb_detect())
+ 		dev->dma_ops = &xen_swiotlb_dma_ops;
+ #endif
+ }
+diff --git a/drivers/xen/Kconfig b/drivers/xen/Kconfig
+index ea0efd290..c2f676abe 100644
+--- a/drivers/xen/Kconfig
++++ b/drivers/xen/Kconfig
+@@ -204,7 +204,7 @@ config XEN_PCIDEV_BACKEND
+ 	  If in doubt, say m.
+ 
+ config XEN_PVCALLS_FRONTEND
+-	tristate "XEN PV Calls frontend driver"
++	bool "XEN PV Calls frontend driver"
+ 	depends on INET && XEN
+ 	select XEN_XENBUS_FRONTEND
+ 	help
+diff --git a/drivers/xen/Makefile b/drivers/xen/Makefile
+index babdca808..7192a77a6 100644
+--- a/drivers/xen/Makefile
++++ b/drivers/xen/Makefile
+@@ -35,6 +35,7 @@ obj-$(CONFIG_XEN_SCSI_BACKEND)		+= xen-scsiback.o
+ obj-$(CONFIG_XEN_AUTO_XLATE)		+= xlate_mmu.o
+ obj-$(CONFIG_XEN_PVCALLS_BACKEND)	+= pvcalls-back.o
+ obj-$(CONFIG_XEN_PVCALLS_FRONTEND)	+= pvcalls-front.o
++obj-$(CONFIG_XEN_PVCALLS_FRONTEND)	+= pvcalls.o
+ xen-evtchn-y				:= evtchn.o
+ xen-gntdev-y				:= gntdev.o
+ xen-gntdev-$(CONFIG_XEN_GNTDEV_DMABUF)	+= gntdev-dmabuf.o
+diff --git a/drivers/xen/pvcalls.c b/drivers/xen/pvcalls.c
+new file mode 100644
+index 000000000..1156ff350
+--- /dev/null
++++ b/drivers/xen/pvcalls.c
+@@ -0,0 +1,134 @@
++#include <linux/types.h>
++#include <linux/bitops.h>
++#include <linux/cred.h>
++#include <linux/init.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/kmod.h>
++#include <linux/list.h>
++#include <linux/miscdevice.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/net.h>
++#include <linux/poll.h>
++#include <linux/skbuff.h>
++#include <linux/smp.h>
++#include <linux/socket.h>
++#include <linux/stddef.h>
++#include <linux/unistd.h>
++#include <linux/wait.h>
++#include <linux/workqueue.h>
++#include <net/sock.h>
++#include <net/inet_common.h>
++
++#include "pvcalls-front.h"
++
++static int
++pvcalls_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
++{
++	int ret;
++	ret = pvcalls_front_socket(sock);
++	if (ret < 0)
++		return ret;
++	return pvcalls_front_bind(sock, addr, addr_len);
++}
++
++static int pvcalls_stream_connect(struct socket *sock, struct sockaddr *addr,
++				int addr_len, int flags)
++{
++	int ret;
++	ret = pvcalls_front_socket(sock);
++	if (ret < 0)
++		return ret;
++	return pvcalls_front_connect(sock, addr, addr_len, flags);
++}
++
++static int pvcalls_accept(struct socket *sock, struct socket *newsock, int flags, bool kern)
++{
++	return pvcalls_front_accept(sock, newsock, flags);
++}
++
++static int pvcalls_getname(struct socket *sock,
++			 struct sockaddr *uaddr, int peer)
++{
++	DECLARE_SOCKADDR(struct sockaddr_in *, sin, uaddr);
++
++	sin->sin_family = AF_INET;
++	memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
++	return 0;
++}
++
++static unsigned int pvcalls_poll(struct file *file, struct socket *sock,
++			       poll_table *wait)
++{
++	return pvcalls_front_poll(file, sock, wait);
++}
++
++static int pvcalls_listen(struct socket *sock, int backlog)
++{
++	return pvcalls_front_listen(sock, backlog);
++}
++
++static int pvcalls_stream_sendmsg(struct socket *sock, struct msghdr *msg,
++				size_t len)
++{
++	return pvcalls_front_sendmsg(sock, msg, len);
++}
++
++static int
++pvcalls_stream_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
++		     int flags)
++{
++	return pvcalls_front_recvmsg(sock, msg, len, flags);
++}
++
++static int pvcalls_release(struct socket *s)
++{
++	return pvcalls_front_release(s);
++}
++
++static int pvcalls_shutdown(struct socket *s, int h)
++{
++	return -ENOTSUPP;
++}
++
++static int sock_no_setsockopt(struct socket *sock, int level, int optname,
++			   sockptr_t optval, unsigned int optlen)
++{
++	return -ENOTSUPP;
++}
++
++static int sock_no_getsockopt(struct socket *sock, int level, int optname,
++			   char __user *optval, int __user *optlen)
++{
++	return -ENOTSUPP;
++}
++
++const struct proto_ops pvcalls_stream_ops = {
++	.family = PF_INET,
++	.owner = THIS_MODULE,
++	.release = pvcalls_release,
++	.bind = pvcalls_bind,
++	.connect = pvcalls_stream_connect,
++	.socketpair = sock_no_socketpair,
++	.accept = pvcalls_accept,
++	.getname = pvcalls_getname,
++	.poll = pvcalls_poll,
++	.ioctl = sock_no_ioctl,
++	.listen = pvcalls_listen,
++	.shutdown = pvcalls_shutdown,
++	.setsockopt = sock_no_setsockopt,
++	.getsockopt = sock_no_getsockopt,
++	.sendmsg = pvcalls_stream_sendmsg,
++	.recvmsg = pvcalls_stream_recvmsg,
++	.mmap = sock_no_mmap,
++	.sendpage = sock_no_sendpage,
++};
++
++bool pvcalls = false;
++static __init int xen_parse_pvcalls(char *arg)
++{
++       pvcalls = true;
++       return 0;
++}
++early_param("pvcalls", xen_parse_pvcalls);
+diff --git a/include/xen/arm/swiotlb-xen.h b/include/xen/arm/swiotlb-xen.h
+new file mode 100644
+index 000000000..2994fe603
+--- /dev/null
++++ b/include/xen/arm/swiotlb-xen.h
+@@ -0,0 +1,7 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#ifndef _ASM_ARM_SWIOTLB_XEN_H
++#define _ASM_ARM_SWIOTLB_XEN_H
++
++extern int xen_swiotlb_detect(void);
++
++#endif /* _ASM_ARM_SWIOTLB_XEN_H */
+diff --git a/include/xen/interface/features.h b/include/xen/interface/features.h
+index 6d1384abf..5a7bdefa0 100644
+--- a/include/xen/interface/features.h
++++ b/include/xen/interface/features.h
+@@ -83,6 +83,20 @@
+  */
+ #define XENFEAT_linux_rsdp_unrestricted   15
+ 
++/*
++ * A direct-mapped (or 1:1 mapped) domain is a domain for which its
++ * local pages have gfn == mfn. If a domain is direct-mapped,
++ * XENFEAT_direct_mapped is set; otherwise XENFEAT_not_direct_mapped
++ * is set.
++ *
++ * If neither flag is set (e.g. older Xen releases) the assumptions are:
++ * - not auto_translated domains (x86 only) are always direct-mapped
++ * - on x86, auto_translated domains are not direct-mapped
++ * - on ARM, Dom0 is direct-mapped, DomUs are not
++ */
++#define XENFEAT_not_direct_mapped         16
++#define XENFEAT_direct_mapped             17
++
+ #define XENFEAT_NR_SUBMAPS 1
+ 
+ #endif /* __XEN_PUBLIC_FEATURES_H__ */
+diff --git a/include/xen/pvcalls.h b/include/xen/pvcalls.h
+new file mode 100644
+index 000000000..7a6147528
+--- /dev/null
++++ b/include/xen/pvcalls.h
+@@ -0,0 +1,13 @@
++#ifndef __LINUX_NET_PVCALLS_H
++#define __LINUX_NET_PVCALLS_H
++
++#include <linux/net.h>
++
++#ifdef CONFIG_XEN_PVCALLS_FRONTEND
++extern bool pvcalls;
++#else
++#define pvcalls (0)
++#endif
++extern const struct proto_ops pvcalls_stream_ops;
++
++#endif
+diff --git a/include/xen/swiotlb-xen.h b/include/xen/swiotlb-xen.h
+index d5eaf9d68..dbc4a4b78 100644
+--- a/include/xen/swiotlb-xen.h
++++ b/include/xen/swiotlb-xen.h
+@@ -3,6 +3,7 @@
+ #define __LINUX_SWIOTLB_XEN_H
+ 
+ #include <linux/swiotlb.h>
++#include <asm/xen/swiotlb-xen.h>
+ 
+ void xen_dma_sync_for_cpu(struct device *dev, dma_addr_t handle,
+ 			  size_t size, enum dma_data_direction dir);
+diff --git a/net/ipv4/af_inet.c b/net/ipv4/af_inet.c
+index 742218594..9473d6927 100644
+--- a/net/ipv4/af_inet.c
++++ b/net/ipv4/af_inet.c
+@@ -119,6 +119,7 @@
+ #include <net/compat.h>
+ 
+ #include <trace/events/sock.h>
++#include <xen/pvcalls.h>
+ 
+ /* The inetsw table contains everything that inet_create needs to
+  * build a new socket.
+@@ -1991,6 +1992,11 @@ static int __init inet_init(void)
+ 	for (r = &inetsw[0]; r < &inetsw[SOCK_MAX]; ++r)
+ 		INIT_LIST_HEAD(r);
+ 
++	if (pvcalls) {
++		pr_info("Enabling pvcalls for AF_INET SOCK_STREAM\n");
++		inetsw_array[0].ops = &pvcalls_stream_ops;
++	}
++
+ 	for (q = inetsw_array; q < &inetsw_array[INETSW_ARRAY_LEN]; ++q)
+ 		inet_register_protosw(q);
+ 

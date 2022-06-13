@@ -1,0 +1,527 @@
+diff --git a/Documentation/devicetree/bindings/net/mscc-phy-vsc8531.txt b/Documentation/devicetree/bindings/net/mscc-phy-vsc8531.txt
+index 87a27d775..e201d24d8 100644
+--- a/Documentation/devicetree/bindings/net/mscc-phy-vsc8531.txt
++++ b/Documentation/devicetree/bindings/net/mscc-phy-vsc8531.txt
+@@ -33,7 +33,14 @@ Optional properties:
+ 			  VSC8531_DUPLEX_COLLISION (8).
+ - load-save-gpios	: GPIO used for the load/save operation of the PTP
+ 			  hardware clock (PHC).
+-
++- vsc8531,rx-delay	: RGMII RX delay. Allowed values are defined in
++			  "include/dt-bindings/net/mscc-phy-vsc8531.h".
++			  Default value, set by the driver is
++			  VSC8531_RGMII_CLK_DELAY_1_1_NS.
++- vsc8531,tx-delay	: RGMII TX delay. Allowed values are defined in
++			  "include/dt-bindings/net/mscc-phy-vsc8531.h".
++			  Default value, set by the driver is
++			  VSC8531_RGMII_CLK_DELAY_0_2_NS.
+ 
+ Table: 1 - Edge rate change
+ ----------------------------------------------------------------|
+diff --git a/Documentation/devicetree/bindings/net/xilinx-phy.txt b/Documentation/devicetree/bindings/net/xilinx-phy.txt
+new file mode 100644
+index 000000000..aeb991749
+--- /dev/null
++++ b/Documentation/devicetree/bindings/net/xilinx-phy.txt
+@@ -0,0 +1,15 @@
++Xilinx PCS/PMA PHY bindings
++
++Required properties:
++	- reg - The ID number for the phy, usually a small integer
++
++Optional properties:
++	- xlnx,phy-type - Describes type 1000BaseX (set to 0x5) or
++			  SGMII (set to 0x4)
++
++Example:
++
++	ethernet-phy@9 {
++		reg = <9>;
++		xlnx,phy-type = <0x5>;
++	};
+diff --git a/drivers/net/phy/Kconfig b/drivers/net/phy/Kconfig
+index 698bea312..5b5ea91d5 100644
+--- a/drivers/net/phy/Kconfig
++++ b/drivers/net/phy/Kconfig
+@@ -221,7 +221,8 @@ config MICROSEMI_PHY
+ 	depends on MACSEC || MACSEC=n
+ 	select CRYPTO_LIB_AES if MACSEC
+ 	help
+-	  Currently supports VSC8514, VSC8530, VSC8531, VSC8540 and VSC8541 PHYs
++	  Currently supports VSC8514, VSC8530, VSC8531, VSC8531_02, VSC8540 and
++	  VSC8541 PHYs
+ 
+ config NATIONAL_PHY
+ 	tristate "National Semiconductor PHYs"
+@@ -307,6 +308,11 @@ config VITESSE_PHY
+ 	help
+ 	  Currently supports the vsc8244
+ 
++config XILINX_PHY
++	tristate "Drivers for xilinx PHYs"
++	help
++	  This module provides a driver for the Xilinx PCS/PMA Core.
++
+ config XILINX_GMII2RGMII
+ 	tristate "Xilinx GMII2RGMII converter driver"
+ 	help
+diff --git a/drivers/net/phy/Makefile b/drivers/net/phy/Makefile
+index a13e40207..f5caf9d5c 100644
+--- a/drivers/net/phy/Makefile
++++ b/drivers/net/phy/Makefile
+@@ -79,4 +79,5 @@ obj-$(CONFIG_SMSC_PHY)		+= smsc.o
+ obj-$(CONFIG_STE10XP)		+= ste10Xp.o
+ obj-$(CONFIG_TERANETICS_PHY)	+= teranetics.o
+ obj-$(CONFIG_VITESSE_PHY)	+= vitesse.o
++obj-$(CONFIG_XILINX_PHY)	+= xilinx_phy.o
+ obj-$(CONFIG_XILINX_GMII2RGMII) += xilinx_gmii2rgmii.o
+diff --git a/drivers/net/phy/dp83867.c b/drivers/net/phy/dp83867.c
+index c716074fd..b74bf0e81 100644
+--- a/drivers/net/phy/dp83867.c
++++ b/drivers/net/phy/dp83867.c
+@@ -25,6 +25,7 @@
+ #define MII_DP83867_MICR	0x12
+ #define MII_DP83867_ISR		0x13
+ #define DP83867_CFG2		0x14
++#define MII_DP83867_BISCR	0x16
+ #define DP83867_CFG3		0x1e
+ #define DP83867_CTRL		0x1f
+ 
+@@ -103,6 +104,11 @@
+ #define DP83867_PHYCR_RX_FIFO_DEPTH_MASK	GENMASK(13, 12)
+ #define DP83867_PHYCR_RESERVED_MASK		BIT(11)
+ #define DP83867_PHYCR_FORCE_LINK_GOOD		BIT(10)
++#define DP83867_MDI_CROSSOVER		5
++#define DP83867_MDI_CROSSOVER_AUTO		0b10
++#define DP83867_PHYCTRL_SGMIIEN			0x0800
++#define DP83867_PHYCTRL_RXFIFO_SHIFT		12
++#define DP83867_PHYCTRL_TXFIFO_SHIFT		14
+ 
+ /* RGMIIDCTL bits */
+ #define DP83867_RGMII_TX_CLK_DELAY_MAX		0xf
+@@ -142,6 +148,14 @@
+ #define DP83867_CFG3_INT_OE			BIT(7)
+ #define DP83867_CFG3_ROBUST_AUTO_MDIX		BIT(9)
+ 
++/* CFG2 bits */
++#define MII_DP83867_CFG2_SPEEDOPT_10EN		0x0040
++#define MII_DP83867_CFG2_SGMII_AUTONEGEN	0x0080
++#define MII_DP83867_CFG2_SPEEDOPT_ENH		0x0100
++#define MII_DP83867_CFG2_SPEEDOPT_CNT		0x0800
++#define MII_DP83867_CFG2_SPEEDOPT_INTLOW	0x2000
++#define MII_DP83867_CFG2_MASK			0x003F
++
+ /* CFG4 bits */
+ #define DP83867_CFG4_PORT_MIRROR_EN              BIT(0)
+ 
+@@ -607,7 +621,7 @@ static int dp83867_config_init(struct phy_device *phydev)
+ {
+ 	struct dp83867_private *dp83867 = phydev->priv;
+ 	int ret, val, bs;
+-	u16 delay;
++	u16 delay, cfg2;
+ 
+ 	/* Force speed optimization for the PHY even if it strapped */
+ 	ret = phy_modify(phydev, DP83867_CFG2, DP83867_DOWNSHIFT_EN,
+@@ -756,6 +770,35 @@ static int dp83867_config_init(struct phy_device *phydev)
+ 		else
+ 			val &= ~DP83867_SGMII_TYPE;
+ 		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_SGMIICTL, val);
++
++		phy_write(phydev, MII_BMCR,
++			  (BMCR_ANENABLE | BMCR_FULLDPLX | BMCR_SPEED1000));
++
++		cfg2 = phy_read(phydev, DP83867_CFG2);
++		cfg2 &= MII_DP83867_CFG2_MASK;
++		cfg2 |= (MII_DP83867_CFG2_SPEEDOPT_10EN |
++			 MII_DP83867_CFG2_SGMII_AUTONEGEN |
++			 MII_DP83867_CFG2_SPEEDOPT_ENH |
++			 MII_DP83867_CFG2_SPEEDOPT_CNT |
++			 MII_DP83867_CFG2_SPEEDOPT_INTLOW);
++		phy_write(phydev, DP83867_CFG2, cfg2);
++
++		phy_write_mmd(phydev, DP83867_DEVADDR, DP83867_RGMIICTL, 0x0);
++
++		phy_write(phydev, MII_DP83867_PHYCTRL,
++			  DP83867_PHYCTRL_SGMIIEN |
++			  (DP83867_MDI_CROSSOVER_AUTO << DP83867_MDI_CROSSOVER) |
++			  (dp83867->rx_fifo_depth << DP83867_PHYCTRL_RXFIFO_SHIFT) |
++			  (dp83867->tx_fifo_depth  << DP83867_PHYCTRL_TXFIFO_SHIFT));
++		phy_write(phydev, MII_DP83867_BISCR, 0x0);
++
++		/* This is a SW workaround for link instability if RX_CTRL is
++		 * not strapped to mode 3 or 4 in HW. This is required along
++		 * with clearing bit 7 and increasing autoneg timer above.
++		 */
++		if (dp83867->rxctrl_strap_quirk)
++			phy_set_bits_mmd(phydev, DP83867_DEVADDR, DP83867_CFG4,
++					 BIT(8));
+ 	}
+ 
+ 	val = phy_read(phydev, DP83867_CFG3);
+diff --git a/drivers/net/phy/mscc/mscc.h b/drivers/net/phy/mscc/mscc.h
+index c2023f93c..a847fe57e 100644
+--- a/drivers/net/phy/mscc/mscc.h
++++ b/drivers/net/phy/mscc/mscc.h
+@@ -174,6 +174,7 @@ enum rgmii_clock_delay {
+ /* RGMII controls at address 20E2, for VSC8502 and similar */
+ #define VSC8502_RGMII_CNTL		  20
+ #define VSC8502_RGMII_RX_DELAY_MASK	  0x0070
++#define VSC8502_RGMII_RX_CLK_DELAY_POS	  4
+ #define VSC8502_RGMII_TX_DELAY_MASK	  0x0007
+ 
+ #define MSCC_PHY_WOL_LOWER_MAC_ADDR	  21
+@@ -277,6 +278,7 @@ enum rgmii_clock_delay {
+ #define PHY_ID_VSC8514			  0x00070670
+ #define PHY_ID_VSC8530			  0x00070560
+ #define PHY_ID_VSC8531			  0x00070570
++#define PHY_ID_VSC8531_02		  0x00070572
+ #define PHY_ID_VSC8540			  0x00070760
+ #define PHY_ID_VSC8541			  0x00070770
+ #define PHY_ID_VSC8552			  0x000704e0
+@@ -365,6 +367,8 @@ struct vsc8531_private {
+ 	 * package.
+ 	 */
+ 	unsigned int base_addr;
++	u32 rx_delay;
++	u32 tx_delay;
+ 
+ #if IS_ENABLED(CONFIG_MACSEC)
+ 	/* MACsec fields:
+diff --git a/drivers/net/phy/mscc/mscc_main.c b/drivers/net/phy/mscc/mscc_main.c
+index e14fa7279..88e927620 100644
+--- a/drivers/net/phy/mscc/mscc_main.c
++++ b/drivers/net/phy/mscc/mscc_main.c
+@@ -535,9 +535,13 @@ static int vsc85xx_rgmii_set_skews(struct phy_device *phydev, u32 rgmii_cntl,
+ 	u16 rgmii_tx_delay_pos = ffs(rgmii_tx_delay_mask) - 1;
+ 	u16 reg_val = 0;
+ 	int rc;
++	struct vsc8531_private *vsc8531 = phydev->priv;
+ 
+ 	mutex_lock(&phydev->lock);
+ 
++	reg_val = (vsc8531->rx_delay << VSC8502_RGMII_RX_CLK_DELAY_POS) |
++		  vsc8531->tx_delay;
++
+ 	if (phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID ||
+ 	    phydev->interface == PHY_INTERFACE_MODE_RGMII_ID)
+ 		reg_val |= RGMII_CLK_DELAY_2_0_NS << rgmii_rx_delay_pos;
+@@ -1700,6 +1704,17 @@ static int vsc85xx_config_init(struct phy_device *phydev)
+ {
+ 	int rc, i, phy_id;
+ 	struct vsc8531_private *vsc8531 = phydev->priv;
++	struct device_node *of_node = phydev->mdio.dev.of_node;
++
++	rc = of_property_read_u32(of_node, "vsc8531,rx-delay",
++				  &vsc8531->rx_delay);
++	if (rc < 0)
++		vsc8531->rx_delay = VSC8531_RGMII_CLK_DELAY_1_1_NS;
++
++	rc = of_property_read_u32(of_node, "vsc8531,tx-delay",
++				  &vsc8531->tx_delay);
++	if (rc < 0)
++		vsc8531->tx_delay = VSC8531_RGMII_CLK_DELAY_0_2_NS;
+ 
+ 	rc = vsc85xx_default_config(phydev);
+ 	if (rc)
+@@ -2332,6 +2347,31 @@ static struct phy_driver vsc85xx_driver[] = {
+ 	.get_strings    = &vsc85xx_get_strings,
+ 	.get_stats      = &vsc85xx_get_stats,
+ },
++{
++	.phy_id		= PHY_ID_VSC8531_02,
++	.name		= "Microsemi VSC8531-02",
++	.phy_id_mask	= 0xfffffff0,
++	/* PHY_GBIT_FEATURES */
++	.soft_reset	= &genphy_soft_reset,
++	.config_init	= &vsc85xx_config_init,
++	.config_aneg	= &vsc85xx_config_aneg,
++	.aneg_done	= &genphy_aneg_done,
++	.read_status	= &vsc85xx_read_status,
++	.ack_interrupt	= &vsc85xx_ack_interrupt,
++	.config_intr	= &vsc85xx_config_intr,
++	.suspend	= &genphy_suspend,
++	.resume		= &genphy_resume,
++	.probe		= &vsc85xx_probe,
++	.set_wol	= &vsc85xx_wol_set,
++	.get_wol	= &vsc85xx_wol_get,
++	.get_tunable	= &vsc85xx_get_tunable,
++	.set_tunable	= &vsc85xx_set_tunable,
++	.read_page	= &vsc85xx_phy_read_page,
++	.write_page	= &vsc85xx_phy_write_page,
++	.get_sset_count = &vsc85xx_get_sset_count,
++	.get_strings	= &vsc85xx_get_strings,
++	.get_stats	= &vsc85xx_get_stats,
++},
+ {
+ 	.phy_id		= PHY_ID_VSC8540,
+ 	.name		= "Microsemi FE VSC8540 SyncE",
+@@ -2567,6 +2607,7 @@ static struct mdio_device_id __maybe_unused vsc85xx_tbl[] = {
+ 	{ PHY_ID_VSC8514, 0xfffffff0, },
+ 	{ PHY_ID_VSC8530, 0xfffffff0, },
+ 	{ PHY_ID_VSC8531, 0xfffffff0, },
++	{ PHY_ID_VSC8531_02, 0xfffffff0, },
+ 	{ PHY_ID_VSC8540, 0xfffffff0, },
+ 	{ PHY_ID_VSC8541, 0xfffffff0, },
+ 	{ PHY_ID_VSC8552, 0xfffffff0, },
+diff --git a/drivers/net/phy/phy.c b/drivers/net/phy/phy.c
+index 18e67eb6d..2c06b6852 100644
+--- a/drivers/net/phy/phy.c
++++ b/drivers/net/phy/phy.c
+@@ -1131,9 +1131,6 @@ void phy_stop(struct phy_device *phydev)
+ 
+ 	mutex_unlock(&phydev->lock);
+ 
+-	phy_state_machine(&phydev->state_queue.work);
+-	phy_stop_machine(phydev);
+-
+ 	/* Cannot call flush_scheduled_work() here as desired because
+ 	 * of rtnl_lock(), but PHY_HALTED shall guarantee irq handler
+ 	 * will not reenable interrupts.
+diff --git a/drivers/net/phy/phy_device.c b/drivers/net/phy/phy_device.c
+index d2f6d8107..0ee462600 100644
+--- a/drivers/net/phy/phy_device.c
++++ b/drivers/net/phy/phy_device.c
+@@ -1050,6 +1050,8 @@ void phy_disconnect(struct phy_device *phydev)
+ 	if (phy_interrupt_is_valid(phydev))
+ 		phy_free_interrupt(phydev);
+ 
++	phy_stop_machine(phydev);
++
+ 	phydev->adjust_link = NULL;
+ 
+ 	phy_detach(phydev);
+diff --git a/drivers/net/phy/xilinx_gmii2rgmii.c b/drivers/net/phy/xilinx_gmii2rgmii.c
+index 151c2a3f0..9c13dc1a1 100644
+--- a/drivers/net/phy/xilinx_gmii2rgmii.c
++++ b/drivers/net/phy/xilinx_gmii2rgmii.c
+@@ -52,9 +52,7 @@ static int xgmiitorgmii_read_status(struct phy_device *phydev)
+ 	else
+ 		val |= BMCR_SPEED10;
+ 
+-	mdiobus_write(bus, addr, XILINX_GMII2RGMII_REG, val);
+-
+-	return 0;
++	return mdiobus_write(bus, addr, XILINX_GMII2RGMII_REG, val);
+ }
+ 
+ static int xgmiitorgmii_probe(struct mdio_device *mdiodev)
+diff --git a/drivers/net/phy/xilinx_phy.c b/drivers/net/phy/xilinx_phy.c
+new file mode 100644
+index 000000000..16aad5370
+--- /dev/null
++++ b/drivers/net/phy/xilinx_phy.c
+@@ -0,0 +1,161 @@
++/* Xilinx PCS/PMA Core phy driver
++ *
++ * Copyright (C) 2015 Xilinx, Inc.
++ *
++ * Description:
++ * This driver is developed for PCS/PMA Core.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/mii.h>
++#include <linux/phy.h>
++#include <linux/of.h>
++#include <linux/xilinx_phy.h>
++
++#define MII_PHY_STATUS_SPD_MASK		0x0C00
++#define MII_PHY_STATUS_FULLDUPLEX	0x1000
++#define MII_PHY_STATUS_1000		0x0800
++#define MII_PHY_STATUS_100		0x0400
++#define XPCSPMA_PHY_CTRL_ISOLATE_DISABLE 0xFBFF
++
++static int xilinxphy_read_status(struct phy_device *phydev)
++{
++	int err;
++	int status = 0;
++
++	/* Update the link, but return if there
++	 * was an error
++	 */
++	err = genphy_update_link(phydev);
++	if (err)
++		return err;
++
++	if (phydev->autoneg == AUTONEG_ENABLE) {
++		status = phy_read(phydev, MII_LPA);
++
++		if (status & MII_PHY_STATUS_FULLDUPLEX)
++			phydev->duplex = DUPLEX_FULL;
++		else
++			phydev->duplex = DUPLEX_HALF;
++
++		switch (status & MII_PHY_STATUS_SPD_MASK) {
++		case MII_PHY_STATUS_1000:
++			phydev->speed = SPEED_1000;
++			break;
++
++		case MII_PHY_STATUS_100:
++			phydev->speed = SPEED_100;
++			break;
++
++		default:
++			phydev->speed = SPEED_10;
++			break;
++		}
++	} else {
++		int bmcr = phy_read(phydev, MII_BMCR);
++
++		if (bmcr < 0)
++			return bmcr;
++
++		if (bmcr & BMCR_FULLDPLX)
++			phydev->duplex = DUPLEX_FULL;
++		else
++			phydev->duplex = DUPLEX_HALF;
++
++		if (bmcr & BMCR_SPEED1000)
++			phydev->speed = SPEED_1000;
++		else if (bmcr & BMCR_SPEED100)
++			phydev->speed = SPEED_100;
++		else
++			phydev->speed = SPEED_10;
++	}
++
++	/* For 1000BASE-X Phy Mode the speed/duplex will always be
++	 * 1000Mbps/fullduplex
++	 */
++	if (phydev->dev_flags == XAE_PHY_TYPE_1000BASE_X) {
++		phydev->duplex = DUPLEX_FULL;
++		phydev->speed = SPEED_1000;
++	}
++
++	/* For 2500BASE-X Phy Mode the speed/duplex will always be
++	 * 2500Mbps/fullduplex
++	 */
++	if (phydev->dev_flags == XAE_PHY_TYPE_2500) {
++		phydev->duplex = DUPLEX_FULL;
++		phydev->speed = SPEED_2500;
++	}
++
++	return 0;
++}
++
++static int xilinxphy_of_init(struct phy_device *phydev)
++{
++	struct device *dev = &phydev->mdio.dev;
++	struct device_node *of_node = dev->of_node;
++	u32 phytype;
++
++	if (!IS_ENABLED(CONFIG_OF_MDIO))
++		return 0;
++
++	if (!of_node)
++		return -ENODEV;
++
++	if (!of_property_read_u32(of_node, "xlnx,phy-type", &phytype)) {
++		if (phytype == XAE_PHY_TYPE_1000BASE_X)
++			phydev->dev_flags |= XAE_PHY_TYPE_1000BASE_X;
++		if (phytype == XAE_PHY_TYPE_2500)
++			phydev->dev_flags |= XAE_PHY_TYPE_2500;
++	}
++
++	return 0;
++}
++
++static int xilinxphy_config_init(struct phy_device *phydev)
++{
++	int temp;
++
++	xilinxphy_of_init(phydev);
++	temp = phy_read(phydev, MII_BMCR);
++	temp &= XPCSPMA_PHY_CTRL_ISOLATE_DISABLE;
++	phy_write(phydev, MII_BMCR, temp);
++
++	return 0;
++}
++
++static struct phy_driver xilinx_drivers[] = {
++	{
++		.phy_id = XILINX_PHY_ID,
++		.phy_id_mask = XILINX_PHY_ID_MASK,
++		.name = "Xilinx PCS/PMA PHY",
++		.flags = PHY_RST_AFTER_CLK_EN,
++		.features = PHY_GBIT_FEATURES,
++		.config_init = &xilinxphy_config_init,
++		.config_aneg = &genphy_config_aneg,
++		.read_status = &xilinxphy_read_status,
++		.resume = &genphy_resume,
++		.suspend = &genphy_suspend,
++	},
++};
++
++module_phy_driver(xilinx_drivers);
++
++static struct mdio_device_id __maybe_unused xilinx_tbl[] = {
++	{ XILINX_PHY_ID, XILINX_PHY_ID_MASK },
++	{ }
++};
++
++MODULE_DEVICE_TABLE(mdio, xilinx_tbl);
++MODULE_DESCRIPTION("Xilinx PCS/PMA PHY driver");
++MODULE_LICENSE("GPL");
+diff --git a/include/dt-bindings/net/mscc-phy-vsc8531.h b/include/dt-bindings/net/mscc-phy-vsc8531.h
+index 9eb2ec2b2..242eb4c7e 100644
+--- a/include/dt-bindings/net/mscc-phy-vsc8531.h
++++ b/include/dt-bindings/net/mscc-phy-vsc8531.h
+@@ -28,4 +28,13 @@
+ #define VSC8531_FORCE_LED_OFF           14
+ #define VSC8531_FORCE_LED_ON            15
+ 
++#define VSC8531_RGMII_CLK_DELAY_0_2_NS	0
++#define VSC8531_RGMII_CLK_DELAY_0_8_NS	1
++#define VSC8531_RGMII_CLK_DELAY_1_1_NS	2
++#define VSC8531_RGMII_CLK_DELAY_1_7_NS	3
++#define VSC8531_RGMII_CLK_DELAY_2_0_NS	4
++#define VSC8531_RGMII_CLK_DELAY_2_3_NS	5
++#define VSC8531_RGMII_CLK_DELAY_2_6_NS	6
++#define VSC8531_RGMII_CLK_DELAY_3_4_NS	7
++
+ #endif
+diff --git a/include/linux/xilinx_phy.h b/include/linux/xilinx_phy.h
+new file mode 100644
+index 000000000..d6804cb58
+--- /dev/null
++++ b/include/linux/xilinx_phy.h
+@@ -0,0 +1,28 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * Xilinx PHY specific header
++ *
++ * (C) Copyright 2015-2021 Xilinx, Inc. All rights reserved.
++ *
++ */
++
++#ifndef _XILINX_PHY_H
++#define _XILINX_PHY_H
++
++/* Mask used for ID comparisons */
++#define XILINX_PHY_ID_MASK		0xfffffff0
++
++/* Known PHY IDs */
++#define XILINX_PHY_ID			0x01740c00
++
++/* struct phy_device dev_flags definitions */
++#define XAE_PHY_TYPE_MII		0
++#define XAE_PHY_TYPE_GMII		1
++#define XAE_PHY_TYPE_RGMII_1_3		2
++#define XAE_PHY_TYPE_RGMII_2_0		3
++#define XAE_PHY_TYPE_SGMII		4
++#define XAE_PHY_TYPE_1000BASE_X		5
++#define XAE_PHY_TYPE_2500		6
++#define XXE_PHY_TYPE_USXGMII		7
++
++#endif /* _XILINX_PHY_H */

@@ -1,0 +1,3271 @@
+diff --git a/Documentation/devicetree/bindings/perf/xilinx-apm.yaml b/Documentation/devicetree/bindings/perf/xilinx-apm.yaml
+new file mode 100644
+index 000000000..30418486b
+--- /dev/null
++++ b/Documentation/devicetree/bindings/perf/xilinx-apm.yaml
+@@ -0,0 +1,128 @@
++# SPDX-License-Identifier: GPL-2.0-or-later OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/perf/xilinx-apm.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Axi Performance Monitor device tree bindings
++
++maintainers:
++  - Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++
++properties:
++  compatible:
++    items:
++      - enum:
++          - xlnx,axi-perf-monitor
++
++  reg:
++    maxItems: 1
++
++  clocks:
++    maxItems: 1
++
++  interrupts:
++    maxItems: 1
++
++  xlnx,enable-profile:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [0, 1]
++    description:
++      Enables the profile mode.
++    maxItems: 1
++
++  xlnx,enable-trace:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [0, 1]
++    description:
++      Enables trace mode.
++    maxItems: 1
++
++  xlnx,num-monitor-slots:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - minimum: 1
++      - maximum: 8
++    description:
++      Number of monitor slots.
++
++  xlnx,enable-event-count:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [0, 1]
++    description:
++      Enable event count.
++
++  xlnx,enable-event-log:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [0, 1]
++    description:
++      Enable event log.
++
++  xlnx,have-sampled-metric-cnt:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++    description:
++      Sampled metric counters enabled in APM.
++
++  xlnx,metric-count-width:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [32, 64]
++    description:
++      Metric Counter width.
++
++  xlnx,num-of-counters:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++    description:
++      Number of counters in APM.
++
++  xlnx,metrics-sample-count-width:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [32, 64]
++    description:
++      Sampled metric counter width.
++
++  xlnx,global-count-width:
++    allOf:
++      - $ref: /schemas/types.yaml#/definitions/uint32
++      - enum: [32, 64]
++    description:
++      Global Clock counter width.
++
++  xlnx,id-filter-32bit:
++    description: APM is in 32-bit mode.
++    type: boolean
++
++required:
++  - compatible
++  - reg
++  - clocks
++  - interrupts
++
++examples:
++  - |
++    apm@44a00000 {
++        compatible = "xlnx,axi-perf-monitor";
++        interrupt-parent = <&axi_intc_1>;
++        interrupts = <1 2>;
++        reg = <0x44a00000 0x1000>;
++        clocks = <&clkc 15>;
++        xlnx,enable-profile = <0>;
++        xlnx,enable-trace = <0>;
++        xlnx,num-monitor-slots = <4>;
++        xlnx,enable-event-count = <1>;
++        xlnx,enable-event-log = <1>;
++        xlnx,have-sampled-metric-cnt = <1>;
++        xlnx,num-of-counters = <8>;
++        xlnx,metric-count-width = <32>;
++        xlnx,metrics-sample-count-width = <32>;
++        xlnx,global-count-width = <32>;
++        xlnx,metric-count-scale = <1>;
++        xlnx,id-filter-32bit;
++    };
+diff --git a/Documentation/devicetree/bindings/perf/xlnx-flexnoc-pm.yaml b/Documentation/devicetree/bindings/perf/xlnx-flexnoc-pm.yaml
+new file mode 100644
+index 000000000..bd0f345e7
+--- /dev/null
++++ b/Documentation/devicetree/bindings/perf/xlnx-flexnoc-pm.yaml
+@@ -0,0 +1,45 @@
++# SPDX-License-Identifier: GPL-2.0-or-later OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/perf/xlnx-flexnoc-pm.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx flexnoc Performance Monitor device tree bindings
++
++maintainers:
++  - Arnd Bergmann <arnd@arndb.de>
++  - Greg Kroah-Hartman <gregkh@linuxfoundation.org>
++
++properties:
++  compatible:
++    # Versal SoC based boards
++    items:
++      - enum:
++          - xlnx,flexnoc-pm-2.7
++
++  reg:
++    items:
++      - description: funnel registers
++      - description: baselpd registers
++      - description: basefpd registers
++
++  reg-names:
++    # The core schema enforces this is a string array
++    items:
++      - const: funnel
++      - const: baselpd
++      - const: basefpd
++
++required:
++  - compatible
++  - reg
++
++examples:
++  - |
++    performance-monitor@f0920000 {
++        compatible = "xlnx,flexnoc-pm-2.7";
++        reg-names = "funnel", "baselpd", "basefpd";
++        reg = <0x0 0xf0920000 0x0 0x1000>,
++              <0x0 0xf0980000 0x0 0x9000>,
++              <0x0 0xf0b80000 0x0 0x9000>;
++    };
+diff --git a/Documentation/devicetree/bindings/xilinx.txt b/Documentation/devicetree/bindings/xilinx.txt
+index 28199b31f..28ad2cc2b 100644
+--- a/Documentation/devicetree/bindings/xilinx.txt
++++ b/Documentation/devicetree/bindings/xilinx.txt
+@@ -110,6 +110,7 @@
+ 
+       Optional properties:
+        - 8-bit (empty) : Set this property for SystemACE in 8 bit mode
++       - port-number = <port_number> : Set port number for particular device
+ 
+       iii) Xilinx EMAC and Xilinx TEMAC
+ 
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 7c118b507..d59bd3632 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -1291,6 +1291,7 @@ W:	http://www.aquantia.com
+ F:	drivers/net/ethernet/aquantia/atlantic/aq_ptp*
+ 
+ ARASAN NAND CONTROLLER DRIVER
++M:	Miquel Raynal <miquel.raynal@bootlin.com>
+ M:	Naga Sureshkumar Relli <nagasure@xilinx.com>
+ L:	linux-mtd@lists.infradead.org
+ S:	Maintained
+@@ -2955,8 +2956,11 @@ F:	include/uapi/linux/atm*
+ ATMEL MACB ETHERNET DRIVER
+ M:	Nicolas Ferre <nicolas.ferre@microchip.com>
+ M:	Claudiu Beznea <claudiu.beznea@microchip.com>
++R:	Harini Katakam <harini.katakam@xilinx.com>
++L:	git@xilinx.com
+ S:	Supported
+ F:	drivers/net/ethernet/cadence/
++W:	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841740/Macb+Driver
+ 
+ ATMEL MAXTOUCH DRIVER
+ M:	Nick Dyer <nick@shmanahar.org>
+@@ -3848,6 +3852,13 @@ S:	Supported
+ F:	Documentation/filesystems/caching/cachefiles.rst
+ F:	fs/cachefiles/
+ 
++CADENCE I2C DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++R:	Venkata Visweswarachari Mallavarapu <vmallava@xilinx.com>
++L:	git@xilinx.com
++F:	drivers/i2c/busses/i2c-cadence.c
++W:	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842160/Cadence+I2C+Driver
++
+ CADENCE MIPI-CSI2 BRIDGES
+ M:	Maxime Ripard <mripard@kernel.org>
+ L:	linux-media@vger.kernel.org
+@@ -4130,6 +4141,15 @@ X:	drivers/char/ipmi/
+ X:	drivers/char/random.c
+ X:	drivers/char/tpm/
+ 
++CHAR and MISC XILINX AI ENGINE DRIVER
++M:	Wendy Liang <wendy.liang@xilinx.com>
++M:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/soc/xilinx/xlnx,ai-engine.yaml
++F:	drivers/misc/xilinx-ai-engine/
++F:	include/linux/xlnx-ai-engine.h
++F:	include/uapi/linux/xlnx-ai-engine.h
++
+ CHECKPATCH
+ M:	Andy Whitcroft <apw@canonical.com>
+ M:	Joe Perches <joe@perches.com>
+@@ -4145,6 +4165,7 @@ F:	Documentation/translations/zh_CN/
+ 
+ CHIPIDEA USB HIGH SPEED DUAL ROLE CONTROLLER
+ M:	Peter Chen <Peter.Chen@nxp.com>
++R:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
+ L:	linux-usb@vger.kernel.org
+ S:	Maintained
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/peter.chen/usb.git
+@@ -5035,6 +5056,7 @@ F:	drivers/usb/dwc2/
+ 
+ DESIGNWARE USB3 DRD IP DRIVER
+ M:	Felipe Balbi <balbi@kernel.org>
++R:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
+ L:	linux-usb@vger.kernel.org
+ S:	Maintained
+ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/balbi/usb.git
+@@ -8647,6 +8669,14 @@ F:	Documentation/hwmon/ina2xx.rst
+ F:	drivers/hwmon/ina2xx.c
+ F:	include/linux/platform_data/ina2xx.h
+ 
++INA260 POWER MONITOR DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++R:	Raviteja Narayanam <raviteja.narayanam@xilinx.com>
++R:	Michal Simek <michal.simek@xilinx.com>
++S:	Maintained
++F:	drivers/iio/adc/ina260-adc.c
++F:	Documentation/devicetree/bindings/iio/adc/ti,ina260.yaml
++
+ INDUSTRY PACK SUBSYSTEM (IPACK)
+ M:	Samuel Iglesias Gonsalvez <siglesias@igalia.com>
+ M:	Jens Taprogge <jens.taprogge@taprogge.org>
+@@ -9942,6 +9972,12 @@ F:	drivers/ata/pata_ftide010.c
+ F:	drivers/ata/sata_gemini.c
+ F:	drivers/ata/sata_gemini.h
+ 
++LIBATA SATA AHCI CEVA CONTROLLER DRIVER
++M:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
++S:	Maintained
++F:	drivers/ata/ahci_ceva.c
++F:	Documentation/devicetree/bindings/ata/ahci-ceva.txt
++
+ LIBATA SATA AHCI PLATFORM devices support
+ M:	Hans de Goede <hdegoede@redhat.com>
+ M:	Jens Axboe <axboe@kernel.dk>
+@@ -18306,6 +18342,7 @@ F:	drivers/net/wireless/rndis_wlan.c
+ 
+ USB XHCI DRIVER
+ M:	Mathias Nyman <mathias.nyman@intel.com>
++R:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
+ L:	linux-usb@vger.kernel.org
+ S:	Supported
+ F:	drivers/usb/host/pci-quirks*
+@@ -18363,6 +18400,11 @@ F:	Documentation/driver-api/uio-howto.rst
+ F:	drivers/uio/
+ F:	include/linux/uio_driver.h
+ 
++USERSPACE I/O (UIO) DRIVER FOR XILINX AI ENGINE NPI
++M:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/soc/xilinx/xlnx,ai-engine-npi.txt
++
+ UTIL-LINUX PACKAGE
+ M:	Karel Zak <kzak@redhat.com>
+ L:	util-linux@vger.kernel.org
+@@ -19260,10 +19302,196 @@ F:	fs/xfs/
+ F:	include/uapi/linux/dqblk_xfs.h
+ F:	include/uapi/linux/fsmap.h
+ 
++XILINX AUDIO FORMATTER (ASoC) DRIVER
++M:	Maruthi Srinivas Bayyavarapu <maruthi.srinivas.bayyavarapu@xilinx.com>
++R:	Vishal Sagar <vishal.sagar@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/sound/xlnx,audio-formatter.txt
++F:	sound/soc/xilinx/xlnx_formatter_pcm.c
++
++XILINX AXI DMAENGINE DRIVER
++M:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++R:	Harini Katakam <harini.katakam@xilinx.com>
++S:	Maintained
++F:	drivers/dma/xilinx/xilinx_dma.c
++F:	Documentation/devicetree/bindings/dma/xilinx/xilinx_dma.txt
++
+ XILINX AXI ETHERNET DRIVER
+ M:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
+ S:	Maintained
+ F:	drivers/net/ethernet/xilinx/xilinx_axienet*
++F:	Documentation/devicetree/bindings/net/xilinx_axienet.txt
++
++XILINX AXI SPI DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++R:	Naga Sureshkumar Relli <naga.sureshkumar.relli@xilinx.com>
++S:	Maintained
++F:	drivers/spi/spi-xilinx.c
++F:	Documentation/devicetree/bindings/spi/spi-xilinx.txt
++
++XILINX FLEXNOC PERFORMANCE MONITOR DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++R:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
++R:	Srinivas Goud <srinivas.goud@xilinx.com>
++S:	Maintained
++F:	drivers/misc/xilinx_flex_pm.c
++F:	Documentation/devicetree/bindings/misc/xlnx,flexnoc-pm.txt
++
++XILINX AXI USB DRIVER
++M:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
++S:	Maintained
++F:	drivers/usb/gadget/udc/udc-xilinx.c
++F:	Documentation/devicetree/bindings/usb/udc-xilinx.txt
++
++XILINX AXI PERFORMANCE MONITOR DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++S:	Maintained
++F:	drivers/uio/uio_xilinx_apm.c
++F:	Documentation/devicetree/bindings/uio/xilinx_apm.txt
++
++XILINX CAN DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++R:	Naga Sureshkumar Relli <naga.sureshkumar.relli@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/net/can/xilinx_can.c
++F:	Documentation/devicetree/bindings/net/can/xilinx_can.txt
++
++XILINX DMA FRAMEBUFFER READ/WRITE DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/dma/xilinx/xilinx_frmbuf.txt
++F:	drivers/dma/xilinx/xilinx_frmbuf.c
++F:	include/linux/dma/xilinx_frmbuf.h
++
++XILINX EMACLITE DRIVER
++M:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++R:	Harini Katakam <harini.katakam@xilinx.com>
++S:	Maintained
++F:	drivers/net/ethernet/xilinx/xilinx_emaclite.c
++F:	Documentation/devicetree/bindings/net/xilinx_emaclite.txt
++
++XILINX GMII2RGMII DRIVER
++M:	Harini Katakam <harini.katakam@xilinx.com>
++R:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/net/phy/xilinx_gmii2rgmii.c
++W:	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842246/Xilinx+GMII2RGMII+convertor
++
++XILINX GQSPI ZYNQMP SPI DRIVER
++M:	Naga Sureshkumar Relli <naga.sureshkumar.relli@xilinx.com>
++R:	Amit Kumar Mahapatra <amit.kumar-mahapatra@xilinx.com>
++F:	drivers/spi/spi-zynqmp-gqspi.c
++W:	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18841754/Zynqmp+QSPI+Driver
++
++XILINX I2S AUDIO (ASoC) DRIVER
++M:	Maruthi Srinivas Bayyavarapu <maruthi.srinivas.bayyavarapu@xilinx.com>
++R:	Vishal Sagar <vishal.sagar@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/sound/xlnx,i2s.txt
++F:	sound/soc/xilinx/xlnx_i2s.c
++
++XILINX MEDIA AXIS SWITCH DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,v-axi4s-switch.txt
++F:	drivers/media/platform/xilinx/xilinx-axis-switch.c
++
++XILINX MEDIA CSI2RXSS DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++L:	git@xilinx.com
++S:	Maintained
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,csi2rxss.txt
++F:	drivers/media/platform/xilinx/xilinx-csi2rxss.c
++F:	include/uapi/linux/xilinx-csi2rxss.h
++
++XILINX MEDIA DEMOSAIC DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++L:	git@xilinx.com
++S:	Maintained
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,v-demosaic.txt
++F:	drivers/media/platform/xilinx/xilinx-demosaic.c
++
++XILINX MEDIA GAMMA DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,v-gamma-lut.txt
++F:	drivers/media/platform/xilinx/xilinx-gamma.c
++F:	drivers/media/platform/xilinx/xilinx-gamma-coeff.h
++
++XILINX MEDIA SDI RX DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,sdirxss.txt
++F:	drivers/media/platform/xilinx/xilinx-sdirxss.c
++F:	include/uapi/linux/xilinx-sdirxss.h
++
++XILINX MEDIA VPSS COLOR SPACE CONVERTER DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++L:	git@xilinx.com
++S:	Maintained
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,v-vpss-csc.txt
++F:	drivers/media/platform/xilinx/xilinx-vpss-csc.c
++
++XILINX MEDIA VPSS SCALER DRIVER
++M:	Vishal Sagar <vishal.sagar@xilinx.com>
++R:	Hyun Kwon <hyun.kwon@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/media/xilinx/xlnx,v-vpss-scaler.txt
++F:	drivers/media/platform/xilinx/xilinx-vpss-scaler.c
++
++XILINX PL SOUND CARD (ASoC) DRIVER
++M:	Maruthi Srinivas Bayyavarapu <maruthi.srinivas.bayyavarapu@xilinx.com>
++R:	Vishal Sagar <vishal.sagar@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	sound/soc/xilinx/xlnx_pl_snd_card.c
++
++XILINX QSPI ZYNQ SPI DRIVER
++M:	Naga Sureshkumar Relli <naga.sureshkumar.relli@xilinx.com>
++R:	Amit Kumar Mahapatra <amit.kumar-mahapatra@xilinx.com>
++F:	drivers/spi/spi-zynq-qspi.c
++W:	https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842262/Zynq+QSPI+Driver
++
++XILINX RTC ZYNQMP DRIVER
++M:	Neeli Srinivas <srinivas.neeli@xilinx.com>
++R:	Srinivas Goud <srinivas.goud@xilinx.com>
++R:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++S:	Maintained
++F:	drivers/rtc/rtc-zynqmp.c
++
++XILINX SDI AUDIO (ASoC) DRIVER
++M:	Maruthi Srinivas Bayyavarapu <maruthi.srinivas.bayyavarapu@xilinx.com>
++R:	Vishal Sagar <vishal.sagar@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/sound/xlnx,v-uhdsdi-audio.txt
++F:	sound/soc/xilinx/xlnx_sdi_audio.c
++
++XILINX SPDIF AUDIO (ASoC) DRIVER
++M:	Maruthi Srinivas Bayyavarapu <maruthi.srinivas.bayyavarapu@xilinx.com>
++R:	Vishal Sagar <vishal.sagar@xilinx.com>
++S:	Maintained
++L:	git@xilinx.com
++F:	Documentation/devicetree/bindings/sound/xlnx,spdif.txt
++F:	sound/soc/xilinx/xlnx_spdif.c
+ 
+ XILINX CAN DRIVER
+ M:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
+@@ -19284,12 +19512,35 @@ F:	drivers/misc/Makefile
+ F:	drivers/misc/xilinx_sdfec.c
+ F:	include/uapi/misc/xilinx_sdfec.h
+ 
++XILINX VERSAL SYSMON DRIVER
++M:	Anand Ashok Dumbre <anand.ashok.dumbre@xilinx.com>
++R:	Dragan Cvetic <dragan.cvetic@xilinx.com>
++L:	git@xilinx.com
++S:	Maintained
++F:	Documentation/devicetree/bindings/iio/adc/xlnx,versal-sysmon.yaml
++F:	drivers/iio/adc/versal-sysmon.c
++F:	drivers/iio/adc/versal-sysmon.h
++F:	include/linux/iio/adc/versal-sysmon-events.h
++
++XILINX VERSAL SECURE CONFIGURATION DRIVER
++M:	Harsha <harsha.harsha@xilinx.com>
++R:	Michal Simek <michal.simek@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/nvmem/xlnx,versal-sec-cfg.yaml
++F:	drivers/nvmem/xlnx_secure_config.c
++
+ XILINX UARTLITE SERIAL DRIVER
+ M:	Peter Korsgaard <jacmet@sunsite.dk>
+ L:	linux-serial@vger.kernel.org
+ S:	Maintained
+ F:	drivers/tty/serial/uartlite.c
+ 
++XILINX UARTPS DRIVER
++M:	Shubhrajyoti Datta <shubhrajyoti.datta@xilinx.com>
++S:	Maintained
++F:	drivers/tty/serial/xilinx_uartps.c
++F:	Documentation/devicetree/bindings/serial/cdns,uart.txt
++
+ XILINX VIDEO IP CORES
+ M:	Hyun Kwon <hyun.kwon@xilinx.com>
+ M:	Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+@@ -19318,6 +19569,101 @@ T:	git https://github.com/Xilinx/linux-xlnx.git
+ F:	Documentation/devicetree/bindings/phy/xlnx,zynqmp-psgtr.yaml
+ F:	drivers/phy/xilinx/phy-zynqmp.c
+ 
++XILINX ZYNQ FPGA MANAGER DRIVER
++M:	Nava Kishore Manne <nava.manne@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/fpga/zynq-fpga.c
++F:	Documentation/devicetree/bindings/fpga/xilinx-zynq-fpga-mgr.txt
++
++XILINX ZYNQMP AES DRIVER
++M:	Kalyani Akula <kalyani.akula@xilinx.com>
++M:	Nava Kishore Manne <nava.manne@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/crypto/zynqmp-aes.c
++F:	Documentation/devicetree/bindings/crypto/xlnx,zynqmp-aes.txt
++
++XILINX ZYNQMP DMAENGINE DRIVER
++M:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++R:	Radhey Shyam Pandey <radhey.shyam.pandey@xilinx.com>
++R:	Harini Katakam <harini.katakam@xilinx.com>
++S:	Maintained
++F:	drivers/dma/xilinx/zynqmp_dma.c
++F:	Documentation/devicetree/bindings/dma/xilinx/zynqmp_dma.txt
++
++XILINX ZYNQMP FPGA MANAGER DRIVER
++M:	Nava Kishore Manne <nava.manne@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/fpga/zynqmp-fpga.c
++F:	Documentation/devicetree/bindings/fpga/xilinx-zynqmp-fpga-mgr.txt
++
++ZYNQMP IPI MAILBOX CONTROLLER DRIVER
++M:	Wendy Liang <wendy.liang@xilinx.com>
++S:	Maintained
++F:	drivers/mailbox/zynqmp-ipi-mailbox.c
++F:	include/linux/mailbox/zynqmp-ipi-message.h
++F:	Documentation/devicetree/bindings/mailbox/xlnx,zynqmp-ipi-mailbox.txt
++
++XILINX VERSAL DDRMC EDAC DRIVER
++M:	Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>
++R:	Michal Simek <michal.simek@xilinx.com>
++R:	Srinivas Goud <srinivas.goud@xilinx.com>
++S:	Maintained
++F:	drivers/edac/xilinx_ddrmc_edac.c
++F:	Documentation/devicetree/bindings/edac/xlnx,versal-ddrmc-edac.yaml
++
++XILINX ZYNQMP PHY DRIVER
++M:	Anurag Kumar Vulisha <anurag.kumar.vulisha@xilinx.com>
++S:	Maintained
++F:	drivers/phy/phy-zynqmp.c
++F:	Documentation/devicetree/bindings/phy/phy-zynqmp.txt
++
++XILINX ZYNQMP R5 REMOTE PROCESSOR (REMOTEPROC) SUBSYSTEM
++M:	Wendy Liang <wendy.liang@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/remoteproc/xilinx,zynqmp-r5-remoteproc.txt
++F:	drivers/remoteproc/zynqmp_r5_remoteproc.c
++
++XILINX ZYNQMP RSA DRIVER
++M:	Nava Kishore Manne <nava.manne@xilinx.com>
++M:	Kalyani Akula <kalyani.akula@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/crypto/zynqmp-rsa.c
++F:	Documentation/devicetree/bindings/crypto/zynqmp-rsa.txt
++
++XILINX ZYNQMP SHA DRIVER
++M:	Nava Kishore Manne <nava.manne@xilinx.com>
++M:	Kalyani Akula <kalyani.akula@xilinx.com>
++R:	Appana Durga Kedareswara rao <appana.durga.rao@xilinx.com>
++S:	Maintained
++F:	drivers/crypto/zynqmp-sha.c
++F:	Documentation/devicetree/bindings/crypto/zynqmp-sha.txt
++
++XILINX SD-FEC IP CORES
++M:	Derek Kiernan <derek.kiernan@xilinx.com>
++M:	Dragan Cvetic <dragan.cvetic@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/misc/xlnx,sd-fec.txt
++F:	Documentation/misc-devices/xilinx_sdfec.rst
++F:	drivers/misc/xilinx_sdfec.c
++F:	drivers/misc/Kconfig
++F:	drivers/misc/Makefile
++F:	include/uapi/misc/xilinx_sdfec.h
++
++XILINX EVENT MANAGEMENT DRIVER
++M:	Abhyuday Godhasara <abhyuday.godhasara@xilinx.com>
++S:	Maintained
++F:	drivers/soc/xilinx/xlnx_event_manager.c
++F:	include/linux/firmware/xlnx-event-manager.h
++
++XILINX ZYNQMP POWER DRIVER
++M:	Abhyuday Godhasara <abhyuday.godhasara@xilinx.com>
++S:	Maintained
++F:	Documentation/devicetree/bindings/power/reset/xlnx,zynqmp-power.yaml
++
+ XILLYBUS DRIVER
+ M:	Eli Billauer <eli.billauer@gmail.com>
+ L:	linux-kernel@vger.kernel.org
+diff --git a/samples/xilinx_apm/Makefile b/samples/xilinx_apm/Makefile
+new file mode 100644
+index 000000000..6182750c4
+--- /dev/null
++++ b/samples/xilinx_apm/Makefile
+@@ -0,0 +1,71 @@
++#
++# 'make depend' uses makedepend to automatically generate dependencies
++#               (dependencies are added to end of Makefile)
++# 'make'        build executable file 'mycc'
++# 'make clean'  removes all .o and executable files
++#
++
++# define the C compiler to use
++CC = $(CROSS_COMPILE)gcc
++
++# define any compile-time flags
++CFLAGS = -Wall -g
++
++# define any directories containing header files other than /usr/include
++#
++INCLUDES =
++
++# define library paths in addition to /usr/lib
++#   if I wanted to include libraries not in /usr/lib I'd specify
++#   their path using -Lpath, something like:
++LFLAGS =
++
++# define any libraries to link into executable:
++#   if I want to link in libraries (libx.so or libx.a) I use the -llibname
++#   option, something like (this will link in libmylib.so and libm.so:
++LIBS =  -lm
++
++# define the C source files
++SRCS = main.c xaxipmon.c
++
++# define the C object files
++#
++# This uses Suffix Replacement within a macro:
++#   $(name:string1=string2)
++#         For each word in 'name' replace 'string1' with 'string2'
++# Below we are replacing the suffix .c of all words in the macro SRCS
++# with the .o suffix
++#
++OBJS = $(SRCS:.c=.o)
++
++# define the executable file
++MAIN = main
++
++#
++# The following part of the makefile is generic; it can be used to
++# build any executable just by changing the definitions above and by
++# deleting dependencies appended to the file from 'make depend'
++#
++
++.PHONY: depend clean
++
++all:    $(MAIN)
++	@echo  Xilinx AXI Performance Monitor application compiled
++
++$(MAIN): $(OBJS)
++	$(CC) $(CFLAGS) $(INCLUDES) -o $(MAIN) $(OBJS) $(LFLAGS) $(LIBS)
++
++# this is a suffix replacement rule for building .o's from .c's
++# it uses automatic variables $<: the name of the prerequisite of
++# the rule(a .c file) and $@: the name of the target of the rule (a .o file)
++# (see the gnu make manual section about automatic variables)
++.c.o:
++	$(CC) $(CFLAGS) $(INCLUDES) -c $<  -o $@
++
++clean:
++	$(RM) *.o *~ $(MAIN)
++
++depend: $(SRCS)
++	makedepend $(INCLUDES) $^
++
++# DO NOT DELETE THIS LINE -- make depend needs it
+diff --git a/samples/xilinx_apm/main.c b/samples/xilinx_apm/main.c
+new file mode 100644
+index 000000000..2a7eda4ab
+--- /dev/null
++++ b/samples/xilinx_apm/main.c
+@@ -0,0 +1,134 @@
++/*
++ * Xilinx AXI Performance Monitor Example
++ *
++ * Copyright (c) 2013 Xilinx Inc.
++ *
++ * The code may be used by anyone for any purpose and can serve as a
++ * starting point for developing applications using Xilinx AXI
++ * Performance Monitor.
++ *
++ * This example based on Xilinx AXI Performance Monitor UIO driver shows
++ * sequence to read metrics from Xilinx AXI Performance Monitor IP.
++ * User need to provide the uio device file with option -d:
++ * main -d /dev/uio0, say /dev/uio0 as device file for AXI Performance
++ * Monitor driver. User need not clear Interrupt Status Register after
++ * waiting for interrupt on read since driver clears it.
++ */
++#include <stdio.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <errno.h>
++#include <sys/msg.h>
++#include <sys/ipc.h>
++#include <stdint.h>
++#include "xaxipmon.h"
++
++#define MAP_SIZE 4096
++
++void usage(void)
++{
++	printf("*argv[0] -d <UIO_DEV_FILE> -i|-o <VALUE>\n");
++	printf(" -d UIO device file. e.g. /dev/uio0\n");
++	return;
++}
++
++static void start(int fd)
++{
++	u8 slot = 2;
++	int tmp;
++	u32 isr;
++
++	setmetrics(slot, XAPM_METRIC_SET_4, XAPM_METRIC_COUNTER_0);
++	setsampleinterval(0x3FFFFFF);
++
++	loadsic();
++
++	intrenable(XAPM_IXR_SIC_OVERFLOW_MASK);
++
++	intrglobalenable();
++
++	enablemetricscounter();
++
++	enablesic();
++
++	isr = intrgetstatus();
++	/* Wait for SIC overflow interrupt */
++	if (read(fd, &tmp, 4) < 0)
++		perror("Read\n");
++	/* Driver clears the interrupt and occured interrupt status is
++		stored in param->isr */
++	isr = intrgetstatus();
++	if (isr & XAPM_IXR_SIC_OVERFLOW_MASK)
++		disablesic();
++
++	disablemetricscounter();
++
++	intrdisable(XAPM_IXR_SIC_OVERFLOW_MASK);
++
++	intrglobaldisable();
++
++	printf("Required metrics: %u\n",
++		getsampledmetriccounter(XAPM_METRIC_COUNTER_0) *
++		params->scalefactor);
++}
++
++int main(int argc, char *argv[])
++{
++	int c;
++	char *uiod;
++	int fd;
++
++	while ((c = getopt(argc, argv, "d:h")) != -1) {
++		switch (c) {
++		case 'd':
++			uiod = optarg;
++			break;
++		case 'h':
++			usage();
++			return 0;
++		default:
++			printf("invalid option: %c\n", (char)c);
++			usage();
++			return -1;
++		}
++	}
++
++	/* Open the UIO device file */
++	fd = open(uiod, O_RDWR);
++	if (fd < 1) {
++		perror(argv[0]);
++		printf("Invalid UIO device file:%s.\n", uiod);
++		usage();
++		return -1;
++	}
++
++	baseaddr = (ulong)mmap(0, MAP_SIZE , PROT_READ|PROT_WRITE,
++				MAP_SHARED , fd, 0);
++	if ((u32 *)baseaddr == MAP_FAILED)
++		perror("mmap failed\n");
++
++	/* mmap the UIO device */
++	params = (struct xapm_param *)mmap(0, MAP_SIZE , PROT_READ|PROT_WRITE,
++				MAP_SHARED , fd, getpagesize());
++	if (params == MAP_FAILED)
++		perror("mmap failed\n");
++
++	if (params->mode == 1)
++		printf("AXI PMON is in Advanced Mode\n");
++	else if (params->mode == 2)
++		printf("AXI PMON is in Profile Mode\n");
++	else
++		printf("AXI PMON is in trace Mode\n");
++
++	start(fd);
++
++	close(fd);
++	munmap((u32 *)baseaddr, MAP_SIZE);
++	munmap(params, MAP_SIZE);
++
++	return 0;
++}
+diff --git a/samples/xilinx_apm/xaxipmon.c b/samples/xilinx_apm/xaxipmon.c
+new file mode 100644
+index 000000000..94a4e7511
+--- /dev/null
++++ b/samples/xilinx_apm/xaxipmon.c
+@@ -0,0 +1,1269 @@
++#include "xaxipmon.h"
++/*****************************************************************************/
++/**
++*
++* This function resets all Metric Counters and Sampled Metric Counters of
++* AXI Performance Monitor.
++*
++* @return	XST_SUCCESS
++*
++*
++* @note		None.
++*
++******************************************************************************/
++int resetmetriccounter(void)
++{
++	u32 regval;
++
++	/*
++	 * Write the reset value to the Control register to reset
++	 * Metric counters
++	 */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++					(regval | XAPM_CR_MCNTR_RESET_MASK));
++	/*
++	 * Release from Reset
++	 */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				(regval & ~(XAPM_CR_MCNTR_RESET_MASK)));
++	return XST_SUCCESS;
++
++}
++
++/*****************************************************************************/
++/**
++*
++* This function resets Global Clock Counter of AXI Performance Monitor
++*
++* @return	None.
++*
++* @note		None.
++*
++******************************************************************************/
++void resetglobalclkcounter(void)
++{
++
++	u32 regval;
++
++	/*
++	 * Write the reset value to the Control register to reset
++	 * Global Clock Counter
++	 */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++					(regval | XAPM_CR_GCC_RESET_MASK));
++
++	/*
++	 * Release from Reset
++	 */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				(regval & ~(XAPM_CR_GCC_RESET_MASK)));
++
++}
++
++/*****************************************************************************/
++/**
++*
++* This function resets Streaming FIFO of AXI Performance Monitor
++*
++* @return	XST_SUCCESS
++*
++* @note		None.
++*
++******************************************************************************/
++int resetfifo(void)
++{
++	u32 regval;
++
++	/* Check Event Logging is enabled in Hardware */
++	if (params->eventlog == 0)
++		/*Event Logging not enabled in Hardware*/
++		return XST_SUCCESS;
++
++	/*
++	 * Write the reset value to the Control register to reset
++	 * FIFO
++	 */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++					(regval | XAPM_CR_FIFO_RESET_MASK));
++	/*
++	 * Release from Reset
++	 */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				(regval & ~(XAPM_CR_FIFO_RESET_MASK)));
++
++	return XST_SUCCESS;
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Ranges for Incrementers depending on parameters passed.
++*
++* @param	incrementer specifies the Incrementer for which Ranges
++*		need to be set
++* @param	rangehigh specifies the Upper limit in 32 bit Register
++* @param	rangelow specifies the Lower limit in 32 bit Register
++*
++* @return	None.
++*
++* @note		None
++*
++*****************************************************************************/
++void setincrementerrange(u8 incrementer, u16 rangehigh, u16 rangelow)
++{
++	u32 regval;
++
++	/*
++	 * Write to the specified Range register
++	 */
++	regval = rangehigh << 16;
++	regval |= rangelow;
++	writereg(baseaddr,
++		(XAPM_RANGE0_OFFSET + (incrementer * 16)), regval);
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the Ranges of Incrementers Registers.
++*
++* @param	incrementer specifies the Incrementer for which Ranges
++*		need to be returned.
++* @param	rangehigh specifies the user reference variable which returns
++*		the Upper Range Value of the specified Incrementer.
++* @param	rangelow specifies the user reference variable which returns
++*		the Lower Range Value of the specified Incrementer.
++*
++* @return	None.
++*
++* @note		None
++*
++*****************************************************************************/
++void getincrementerrange(u8 incrementer, u16 *rangehigh, u16 *rangelow)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, (XAPM_RANGE0_OFFSET +
++					(incrementer * 16)));
++
++	*rangelow = regval & 0xFFFF;
++	*rangehigh = (regval >> 16) & 0xFFFF;
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets the Sample Interval Register
++*
++* @param	sampleinterval is the Sample Interval
++*
++* @return	None
++*
++* @note		None.
++*
++*****************************************************************************/
++void setsampleinterval(u32 sampleinterval)
++{
++	/*
++	 * Set Sample Interval
++	 */
++	writereg(baseaddr, XAPM_SI_LOW_OFFSET, sampleinterval);
++
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of Sample Interval Register
++*
++* @param	sampleinterval is a pointer where Sample Interval register
++*		contents are returned.
++* @return	None.
++*
++* @note		None.
++*
++******************************************************************************/
++void getsampleinterval(u32 *sampleinterval)
++{
++	/*
++	 * Set Sample Interval Lower
++	 */
++	*sampleinterval = readreg(baseaddr, XAPM_SI_LOW_OFFSET);
++
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets metrics for specified Counter in the corresponding
++* Metric Selector Register.
++*
++* @param	slot is the slot ID for which specified counter has to
++*		be connected.
++* @param	metrics is one of the Metric Sets. User has to use
++*		XAPM_METRIC_SET_* macros in xaxipmon.h for this parameter
++* @param	counter is the Counter Number.
++*		The valid values are 0 to 9.
++*
++* @return	XST_SUCCESS if Success
++*		XST_FAILURE if Failure
++*
++* @note		None.
++*
++*****************************************************************************/
++int setmetrics(u8 slot, u8 metrics, u8 counter)
++{
++	u32 regval;
++	u32 mask;
++
++	/* Find mask value to force zero in counternum byte range */
++	if (counter == 0 || counter == 4 || counter == 8)
++		mask = 0xFFFFFF00;
++	else if (counter == 1 || counter == 5 || counter == 9)
++		mask = 0xFFFF00FF;
++	else if (counter == 2 || counter == 6)
++		mask = 0xFF00FFFF;
++	else
++		mask = 0x00FFFFFF;
++
++	if (counter <= 3) {
++		regval = readreg(baseaddr, XAPM_MSR0_OFFSET);
++		regval = regval & mask;
++		regval = regval | (metrics << (counter * 8));
++		regval = regval | (slot << (counter * 8 + 5));
++		writereg(baseaddr, XAPM_MSR0_OFFSET, regval);
++	} else if ((counter >= 4) && (counter <= 7)) {
++		counter = counter - 4;
++		regval = readreg(baseaddr, XAPM_MSR1_OFFSET);
++		regval = regval & mask;
++		regval = regval | (metrics << (counter * 8));
++		regval = regval | (slot << (counter * 8 + 5));
++		writereg(baseaddr, XAPM_MSR1_OFFSET, regval);
++	} else {
++		counter = counter - 8;
++		regval = readreg(baseaddr, XAPM_MSR2_OFFSET);
++
++		regval = regval & mask;
++		regval = regval | (metrics << (counter * 8));
++		regval = regval | (slot << (counter * 8 + 5));
++		writereg(baseaddr, XAPM_MSR2_OFFSET, regval);
++	}
++	return XST_SUCCESS;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function returns metrics in the specified Counter from the corresponding
++* Metric Selector Register.
++*
++* @param	counter is the Counter Number.
++*		The valid values are 0 to 9.
++* @param	metrics is a reference parameter from application where metrics
++*		of specified counter is filled.
++* @praram	slot is a reference parameter in which slot Id of
++*		specified counter is filled
++* @return	XST_SUCCESS if Success
++*		XST_FAILURE if Failure
++*
++* @note		None.
++*
++*****************************************************************************/
++int getmetrics(u8 counter, u8 *metrics, u8 *slot)
++{
++	u32 regval;
++
++	if (counter <= 3) {
++		regval = readreg(baseaddr, XAPM_MSR0_OFFSET);
++		*metrics = (regval >> (counter * 8)) & 0x1F;
++		*slot	= (regval >> (counter * 8 + 5)) & 0x7;
++	} else if ((counter >= 4) && (counter <= 7)) {
++		counter = counter - 4;
++		regval = readreg(baseaddr, XAPM_MSR1_OFFSET);
++		*metrics = (regval >> (counter * 8)) & 0x1F;
++		*slot	= (regval >> (counter * 8 + 5)) & 0x7;
++	} else {
++		counter = counter - 8;
++		regval = readreg(baseaddr, XAPM_MSR2_OFFSET);
++		*metrics = (regval >> (counter * 8)) & 0x1F;
++		*slot	= (regval >> (counter * 8 + 5)) & 0x7;
++	}
++	return XST_SUCCESS;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of the Global Clock Counter Register.
++*
++* @param	cnthigh is the user space pointer with which upper 32 bits
++*		of Global Clock Counter has to be filled
++* @param	cntlow is the user space pointer with which lower 32 bits
++*		of Global Clock Counter has to be filled
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void getglobalclkcounter(u32 *cnthigh, u32 *cntlow)
++{
++	*cnthigh = 0x0;
++	*cntlow  = 0x0;
++
++	/*
++	 * If Counter width is 64 bit then Counter Value has to be
++	 * filled at CntHighValue address also.
++	 */
++	if (params->globalcntwidth == 64) {
++		/* Bits[63:32] exists at XAPM_GCC_HIGH_OFFSET */
++		*cnthigh = readreg(baseaddr, XAPM_GCC_HIGH_OFFSET);
++	}
++	/* Bits[31:0] exists at XAPM_GCC_LOW_OFFSET */
++	*cntlow = readreg(baseaddr, XAPM_GCC_LOW_OFFSET);
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of the Metric Counter Register.
++*
++* @param	counter is the number of the Metric Counter to be read.
++*		Use the XAPM_METRIC_COUNTER* defines for the counter number in
++*		xaxipmon.h. The valid values are 0 (XAPM_METRIC_COUNTER_0) to
++*		9 (XAPM_METRIC_COUNTER_9).
++* @return	regval is the content of specified Metric Counter.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getmetriccounter(u32 counter)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr,
++				(XAPM_MC0_OFFSET + (counter * 16)));
++	return regval;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of the Sampled Metric Counter Register.
++*
++* @param	counter is the number of the Sampled Metric Counter to read.
++*		Use the XAPM_METRIC_COUNTER* defines for the counter number in
++*		xaxipmon.h. The valid values are 0 (XAPM_METRIC_COUNTER_0) to
++*		9 (XAPM_METRIC_COUNTER_9).
++*
++* @return	regval is the content of specified Sampled Metric Counter.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getsampledmetriccounter(u32 counter)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, (XAPM_SMC0_OFFSET +
++						(counter * 16)));
++	return regval;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of the Incrementer Register.
++*
++* @param	incrementer is the number of the Incrementer register to
++*		read.Use the XAPM_INCREMENTER_* defines for the Incrementer
++*		number.The valid values are 0 (XAPM_INCREMENTER_0) to
++*		9 (XAPM_INCREMENTER_9).
++* @param	incrementer is the number of the specified Incrementer
++*		register
++* @return	regval is content of specified Metric Incrementer register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getincrementer(u32 incrementer)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, (XAPM_INC0_OFFSET +
++						(incrementer * 16)));
++	return regval;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the contents of the Sampled Incrementer Register.
++*
++* @param	incrementer is the number of the Sampled Incrementer
++*		register to read.Use the XAPM_INCREMENTER_* defines for the
++*		Incrementer number.The valid values are 0 (XAPM_INCREMENTER_0)
++*		to 9 (XAPM_INCREMENTER_9).
++* @param	incrementer is the number of the specified Sampled
++*		Incrementer register
++* @return	regval is content of specified Sampled Incrementer register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getsampledincrementer(u32 incrementer)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, (XAPM_SINC0_OFFSET +
++					(incrementer * 16)));
++	return regval;
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Software-written Data Register.
++*
++* @param	swdata is the Software written Data.
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void setswdatareg(u32 swdata)
++{
++	/*
++	 * Set Software-written Data Register
++	 */
++	writereg(baseaddr, XAPM_SWD_OFFSET, swdata);
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns contents of Software-written Data Register.
++*
++* @return	swdata.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getswdatareg(void)
++{
++	u32 swdata;
++
++	/*
++	 * Set Metric Selector Register
++	 */
++	swdata = (u32)readreg(baseaddr, XAPM_SWD_OFFSET);
++	return swdata;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables the following in the AXI Performance Monitor:
++*   - Event logging
++*
++* @param        flagenables is a value to write to the flag enables
++*               register defined by XAPM_FEC_OFFSET. It is recommended
++*               to use the XAPM_FEC_*_MASK mask bits to generate.
++*               A value of 0x0 will disable all events to the event
++*               log streaming FIFO.
++*
++* @return       XST_SUCCESS
++*
++* @note         None
++*
++******************************************************************************/
++int starteventlog(u32 flagenables)
++{
++	u32 regval;
++
++	/* Read current register value */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	/* Now write to flag enables register */
++	writereg(baseaddr, XAPM_FEC_OFFSET, flagenables);
++	/* Write the new value to the Control register to
++	 *	enable event logging */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++			regval | XAPM_CR_EVENTLOG_ENABLE_MASK);
++	return XST_SUCCESS;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function disables the following in the AXI Performance Monitor:
++*   - Event logging
++*
++* @return       XST_SUCCESS
++*
++* @note         None
++*
++******************************************************************************/
++int stopeventlog(void)
++{
++	u32 regval;
++
++	/* Read current register value */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	/* Write the new value to the Control register to disable
++	 * event logging */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				regval & ~XAPM_CR_EVENTLOG_ENABLE_MASK);
++
++	return XST_SUCCESS;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables the following in the AXI Performance Monitor:
++*   - Global clock counter
++*   - All metric counters
++*   - All sampled metric counters
++*
++* @param    sampleinterval is the sample interval
++* @return   XST_SUCCESS
++*
++* @note	    None
++******************************************************************************/
++int startcounters(u32 sampleinterval)
++{
++	u32 regval;
++
++	/* Read current register value */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	/* Global Clock Counter is present in Advanced Mode only */
++	if (params->mode == 1)
++		regval = regval | XAPM_CR_GCC_ENABLE_MASK;
++	/*
++	 * Write the new value to the Control register to enable
++	 * global clock counter and metric counters
++	 */
++	writereg(baseaddr, XAPM_CTL_OFFSET, regval | XAPM_CR_MCNTR_ENABLE_MASK);
++
++	/* Set, enable, and load sampled counters */
++	setsampleinterval(sampleinterval);
++	loadsic();
++	enablesic();
++
++	return XST_SUCCESS;
++}
++
++/****************************************************************************/
++/**
++*
++* This function disables the following in the AXI Performance Monitor:
++*   - Global clock counter
++*   - All metric counters
++*
++* @return       XST_SUCCESS
++*
++* @note         None
++*
++******************************************************************************/
++int stopcounters(void)
++{
++	u32 regval;
++
++	/* Read current register value */
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	/* Global Clock Counter is present in Advanced Mode only */
++	if (params->mode == 1)
++		regval = regval & ~XAPM_CR_GCC_ENABLE_MASK;
++
++	/*
++	 * Write the new value to the Control register to disable
++	 * global clock counter and metric counters
++	 */
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++			regval & ~XAPM_CR_MCNTR_ENABLE_MASK);
++
++	return XST_SUCCESS;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables Metric Counters.
++*
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void enablemetricscounter(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++					regval | XAPM_CR_MCNTR_ENABLE_MASK);
++}
++/****************************************************************************/
++/**
++*
++* This function disables the Metric Counters.
++*
++* @return	None
++*
++* @note		None
++*
++*****************************************************************************/
++void disablemetricscounter(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++					regval & ~(XAPM_CR_MCNTR_ENABLE_MASK));
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets the Upper and Lower Ranges for specified Metric Counter
++* Log Enable Register.Event Logging starts when corresponding Metric Counter
++* value falls in between these ranges
++*
++* @param	counter is the Metric Counter number for which
++*		Ranges are to be assigned.Use the XAPM_METRIC_COUNTER*
++*		defines for the counter number in xaxipmon.h.
++*		The valid values are 0 (XAPM_METRIC_COUNTER_0) to
++*		9 (XAPM_METRIC_COUNTER_9).
++* @param	rangehigh specifies the Upper limit in 32 bit Register
++* @param	rangelow specifies the Lower limit in 32 bit Register
++* @return	None
++*
++* @note		None.
++*
++*****************************************************************************/
++void setlogenableranges(u32 counter, u16 rangehigh, u16 rangelow)
++{
++	u32 regval;
++
++	/*
++	 * Write the specified Ranges to corresponding Metric Counter Log
++	 * Enable Register
++	 */
++	regval = rangehigh << 16;
++	regval |= rangelow;
++	writereg(baseaddr, (XAPM_MC0LOGEN_OFFSET +
++					(counter * 16)), regval);
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns the Ranges of specified Metric Counter Log
++* Enable Register.
++*
++* @param	counter is the Metric Counter number for which
++*		Ranges are to be returned.Use the XAPM_METRIC_COUNTER*
++*		defines for the counter number in xaxipmon.h.
++*		The valid values are 0 (XAPM_METRIC_COUNTER_0) to
++*		9 (XAPM_METRIC_COUNTER_9).
++*
++* @param	rangehigh specifies the user reference variable which returns
++*		the Upper Range Value of the specified Metric Counter
++*		Log Enable Register.
++* @param	rangelow specifies the user reference variable which returns
++*		the Lower Range Value of the specified Metric Counter
++*		Log Enable Register.
++*
++* @note		None.
++*
++*****************************************************************************/
++void getlogenableranges(u32 counter, u16 *rangehigh, u16 *rangelow)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr,
++				(XAPM_MC0LOGEN_OFFSET + (counter * 16)));
++
++	*rangelow = regval & 0xFFFF;
++	*rangehigh = (regval >> 16) & 0xFFFF;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables Event Logging.
++*
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void enableeventlog(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				regval | XAPM_CR_EVENTLOG_ENABLE_MASK);
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables External trigger pulse so that Metric Counters can be
++* started on external trigger pulse for a slot.
++*
++*
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void enablemctrigger(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++			regval | XAPM_CR_MCNTR_EXTTRIGGER_MASK);
++}
++
++/****************************************************************************/
++/**
++*
++* This function disables the External trigger pulse used to start Metric
++* Counters on external trigger pulse for a slot.
++*
++* @return	None
++*
++* @note		None
++*
++*****************************************************************************/
++void disablemctrigger(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++			regval & ~(XAPM_CR_MCNTR_EXTTRIGGER_MASK));
++}
++
++/*****************************************************************************/
++/**
++*
++* This function enables External trigger pulse for Event Log
++* so that Event Logging can be started on external trigger pulse for a slot.
++*
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void enableeventlogtrigger(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				regval | XAPM_CR_EVTLOG_EXTTRIGGER_MASK);
++}
++
++/****************************************************************************/
++/**
++*
++* This function disables the External trigger pulse used to start Event
++* Log on external trigger pulse for a slot.
++*
++* @return	None
++*
++* @note		None
++*
++*****************************************************************************/
++void disableeventlogtrigger(void)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++
++	writereg(baseaddr, XAPM_CTL_OFFSET,
++				regval & ~(XAPM_CR_EVTLOG_EXTTRIGGER_MASK));
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns a name for a given Metric.
++*
++* @param        metrics is one of the Metric Sets. User has to use
++*               XAPM_METRIC_SET_* macros in xaxipmon.h for this parameter
++*
++* @return       const char *
++*
++* @note         None
++*
++*****************************************************************************/
++const char *getmetricname(u8 metrics)
++{
++	if (metrics == XAPM_METRIC_SET_0)
++		return "Write Transaction Count";
++	if (metrics == XAPM_METRIC_SET_1)
++		return "Read Transaction Count";
++	if (metrics == XAPM_METRIC_SET_2)
++		return "Write Byte Count";
++	if (metrics == XAPM_METRIC_SET_3)
++		return "Read Byte Count";
++	if (metrics == XAPM_METRIC_SET_4)
++		return "Write Beat Count";
++	if (metrics == XAPM_METRIC_SET_5)
++		return "Total Read Latency";
++	if (metrics == XAPM_METRIC_SET_6)
++		return "Total Write Latency";
++	if (metrics == XAPM_METRIC_SET_7)
++		return "Slv_Wr_Idle_Cnt";
++	if (metrics == XAPM_METRIC_SET_8)
++		return "Mst_Rd_Idle_Cnt";
++	if (metrics == XAPM_METRIC_SET_9)
++		return "Num_BValids";
++	if (metrics == XAPM_METRIC_SET_10)
++		return "Num_WLasts";
++	if (metrics == XAPM_METRIC_SET_11)
++		return "Num_RLasts";
++	if (metrics == XAPM_METRIC_SET_12)
++		return "Minimum Write Latency";
++	if (metrics == XAPM_METRIC_SET_13)
++		return "Maximum Write Latency";
++	if (metrics == XAPM_METRIC_SET_14)
++		return "Minimum Read Latency";
++	if (metrics == XAPM_METRIC_SET_15)
++		return "Maximum Read Latency";
++	if (metrics == XAPM_METRIC_SET_16)
++		return "Transfer Cycle Count";
++	if (metrics == XAPM_METRIC_SET_17)
++		return "Packet Count";
++	if (metrics == XAPM_METRIC_SET_18)
++		return "Data Byte Count";
++	if (metrics == XAPM_METRIC_SET_19)
++		return "Position Byte Count";
++	if (metrics == XAPM_METRIC_SET_20)
++		return "Null Byte Count";
++	if (metrics == XAPM_METRIC_SET_21)
++		return "Slv_Idle_Cnt";
++	if (metrics == XAPM_METRIC_SET_22)
++		return "Mst_Idle_Cnt";
++	if (metrics == XAPM_METRIC_SET_30)
++		return "External event count";
++	return "Unsupported";
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Write ID in Latency ID register to capture Write
++* Latency metrics.
++*
++* @param	writeid is the Write ID to be written in Latency ID register.
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void setwriteid(u32 writeid)
++{
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_ID_OFFSET);
++		regval = regval & ~(XAPM_ID_WID_MASK);
++		regval = regval | writeid;
++		writereg(baseaddr, XAPM_ID_OFFSET, regval);
++	} else {
++		writereg(baseaddr, XAPM_ID_OFFSET, writeid);
++	}
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Read ID in Latency ID register to capture
++* Read Latency metrics.
++*
++* @param	readid is the Read ID to be written in Latency ID register.
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void setreadid(u32 readid)
++{
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_ID_OFFSET);
++		regval = regval & ~(XAPM_ID_RID_MASK);
++		regval = regval | (readid << 16);
++		writereg(baseaddr, XAPM_ID_OFFSET, regval);
++	} else {
++		writereg(baseaddr, XAPM_RID_OFFSET, readid);
++	}
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns Write ID in Latency ID register.
++*
++* @return	writeid is the required Write ID in Latency ID register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getwriteid(void)
++{
++
++	u32 writeid;
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_ID_OFFSET);
++		writeid = regval & XAPM_ID_WID_MASK;
++	} else {
++		writeid = XAPM_IDMASK_OFFSET;
++	}
++
++	return writeid;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns Read ID in Latency ID register.
++*
++* @return	readid is the required Read ID in Latency ID register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getreadid(void)
++{
++
++	u32 readid;
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_ID_OFFSET);
++		regval = regval & XAPM_ID_RID_MASK;
++		readid = regval >> 16;
++	} else {
++		readid = XAPM_RID_OFFSET;
++	}
++
++	return readid;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function sets Latency Start point to calculate write latency.
++*
++* @param	Param can be 0 - XAPM_LATENCY_ADDR_ISSUE
++*		or 1 - XAPM_LATENCY_ADDR_ACCEPT
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void setwrlatencystart(u8 param)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	if (param == XAPM_LATENCY_ADDR_ACCEPT)
++		writereg(baseaddr, XAPM_CTL_OFFSET, regval |
++				XAPM_CR_WRLATENCY_START_MASK);
++	else
++		writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr,
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_WRLATENCY_START_MASK));
++}
++
++/*****************************************************************************/
++/**
++*
++* This function sets Latency End point to calculate write latency.
++*
++* @param	Param can be 0 - XAPM_LATENCY_LASTWR
++*		or 1 - XAPM_LATENCY_FIRSTWR
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void setwrlatencyend(u8 param)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	if (param == XAPM_LATENCY_FIRSTWR)
++		writereg(baseaddr, XAPM_CTL_OFFSET, regval |
++					XAPM_CR_WRLATENCY_END_MASK);
++	else
++		writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr,
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_WRLATENCY_END_MASK));
++}
++
++/*****************************************************************************/
++/**
++*
++* This function sets Latency Start point to calculate read latency.
++*
++* @param	Param can be 0 - XAPM_LATENCY_ADDR_ISSUE
++*		or 1 - XAPM_LATENCY_ADDR_ACCEPT
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void setrdlatencystart(u8 param)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	if (param == XAPM_LATENCY_ADDR_ACCEPT)
++		writereg(baseaddr, XAPM_CTL_OFFSET, regval |
++					XAPM_CR_RDLATENCY_START_MASK);
++	else
++		writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr,
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_RDLATENCY_START_MASK));
++}
++
++/*****************************************************************************/
++/**
++*
++* This function sets Latency End point to calculate read latency.
++*
++* @param	Param can be 0 - XAPM_LATENCY_LASTRD
++*		or 1 - XAPM_LATENCY_FIRSTRD
++* @return	None
++*
++* @note		None
++*
++******************************************************************************/
++void setrdlatencyend(u8 param)
++{
++	u32 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	if (param == XAPM_LATENCY_FIRSTRD)
++		writereg(baseaddr, XAPM_CTL_OFFSET, regval |
++				XAPM_CR_RDLATENCY_END_MASK);
++	else
++		writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr,
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_RDLATENCY_END_MASK));
++}
++
++/*****************************************************************************/
++/**
++*
++* This function returns Write Latency Start point.
++*
++* @return	Returns 0 - XAPM_LATENCY_ADDR_ISSUE or
++*			1 - XAPM_LATENCY_ADDR_ACCEPT
++*
++* @note		None
++*
++******************************************************************************/
++u8 getwrlatencystart(void)
++{
++	u8 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	regval = regval & XAPM_CR_WRLATENCY_START_MASK;
++	if (regval != XAPM_LATENCY_ADDR_ISSUE)
++		return XAPM_LATENCY_ADDR_ACCEPT;
++	else
++		return XAPM_LATENCY_ADDR_ISSUE;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function returns Write Latency End point.
++*
++* @return	Returns 0 - XAPM_LATENCY_LASTWR or
++*			1 - XAPM_LATENCY_FIRSTWR.
++*
++* @note		None
++*
++******************************************************************************/
++u8 getwrlatencyend(void)
++{
++	u8 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	regval = regval & XAPM_CR_WRLATENCY_END_MASK;
++	if (regval != XAPM_LATENCY_LASTWR)
++		return XAPM_LATENCY_FIRSTWR;
++	else
++		return XAPM_LATENCY_LASTWR;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function returns read Latency Start point.
++*
++* @return	Returns 0 - XAPM_LATENCY_ADDR_ISSUE or
++*			1 - XAPM_LATENCY_ADDR_ACCEPT
++*
++* @note		None
++*
++******************************************************************************/
++u8 getrdlatencystart(void)
++{
++	u8 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	regval = regval & XAPM_CR_RDLATENCY_START_MASK;
++
++	if (regval != XAPM_LATENCY_ADDR_ISSUE)
++		return	XAPM_LATENCY_ADDR_ACCEPT;
++	else
++		return XAPM_LATENCY_ADDR_ISSUE;
++}
++
++/*****************************************************************************/
++/**
++*
++* This function returns Read Latency End point.
++*
++* @return	Returns 0 - XAPM_LATENCY_LASTRD or
++*			1 - XAPM_LATENCY_FIRSTRD.
++*
++* @note		None
++*
++******************************************************************************/
++u8 getrdlatencyend(void)
++{
++	u8 regval;
++
++	regval = readreg(baseaddr, XAPM_CTL_OFFSET);
++	regval = regval & XAPM_CR_RDLATENCY_END_MASK;
++	if (regval != XAPM_LATENCY_LASTRD)
++		return XAPM_LATENCY_FIRSTRD;
++	else
++		return XAPM_LATENCY_LASTRD;
++
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Write ID Mask in ID Mask register.
++*
++* @param	wrmask is the Write ID mask to be written in ID register.
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void setwriteidmask(u32 wrmask)
++{
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_IDMASK_OFFSET);
++		regval = regval & ~(XAPM_MASKID_WID_MASK);
++		regval = regval | wrmask;
++		writereg(baseaddr, XAPM_IDMASK_OFFSET, regval);
++	} else {
++		writereg(baseaddr, XAPM_IDMASK_OFFSET, wrmask);
++	}
++}
++
++/****************************************************************************/
++/**
++*
++* This function sets Read ID Mask in ID Mask register.
++*
++* @param	rdmask is the Read ID mask to be written in ID Mask register.
++*
++* @return	None.
++*
++* @note		None.
++*
++*****************************************************************************/
++void setreadidmask(u32 rdmask)
++{
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_IDMASK_OFFSET);
++		regval = regval & ~(XAPM_MASKID_RID_MASK);
++		regval = regval | (rdmask << 16);
++		writereg(baseaddr, XAPM_IDMASK_OFFSET, regval);
++	} else {
++		writereg(baseaddr, XAPM_RIDMASK_OFFSET, rdmask);
++	}
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns Write ID Mask in ID Mask register.
++*
++* @return	wrmask is the required Write ID Mask in ID Mask register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getwriteidmask(void)
++{
++
++	u32 wrmask;
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_IDMASK_OFFSET);
++		wrmask = regval & XAPM_MASKID_WID_MASK;
++	} else {
++		wrmask = XAPM_IDMASK_OFFSET;
++	}
++	return wrmask;
++}
++
++/****************************************************************************/
++/**
++*
++* This function returns Read ID Mask in ID Mask register.
++*
++* @return	rdmask is the required Read ID Mask in ID Mask register.
++*
++* @note		None.
++*
++*****************************************************************************/
++u32 getreadidmask(void)
++{
++
++	u32 rdmask;
++	u32 regval;
++
++	if (params->is_32bit_filter == 0) {
++		regval = readreg(baseaddr, XAPM_IDMASK_OFFSET);
++		regval = regval & XAPM_MASKID_RID_MASK;
++		rdmask = regval >> 16;
++	} else {
++		rdmask = XAPM_RIDMASK_OFFSET;
++	}
++	return rdmask;
++}
+diff --git a/samples/xilinx_apm/xaxipmon.h b/samples/xilinx_apm/xaxipmon.h
+new file mode 100644
+index 000000000..85e0e902a
+--- /dev/null
++++ b/samples/xilinx_apm/xaxipmon.h
+@@ -0,0 +1,943 @@
++#ifndef XAXIPMON_H /* Prevent circular inclusions */
++#define XAXIPMON_H /* by using protection macros  */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <stdint.h>
++#include <stdbool.h>
++
++
++#define XST_SUCCESS	0
++#define XST_FAILURE	1
++
++#ifndef TRUE
++#define TRUE		1
++#endif
++
++#ifndef FALSE
++#define FALSE		0
++#endif
++
++#ifndef NULL
++#define NULL		0
++#endif
++
++#define XAPM_GCC_HIGH_OFFSET		0x0000	/* Global Clock Counter
++							32 to 63 bits  */
++#define XAPM_GCC_LOW_OFFSET		0x0004	/* Global Clock Counter Lower
++							0-31 bits  */
++#define XAPM_SI_HIGH_OFFSET		0x0020	/* Sample Interval MSB */
++#define XAPM_SI_LOW_OFFSET		0x0024	/* Sample Interval LSB */
++#define XAPM_SICR_OFFSET		0x0028	/* Sample Interval Control
++							Register */
++#define XAPM_SR_OFFSET			0x002C	/* Sample Register */
++#define XAPM_GIE_OFFSET			0x0030	/* Global Interrupt Enable
++							Register */
++#define XAPM_IE_OFFSET			0x0034	/* Interrupt Enable Register */
++#define XAPM_IS_OFFSET			0x0038	/* Interrupt Status Register */
++
++#define XAPM_MSR0_OFFSET		0x0044	/* Metric Selector 0 Register*/
++#define XAPM_MSR1_OFFSET		0x0048	/* Metric Selector 1 Register*/
++#define XAPM_MSR2_OFFSET		0x004C	/* Metric Selector 2 Register*/
++
++#define XAPM_MC0_OFFSET			0x0100	/* Metric Counter 0 Register */
++#define XAPM_INC0_OFFSET		0x0104	/* Incrementer 0 Register */
++#define XAPM_RANGE0_OFFSET		0x0108	/* Range 0 Register */
++#define XAPM_MC0LOGEN_OFFSET		0x010C	/* Metric Counter 0
++							Log Enable Register */
++#define XAPM_MC1_OFFSET			0x0110	/* Metric Counter 1 Register */
++#define XAPM_INC1_OFFSET		0x0114	/* Incrementer 1 Register */
++#define XAPM_RANGE1_OFFSET		0x0118	/* Range 1 Register */
++#define XAPM_MC1LOGEN_OFFSET		0x011C	/* Metric Counter 1
++							Log Enable Register */
++#define XAPM_MC2_OFFSET			0x0120	/* Metric Counter 2 Register */
++#define XAPM_INC2_OFFSET		0x0124	/* Incrementer 2 Register */
++#define XAPM_RANGE2_OFFSET		0x0128	/* Range 2 Register */
++#define XAPM_MC2LOGEN_OFFSET		0x012C	/* Metric Counter 2
++							Log Enable Register */
++#define XAPM_MC3_OFFSET			0x0130	/* Metric Counter 3 Register */
++#define XAPM_INC3_OFFSET		0x0134	/* Incrementer 3 Register */
++#define XAPM_RANGE3_OFFSET		0x0138	/* Range 3 Register */
++#define XAPM_MC3LOGEN_OFFSET		0x013C	/* Metric Counter 3
++							Log Enable Register */
++#define XAPM_MC4_OFFSET			0x0140	/* Metric Counter 4 Register */
++#define XAPM_INC4_OFFSET		0x0144	/* Incrementer 4 Register */
++#define XAPM_RANGE4_OFFSET		0x0148	/* Range 4 Register */
++#define XAPM_MC4LOGEN_OFFSET		0x014C	/* Metric Counter 4
++							Log Enable Register */
++#define XAPM_MC5_OFFSET			0x0150	/* Metric Counter 5
++							Register */
++#define XAPM_INC5_OFFSET		0x0154	/* Incrementer 5 Register */
++#define XAPM_RANGE5_OFFSET		0x0158	/* Range 5 Register */
++#define XAPM_MC5LOGEN_OFFSET		0x015C	/* Metric Counter 5
++							Log Enable Register */
++#define XAPM_MC6_OFFSET			0x0160	/* Metric Counter 6
++							Register */
++#define XAPM_INC6_OFFSET		0x0164	/* Incrementer 6 Register */
++#define XAPM_RANGE6_OFFSET		0x0168	/* Range 6 Register */
++#define XAPM_MC6LOGEN_OFFSET		0x016C	/* Metric Counter 6
++							Log Enable Register */
++#define XAPM_MC7_OFFSET			0x0170	/* Metric Counter 7
++							Register */
++#define XAPM_INC7_OFFSET		0x0174	/* Incrementer 7 Register */
++#define XAPM_RANGE7_OFFSET		0x0178	/* Range 7 Register */
++#define XAPM_MC7LOGEN_OFFSET		0x017C	/* Metric Counter 7
++							Log Enable Register */
++#define XAPM_MC8_OFFSET			0x0180	/* Metric Counter 8
++							Register */
++#define XAPM_INC8_OFFSET		0x0184	/* Incrementer 8 Register */
++#define XAPM_RANGE8_OFFSET		0x0188	/* Range 8 Register */
++#define XAPM_MC8LOGEN_OFFSET		0x018C	/* Metric Counter 8
++							Log Enable Register */
++#define XAPM_MC9_OFFSET			0x0190	/* Metric Counter 9
++							Register */
++#define XAPM_INC9_OFFSET		0x0194	/* Incrementer 9 Register */
++#define XAPM_RANGE9_OFFSET		0x0198	/* Range 9 Register */
++#define XAPM_MC9LOGEN_OFFSET		0x019C	/* Metric Counter 9
++							Log Enable Register */
++
++#define XAPM_MC10_OFFSET		0x01A0	/* Metric Counter 10
++							Register */
++#define XAPM_MC11_OFFSET		0x01B0	/* Metric Counter 11
++							Register */
++#define XAPM_MC12_OFFSET		0x0500	/* Metric Counter 12
++							Register */
++#define XAPM_MC13_OFFSET		0x0510	/* Metric Counter 13
++							Register */
++#define XAPM_MC14_OFFSET		0x0520	/* Metric Counter 14
++							Register */
++#define XAPM_MC15_OFFSET		0x0530	/* Metric Counter 15
++							Register */
++#define XAPM_MC16_OFFSET		0x0540	/* Metric Counter 16
++							Register */
++#define XAPM_MC17_OFFSET		0x0550	/* Metric Counter 17
++							Register */
++#define XAPM_MC18_OFFSET		0x0560	/* Metric Counter 18
++							Register */
++#define XAPM_MC19_OFFSET		0x0570	/* Metric Counter 19
++							Register */
++#define XAPM_MC20_OFFSET		0x0580	/* Metric Counter 20
++							Register */
++#define XAPM_MC21_OFFSET		0x0590	/* Metric Counter 21
++							Register */
++#define XAPM_MC22_OFFSET		0x05A0	/* Metric Counter 22
++							Register */
++#define XAPM_MC23_OFFSET		0x05B0	/* Metric Counter 23
++							Register */
++#define XAPM_MC24_OFFSET		0x0700	/* Metric Counter 24
++							Register */
++#define XAPM_MC25_OFFSET		0x0710	/* Metric Counter 25
++							Register */
++#define XAPM_MC26_OFFSET		0x0720	/* Metric Counter 26
++							Register */
++#define XAPM_MC27_OFFSET		0x0730	/* Metric Counter 27
++							Register */
++#define XAPM_MC28_OFFSET		0x0740	/* Metric Counter 28
++							Register */
++#define XAPM_MC29_OFFSET		0x0750	/* Metric Counter 29
++							Register */
++#define XAPM_MC30_OFFSET		0x0760	/* Metric Counter 30
++							Register */
++#define XAPM_MC31_OFFSET		0x0770	/* Metric Counter 31
++							Register */
++#define XAPM_MC32_OFFSET		0x0780	/* Metric Counter 32
++							Register */
++#define XAPM_MC33_OFFSET		0x0790	/* Metric Counter 33
++							Register */
++#define XAPM_MC34_OFFSET		0x07A0	/* Metric Counter 34
++							Register */
++#define XAPM_MC35_OFFSET		0x07B0	/* Metric Counter 35
++							Register */
++#define XAPM_MC36_OFFSET		0x0900	/* Metric Counter 36
++							Register */
++#define XAPM_MC37_OFFSET		0x0910	/* Metric Counter 37
++							Register */
++#define XAPM_MC38_OFFSET		0x0920	/* Metric Counter 38
++							Register */
++#define XAPM_MC39_OFFSET		0x0930	/* Metric Counter 39
++							Register */
++#define XAPM_MC40_OFFSET		0x0940	/* Metric Counter 40
++							Register */
++#define XAPM_MC41_OFFSET		0x0950	/* Metric Counter 41
++							Register */
++#define XAPM_MC42_OFFSET		0x0960	/* Metric Counter 42
++							Register */
++#define XAPM_MC43_OFFSET		0x0970	/* Metric Counter 43
++							Register */
++#define XAPM_MC44_OFFSET		0x0980	/* Metric Counter 44
++							Register */
++#define XAPM_MC45_OFFSET		0x0990	/* Metric Counter 45
++							Register */
++#define XAPM_MC46_OFFSET		0x09A0	/* Metric Counter 46
++							Register */
++#define XAPM_MC47_OFFSET		0x09B0	/* Metric Counter 47
++							Register */
++
++#define XAPM_SMC0_OFFSET		0x0200	/* Sampled Metric Counter
++							0 Register */
++#define XAPM_SINC0_OFFSET		0x0204	/* Sampled Incrementer
++							0 Register */
++#define XAPM_SMC1_OFFSET		0x0210	/* Sampled Metric Counter
++							1 Register */
++#define XAPM_SINC1_OFFSET		0x0214	/* Sampled Incrementer
++							1 Register */
++#define XAPM_SMC2_OFFSET		0x0220	/* Sampled Metric Counter
++							2 Register */
++#define XAPM_SINC2_OFFSET		0x0224	/* Sampled Incrementer
++							2 Register */
++#define XAPM_SMC3_OFFSET		0x0230	/* Sampled Metric Counter
++							3 Register */
++#define XAPM_SINC3_OFFSET		0x0234	/* Sampled Incrementer
++							3 Register */
++#define XAPM_SMC4_OFFSET		0x0240	/* Sampled Metric Counter
++							4 Register */
++#define XAPM_SINC4_OFFSET		0x0244	/* Sampled Incrementer
++							4 Register */
++#define XAPM_SMC5_OFFSET		0x0250	/* Sampled Metric Counter
++							5 Register */
++#define XAPM_SINC5_OFFSET		0x0254	/* Sampled Incrementer
++							5 Register */
++#define XAPM_SMC6_OFFSET		0x0260	/* Sampled Metric Counter
++							6 Register */
++#define XAPM_SINC6_OFFSET		0x0264	/* Sampled Incrementer
++							6 Register */
++#define XAPM_SMC7_OFFSET		0x0270	/* Sampled Metric Counter
++							7 Register */
++#define XAPM_SINC7_OFFSET		0x0274	/* Sampled Incrementer
++							7 Register */
++#define XAPM_SMC8_OFFSET		0x0280	/* Sampled Metric Counter
++							8 Register */
++#define XAPM_SINC8_OFFSET		0x0284	/* Sampled Incrementer
++							8 Register */
++#define XAPM_SMC9_OFFSET		0x0290	/* Sampled Metric Counter
++							9 Register */
++#define XAPM_SINC9_OFFSET		0x0294	/* Sampled Incrementer
++							9 Register */
++#define XAPM_SMC10_OFFSET		0x02A0	/* Sampled Metric Counter
++							10 Register */
++#define XAPM_SMC11_OFFSET		0x02B0	/* Sampled Metric Counter
++							11 Register */
++#define XAPM_SMC12_OFFSET		0x0600	/* Sampled Metric Counter
++							12 Register */
++#define XAPM_SMC13_OFFSET		0x0610	/* Sampled Metric Counter
++							13 Register */
++#define XAPM_SMC14_OFFSET		0x0620	/* Sampled Metric Counter
++							14 Register */
++#define XAPM_SMC15_OFFSET		0x0630	/* Sampled Metric Counter
++							15 Register */
++#define XAPM_SMC16_OFFSET		0x0640	/* Sampled Metric Counter
++							16 Register */
++#define XAPM_SMC17_OFFSET		0x0650	/* Sampled Metric Counter
++							17 Register */
++#define XAPM_SMC18_OFFSET		0x0660	/* Sampled Metric Counter
++							18 Register */
++#define XAPM_SMC19_OFFSET		0x0670	/* Sampled Metric Counter
++							19 Register */
++#define XAPM_SMC20_OFFSET		0x0680	/* Sampled Metric Counter
++							20 Register */
++#define XAPM_SMC21_OFFSET		0x0690	/* Sampled Metric Counter
++							21 Register */
++#define XAPM_SMC22_OFFSET		0x06A0	/* Sampled Metric Counter
++							22 Register */
++#define XAPM_SMC23_OFFSET		0x06B0	/* Sampled Metric Counter
++							23 Register */
++#define XAPM_SMC24_OFFSET		0x0800	/* Sampled Metric Counter
++							24 Register */
++#define XAPM_SMC25_OFFSET		0x0810	/* Sampled Metric Counter
++							25 Register */
++#define XAPM_SMC26_OFFSET		0x0820	/* Sampled Metric Counter
++							26 Register */
++#define XAPM_SMC27_OFFSET		0x0830	/* Sampled Metric Counter
++							27 Register */
++#define XAPM_SMC28_OFFSET		0x0840	/* Sampled Metric Counter
++							28 Register */
++#define XAPM_SMC29_OFFSET		0x0850	/* Sampled Metric Counter
++							29 Register */
++#define XAPM_SMC30_OFFSET		0x0860	/* Sampled Metric Counter
++							30 Register */
++#define XAPM_SMC31_OFFSET		0x0870	/* Sampled Metric Counter
++							31 Register */
++#define XAPM_SMC32_OFFSET		0x0880	/* Sampled Metric Counter
++							32 Register */
++#define XAPM_SMC33_OFFSET		0x0890	/* Sampled Metric Counter
++							33 Register */
++#define XAPM_SMC34_OFFSET		0x08A0	/* Sampled Metric Counter
++							34 Register */
++#define XAPM_SMC35_OFFSET		0x08B0	/* Sampled Metric Counter
++							35 Register */
++#define XAPM_SMC36_OFFSET		0x0A00	/* Sampled Metric Counter
++							36 Register */
++#define XAPM_SMC37_OFFSET		0x0A10	/* Sampled Metric Counter
++							37 Register */
++#define XAPM_SMC38_OFFSET		0x0A20	/* Sampled Metric Counter
++							38 Register */
++#define XAPM_SMC39_OFFSET		0x0A30	/* Sampled Metric Counter
++							39 Register */
++#define XAPM_SMC40_OFFSET		0x0A40	/* Sampled Metric Counter
++							40 Register */
++#define XAPM_SMC41_OFFSET		0x0A50	/* Sampled Metric Counter
++							41 Register */
++#define XAPM_SMC42_OFFSET		0x0A60	/* Sampled Metric Counter
++							42 Register */
++#define XAPM_SMC43_OFFSET		0x0A70	/* Sampled Metric Counter
++							43 Register */
++#define XAPM_SMC44_OFFSET		0x0A80	/* Sampled Metric Counter
++							44 Register */
++#define XAPM_SMC45_OFFSET		0x0A90	/* Sampled Metric Counter
++							45 Register */
++#define XAPM_SMC46_OFFSET		0x0AA0	/* Sampled Metric Counter
++							46 Register */
++#define XAPM_SMC47_OFFSET		0x0AB0	/* Sampled Metric Counter
++							47 Register */
++
++#define XAPM_CTL_OFFSET			0x0300	/* Control Register */
++
++#define XAPM_ID_OFFSET			0x0304	/* Latency ID Register */
++
++#define XAPM_IDMASK_OFFSET		0x0308	/* ID Mask Register */
++
++#define XAPM_RID_OFFSET                 0x030C	/* Latency Write ID Register */
++
++#define XAPM_RIDMASK_OFFSET             0x0310	/* Read ID mask register */
++
++#define XAPM_FEC_OFFSET			0x0400	/* flag Enable
++							Control Register */
++
++#define XAPM_SWD_OFFSET			0x0404	/* Software-written
++							Data Register */
++
++#define XAPM_SICR_MCNTR_RST_MASK	0x00000100 /* Enable the Metric
++							Counter Reset */
++#define XAPM_SICR_LOAD_MASK		0x00000002 /* Load the Sample Interval
++							Register Value into
++							the counter */
++#define XAPM_SICR_ENABLE_MASK		0x00000001 /* Enable the downcounter */
++
++#define XAPM_IXR_MC9_OVERFLOW_MASK	0x00001000	/**< Metric Counter 9
++							  *  Overflow> */
++#define XAPM_IXR_MC8_OVERFLOW_MASK	0x00000800	/**< Metric Counter 8
++							  *  Overflow> */
++#define XAPM_IXR_MC7_OVERFLOW_MASK	0x00000400	/**< Metric Counter 7
++							  *  Overflow> */
++#define XAPM_IXR_MC6_OVERFLOW_MASK	0x00000200	/**< Metric Counter 6
++							  *  Overflow> */
++#define XAPM_IXR_MC5_OVERFLOW_MASK	0x00000100	/**< Metric Counter 5
++							  *  Overflow> */
++#define XAPM_IXR_MC4_OVERFLOW_MASK	0x00000080	/**< Metric Counter 4
++							  *  Overflow> */
++#define XAPM_IXR_MC3_OVERFLOW_MASK	0x00000040	/**< Metric Counter 3
++							  *  Overflow> */
++#define XAPM_IXR_MC2_OVERFLOW_MASK	0x00000020	/**< Metric Counter 2
++							  *  Overflow> */
++#define XAPM_IXR_MC1_OVERFLOW_MASK	0x00000010	/**< Metric Counter 1
++							  *  Overflow> */
++#define XAPM_IXR_MC0_OVERFLOW_MASK	0x00000008	/**< Metric Counter 0
++							  *  Overflow> */
++#define XAPM_IXR_FIFO_FULL_MASK		0x00000004	/**< Event Log FIFO
++							  *  full> */
++#define XAPM_IXR_SIC_OVERFLOW_MASK	0x00000002	/**< Sample Interval
++							  * Counter Overflow */
++#define XAPM_IXR_GCC_OVERFLOW_MASK	0x00000001	/**< Global Clock
++							Counter Overflow */
++#define XAPM_IXR_ALL_MASK		(XAPM_IXR_SIC_OVERFLOW_MASK | \
++					XAPM_IXR_GCC_OVERFLOW_MASK |  \
++					XAPM_IXR_FIFO_FULL_MASK | \
++					XAPM_IXR_MC0_OVERFLOW_MASK | \
++					XAPM_IXR_MC1_OVERFLOW_MASK | \
++					XAPM_IXR_MC2_OVERFLOW_MASK | \
++					XAPM_IXR_MC3_OVERFLOW_MASK | \
++					XAPM_IXR_MC4_OVERFLOW_MASK | \
++					XAPM_IXR_MC5_OVERFLOW_MASK | \
++					XAPM_IXR_MC6_OVERFLOW_MASK | \
++					XAPM_IXR_MC7_OVERFLOW_MASK | \
++					XAPM_IXR_MC8_OVERFLOW_MASK | \
++					XAPM_IXR_MC9_OVERFLOW_MASK)
++
++#define XAPM_CR_FIFO_RESET_MASK			0x02000000
++						/**< FIFO Reset */
++#define XAPM_CR_MUXSEL_MASK			0x01000000
++						/**< Mux Selector mask */
++#define XAPM_CR_GCC_RESET_MASK			0x00020000
++						/**< Global Clk
++						  Counter Reset */
++#define XAPM_CR_GCC_ENABLE_MASK			0x00010000
++						/**< Global Clk
++						   Counter Enable */
++#define XAPM_CR_EVTLOG_EXTTRIGGER_MASK		0x00000200
++						/**< Enable External trigger
++						to start event Log */
++#define XAPM_CR_EVENTLOG_ENABLE_MASK		0x00000100
++						/**< Event Log Enable */
++#define XAPM_CR_RDLATENCY_END_MASK		0x00000080
++						/**< Write Latency
++							End point */
++#define XAPM_CR_RDLATENCY_START_MASK		0x00000040
++						/**< Read Latency
++							Start point */
++#define XAPM_CR_WRLATENCY_END_MASK		0x00000020
++						/**< Write Latency
++							End point */
++#define XAPM_CR_WRLATENCY_START_MASK		0x00000010
++						/**< Write Latency
++							Start point */
++#define XAPM_CR_IDFILTER_ENABLE_MASK		0x00000008
++						/**< ID Filter Enable */
++#define XAPM_CR_MCNTR_EXTTRIGGER_MASK		0x00000004
++						/**< Enable External
++						   trigger to start
++						   Metric Counters  */
++#define XAPM_CR_MCNTR_RESET_MASK		0x00000002
++						/**< Metrics Counter
++						   Reset */
++#define XAPM_CR_MCNTR_ENABLE_MASK		0x00000001
++						/**< Metrics Counter
++							Enable */
++
++#define XAPM_ID_RID_MASK			0xFFFF0000 /**< Read ID */
++
++#define XAPM_ID_WID_MASK			0x0000FFFF /**< Write ID */
++
++#define XAPM_MASKID_RID_MASK			0xFFFF0000 /**< Read ID Mask */
++
++#define XAPM_MASKID_WID_MASK			0x0000FFFF /**< Write ID Mask*/
++
++
++#define XAPM_MAX_COUNTERS		10 /**< Maximum number of Counters */
++#define XAPM_MAX_COUNTERS_PROFILE	48 /**< Maximum number of Counters in
++						profile mode */
++
++#define XAPM_METRIC_COUNTER_0	0 /**< Metric Counter 0 Register Index */
++#define XAPM_METRIC_COUNTER_1	1 /**< Metric Counter 1 Register Index */
++#define XAPM_METRIC_COUNTER_2	2 /**< Metric Counter 2 Register Index */
++#define XAPM_METRIC_COUNTER_3	3 /**< Metric Counter 3 Register Index */
++#define XAPM_METRIC_COUNTER_4	4 /**< Metric Counter 4 Register Index */
++#define XAPM_METRIC_COUNTER_5	5 /**< Metric Counter 5 Register Index */
++#define XAPM_METRIC_COUNTER_6	6 /**< Metric Counter 6 Register Index */
++#define XAPM_METRIC_COUNTER_7	7 /**< Metric Counter 7 Register Index */
++#define XAPM_METRIC_COUNTER_8	8 /**< Metric Counter 8 Register Index */
++#define XAPM_METRIC_COUNTER_9	9 /**< Metric Counter 9 Register Index */
++
++#define XAPM_INCREMENTER_0	0 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_1	1 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_2	2 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_3	3 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_4	4 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_5	5 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_6	6 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_7	7 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_8	8 /**< Metric Counter 0 Register Index */
++#define XAPM_INCREMENTER_9	9 /**< Metric Counter 0 Register Index */
++
++#define XAPM_METRIC_SET_0	0 /**< Write Transaction Count */
++#define XAPM_METRIC_SET_1	1 /**< Read Transaction Count */
++#define XAPM_METRIC_SET_2	2 /**< Write Byte Count */
++#define XAPM_METRIC_SET_3	3 /**< Read Byte Count */
++#define XAPM_METRIC_SET_4	4 /**< Write Beat Count */
++#define XAPM_METRIC_SET_5	5 /**< Total Read Latency */
++#define XAPM_METRIC_SET_6	6 /**< Total Write Latency */
++#define XAPM_METRIC_SET_7	7 /**< Slv_Wr_Idle_Cnt */
++#define XAPM_METRIC_SET_8	8 /**< Mst_Rd_Idle_Cnt */
++#define XAPM_METRIC_SET_9	9 /**< Num_BValids */
++#define XAPM_METRIC_SET_10	10 /**< Num_WLasts */
++#define XAPM_METRIC_SET_11	11 /**< Num_RLasts */
++#define XAPM_METRIC_SET_12	12 /**< Minimum Write Latency */
++#define XAPM_METRIC_SET_13	13 /**< Maximum Write Latency */
++#define XAPM_METRIC_SET_14	14 /**< Minimum Read Latency */
++#define XAPM_METRIC_SET_15	15 /**< Maximum Read Latency */
++#define XAPM_METRIC_SET_16	16 /**< Transfer Cycle Count */
++#define XAPM_METRIC_SET_17	17 /**< Packet Count */
++#define XAPM_METRIC_SET_18	18 /**< Data Byte Count */
++#define XAPM_METRIC_SET_19	19 /**< Position Byte Count */
++#define XAPM_METRIC_SET_20	20 /**< Null Byte Count */
++#define XAPM_METRIC_SET_21	21 /**< Slv_Idle_Cnt */
++#define XAPM_METRIC_SET_22	22 /**< Mst_Idle_Cnt */
++#define XAPM_METRIC_SET_30	30 /**< External event count */
++
++#define XAPM_MAX_AGENTS		8 /**< Maximum number of Agents */
++
++#define XAPM_FLAG_WRADDR	0x00000001 /**< Write Address flag */
++#define XAPM_FLAG_FIRSTWR	0x00000002 /**< First Write flag */
++#define XAPM_FLAG_LASTWR	0x00000004 /**< Last Write flag */
++#define XAPM_FLAG_RESPONSE	0x00000008 /**< Response flag */
++#define XAPM_FLAG_RDADDR	0x00000010 /**< Read Address flag */
++#define XAPM_FLAG_FIRSTRD	0x00000020 /**< First Read flag */
++#define XAPM_FLAG_LASTRD	0x00000040 /**< Last Read flag */
++#define XAPM_FLAG_SWDATA	0x00010000 /**< Software-written Data flag */
++#define XAPM_FLAG_EVENT		0x00020000 /**< Last Read flag */
++#define XAPM_FLAG_EVNTSTOP	0x00040000 /**< Last Read flag */
++#define XAPM_FLAG_EVNTSTART	0x00080000 /**< Last Read flag */
++#define XAPM_FLAG_GCCOVF	0x00100000 /**< Global Clock Counter Overflow
++					     *  flag */
++#define XAPM_FLAG_SCLAPSE	0x00200000 /**< Sample Counter Lapse flag */
++#define XAPM_FLAG_MC0		0x00400000 /**< Metric Counter 0 flag */
++#define XAPM_FLAG_MC1		0x00800000 /**< Metric Counter 1 flag */
++#define XAPM_FLAG_MC2		0x01000000 /**< Metric Counter 2 flag */
++#define XAPM_FLAG_MC3		0x02000000 /**< Metric Counter 3 flag */
++#define XAPM_FLAG_MC4		0x04000000 /**< Metric Counter 4 flag */
++#define XAPM_FLAG_MC5		0x08000000 /**< Metric Counter 5 flag */
++#define XAPM_FLAG_MC6		0x10000000 /**< Metric Counter 6 flag */
++#define XAPM_FLAG_MC7		0x20000000 /**< Metric Counter 7 flag */
++#define XAPM_FLAG_MC8		0x40000000 /**< Metric Counter 8 flag */
++#define XAPM_FLAG_MC9		0x80000000 /**< Metric Counter 9 flag */
++
++#define XAPM_LATENCY_ADDR_ISSUE		0 /**< Address Issue as start
++					point for Latency calculation*/
++#define XAPM_LATENCY_ADDR_ACCEPT	1 /**< Address Acceptance as start
++					point for Latency calculation*/
++#define XAPM_LATENCY_LASTRD		0 /**< Last Read as end point for
++					Latency calculation */
++#define XAPM_LATENCY_LASTWR		0 /**< Last Write as end point for
++					Latency calculation */
++#define XAPM_LATENCY_FIRSTRD		1 /**< First Read as end point for
++					Latency calculation */
++#define XAPM_LATENCY_FIRSTWR		1 /**< First Write as end point for
++					Latency calculation */
++
++#define XAPM_MODE_TRACE			2 /**< APM in Trace mode */
++
++#define XAPM_MODE_PROFILE		1 /**< APM in Profile mode */
++
++#define XAPM_MODE_ADVANCED		0 /**< APM in Advanced mode */
++
++typedef unsigned char u8;
++typedef uint16_t u16;
++typedef uint32_t u32;
++typedef unsigned long ulong;
++
++ulong baseaddr;
++
++struct xapm_param {
++	u32	mode;
++	u32	maxslots;
++	u32	eventcnt;
++	u32	eventlog;
++	u32	sampledcnt;
++	u32	numcounters;
++	u32	metricwidth;
++	u32	sampledwidth;
++	u32	globalcntwidth;
++	u32     scalefactor;
++	u32	isr;
++	bool	is_32bit_filter;
++};
++
++static struct xapm_param *params;
++
++/*****************************************************************************/
++/**
++*
++* Read a register of the AXI Performance Monitor device. This macro provides
++* register access to all registers using the register offsets defined above.
++*
++* @param	baseaddr contains the base address of the device.
++* @param	regoffset is the offset of the register to read.
++*
++* @return	The contents of the register.
++*
++* @note		C-style Signature:
++*		u32 readreg(u32 baseaddr, u32 regoffset);
++*
++******************************************************************************/
++#define readreg(baseaddr, regoffset) \
++			(*(u32 *)(baseaddr + regoffset))
++
++/*****************************************************************************/
++/**
++*
++* Write a register of the AXI Performance Monitor device. This macro provides
++* register access to all registers using the register offsets defined above.
++*
++* @param	baseaddr contains the base address of the device.
++* @param	regoffset is the offset of the register to write.
++* @param	data is the value to write to the register.
++*
++* @return	None.
++*
++* @note		C-style Signature:
++*		void writereg(u32 baseaddr,
++*					u32 regoffset,u32 Data)
++*
++******************************************************************************/
++#define writereg(baseaddr, regoffset, data) \
++				(*(u32 *)(baseaddr + regoffset) = data)
++
++/****************************************************************************/
++/**
++*
++* This routine enables the Global Interrupt.
++*
++* @note		C-Style signature:
++*		void intrglobalenable()
++*
++*****************************************************************************/
++#define intrglobalenable()			\
++		writereg(baseaddr, XAPM_GIE_OFFSET, 1)
++
++
++/****************************************************************************/
++/**
++*
++* This routine disables the Global Interrupt.
++*
++* @note		C-Style signature:
++*		void intrglobaldisable(void)
++*
++*****************************************************************************/
++#define intrglobaldisable()				\
++		writereg(baseaddr, XAPM_GIE_OFFSET, 0)
++
++/****************************************************************************/
++/**
++*
++* This routine enables interrupt(s). Use the XAPM_IXR_* constants defined in
++* xaxipmon_hw.h to create the bit-mask to enable interrupts.
++*
++* @param	mask is the mask to enable. Bit positions of 1 will be enabled.
++*		Bit positions of 0 will keep the previous setting. This mask is
++*		formed by OR'ing XAPM_IXR__* bits defined in xaxipmon_hw.h.
++*
++* @return	None.
++*
++* @note		C-Style signature:
++*		void intrenable(u32 mask)
++*
++*****************************************************************************/
++#define intrenable(mask)				     \
++	writereg(baseaddr, XAPM_IE_OFFSET, readreg(baseaddr, \
++			XAPM_IE_OFFSET) | mask);
++
++
++/****************************************************************************/
++/**
++*
++* This routine disable interrupt(s). Use the XAPM_IXR_* constants defined in
++* xaxipmon_hw.h to create the bit-mask to disable interrupts.
++*
++* @param	mask is the mask to disable. Bit positions of 1 will be
++*		disabled. Bit positions of 0 will keep the previous setting.
++*		This mask is formed by OR'ing XAPM_IXR_* bits defined in
++*		xaxipmon_hw.h.
++*
++* @return	None.
++*
++* @note		C-Style signature:
++*		void intrdisable(u32 mask)
++*
++*****************************************************************************/
++#define intrdisable(mask)				     \
++	writereg(baseaddr, XAPM_IE_OFFSET, readreg(baseaddr, \
++						XAPM_IE_OFFSET) | mask);
++
++/****************************************************************************/
++/**
++*
++* This routine clears the specified interrupt(s).
++*
++* @param	mask is the mask to clear. Bit positions of 1 will be cleared.
++*		This mask is formed by OR'ing XAPM_IXR_* bits defined in
++*		xaxipmon_hw.h.
++*
++* @return	None.
++*
++* @note		C-Style signature:
++*		void intrclear(u32 mask)
++*
++*****************************************************************************/
++#define intrclear(mask)				     \
++	writereg(baseaddr, XAPM_IS_OFFSET, readreg(baseaddr, \
++				XAPM_IS_OFFSET) | mask);
++
++/****************************************************************************/
++/**
++*
++* This routine returns the Interrupt Status Register.
++*
++* @return	isr value updated by kernel driver
++*
++* @note		This macro returns isr value updated by kernel driver.
++*		C-Style signature:
++*		void intrgetstatus(void)
++*
++*****************************************************************************/
++#define intrgetstatus()		(params->isr)
++
++/****************************************************************************/
++/**
++*
++* This routine returns the Interrupt Status Register.
++*
++* @return       Interrupt Status Register contents
++*
++* @note         C-Style signature:
++*               void intrhwgetstatus(void)
++*
++*****************************************************************************/
++#define intrhwgetstatus()         (params->isr)
++
++/****************************************************************************/
++/**
++*
++* This function enables the Global Clock Counter.
++*
++* @note		C-Style signature:
++*		void enablegcc(void);
++*
++*****************************************************************************/
++#define enablegcc() \
++	writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr, \
++			XAPM_CTL_OFFSET) | XAPM_CR_GCC_ENABLE_MASK);
++
++/****************************************************************************/
++/**
++*
++* This function disbles the Global Clock Counter.
++*
++* @note		C-Style signature:
++*		void disablegcc(void);
++*
++*****************************************************************************/
++#define disablegcc() \
++	writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr, \
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_GCC_ENABLE_MASK));
++
++/****************************************************************************/
++/**
++*
++* This function enables the specified flag in flag Control Register.
++*
++* @param	flag is one of the XAPM_FLAG_* masks defined in xaxipmon.h
++*
++* @return	None
++*
++* @note		C-Style signature:
++*		void enableflag(void);
++*
++*****************************************************************************/
++#define enableflag(flag) \
++	writereg(baseaddr, XAPM_FEC_OFFSET, \
++			readreg(baseaddr, XAPM_FEC_OFFSET) | flag);
++
++/****************************************************************************/
++/**
++*
++* This function disables the specified flag in flag Control Register.
++*
++* @param	flag is one of the XAPM_FLAG_* masks defined in xaxipmon.h*
++* @return	None
++*
++* @note		C-Style signature:
++*		void disableflag(void);
++*
++*****************************************************************************/
++#define disableflag(flag) \
++	writereg(baseaddr, XAPM_FEC_OFFSET, \
++			readreg(baseaddr, XAPM_FEC_OFFSET) & ~(flag));
++
++/****************************************************************************/
++/**
++*
++* This function loads the sample interval register value into the sample
++* interval counter.
++*
++* @note		C-Style signature:
++*		void loadsic(void);
++*
++*****************************************************************************/
++#define loadsic() \
++		writereg(baseaddr, XAPM_SICR_OFFSET, XAPM_SICR_LOAD_MASK)
++
++
++/****************************************************************************/
++/**
++*
++* This enables the down count of the sample interval counter.
++*
++* @note		C-Style signature:
++*	   void enablesic(void);
++*
++*****************************************************************************/
++#define enablesic() \
++	writereg(baseaddr, XAPM_SICR_OFFSET, XAPM_SICR_ENABLE_MASK)
++
++/****************************************************************************/
++/**
++*
++* This disables the down count of the sample interval counter.
++*
++* @note		C-Style signature:
++*	    void disablesic(void);
++*
++*****************************************************************************/
++#define disablesic() \
++	writereg(baseaddr, XAPM_SICR_OFFSET, \
++	readreg(baseaddr, XAPM_SICR_OFFSET) & ~(XAPM_SICR_ENABLE_MASK));
++
++/****************************************************************************/
++/**
++*
++* This enables Reset of Metric Counters when Sample Interval Counter lapses.
++*
++* @note		C-Style signature:
++*		void enablemcreset(void);
++*
++*****************************************************************************/
++#define enablemcreset() \
++	writereg(baseaddr, XAPM_SICR_OFFSET, XAPM_SICR_MCNTR_RST_MASK);
++
++/****************************************************************************/
++/**
++*
++* This disables the down count of the sample interval counter.
++*
++* @note		C-Style signature:
++*		void disablemcreset(void);
++*
++*****************************************************************************/
++#define disablemcreset() \
++	writereg(baseaddr, XAPM_SICR_OFFSET, \
++	readreg(baseaddr, XAPM_SICR_OFFSET) & ~(XAPM_SICR_MCNTR_RST_MASK));
++
++/****************************************************************************/
++/**
++*
++* This function enables the ID Filter Masking.
++*
++* @note		C-Style signature:
++*		void enableidfilter(void);
++*
++*****************************************************************************/
++#define enableidfilter()			\
++	writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr, \
++			XAPM_CTL_OFFSET) | XAPM_CR_IDFILTER_ENABLE_MASK);
++
++/****************************************************************************/
++/**
++*
++* This function disbles the ID Filter masking.
++*
++* @note		C-Style signature:
++*		void disableidfilter(void);
++*
++*****************************************************************************/
++#define disableidfilter() \
++	writereg(baseaddr, XAPM_CTL_OFFSET, readreg(baseaddr, \
++			XAPM_CTL_OFFSET) & ~(XAPM_CR_IDFILTER_ENABLE_MASK));
++
++/****************************************************************************/
++/**
++*
++* This function samples Metric Counters to Sampled Metric Counters by
++* reading Sample Register and also returns interval. i.e. the number of
++* clocks in between previous read to the current read of sample register.
++*
++* @return	Interval. i.e. the number of clocks in between previous
++*		read to the current read of sample register.
++*
++* @note		C-Style signature:
++*		u32 samplemetrics(void);
++*
++*****************************************************************************/
++#define samplemetrics()		readreg(baseaddr, XAPM_SR_OFFSET);
++
++
++/************************** Function Prototypes *****************************/
++
++int resetmetriccounter(void);
++
++void resetglobalclkcounter(void);
++
++int resetfifo(void);
++
++void setincrementerrange(u8 incrementer, u16 rangehigh, u16 rangelow);
++
++void getincrementerrange(u8 incrementer, u16 *rangehigh, u16 *rangelow);
++
++void setsampleinterval(u32 sampleinterval);
++
++void getsampleinterval(u32 *sampleinterval);
++
++int setmetrics(u8 slot, u8 metrics, u8 counter);
++
++int getmetrics(u8 counter, u8 *metrics, u8 *slot);
++void getglobalclkcounter(u32 *cnthigh, u32 *cntlow);
++
++u32 getmetriccounter(u32 counter);
++
++u32 getsampledmetriccounter(u32 counter);
++
++u32 getincrementer(u32 incrementer);
++
++u32 getsampledincrementer(u32 incrementer);
++
++void setswdatareg(u32 swdata);
++
++u32 getswdatareg(void);
++
++int starteventlog(u32 flagenables);
++
++int stopeventlog(void);
++
++int startcounters(u32 sampleinterval);
++
++int stopcounters(void);
++
++void enablemetricscounter(void);
++
++void disablemetricscounter(void);
++
++void setlogenableranges(u32 counter, u16 rangehigh, u16 rangelow);
++
++void getlogenableranges(u32 counter, u16 *rangehigh, u16 *rangelow);
++
++void enableeventlog(void);
++
++void enablemctrigger(void);
++
++void disablemctrigger(void);
++
++void enableeventlogtrigger(void);
++
++void disableeventlogtrigger(void);
++
++const char *getmetricname(u8 metrics);
++
++void setwriteid(u32 writeid);
++
++void setreadid(u32 readid);
++
++u32 getwriteid(void);
++
++u32 getreadid(void);
++
++void setwrlatencystart(u8 param);
++
++void setwrlatencyend(u8 param);
++
++void setrdlatencystart(u8 param);
++
++void setrdlatencyend(u8 param);
++
++u8 getwrlatencystart(void);
++
++u8 getwrlatencyend(void);
++
++u8 getrdlatencystart(void);
++
++u8 getrdlatencyend(void);
++
++void setwriteidmask(u32 wrmask);
++
++void setreadidmask(u32 rdmask);
++
++u32 getwriteidmask(void);
++
++u32 getreadidmask(void);
++
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif  /* End of protection macro. */
+diff --git a/scripts/kernel-doc b/scripts/kernel-doc
+index 6325bec3f..8b5bc7bf4 100755
+--- a/scripts/kernel-doc
++++ b/scripts/kernel-doc
+@@ -382,6 +382,9 @@ my $inline_doc_state;
+ # 'function', 'struct', 'union', 'enum', 'typedef'
+ my $decl_type;
+ 
++# Name of the kernel-doc identifier for non-DOC markups
++my $identifier;
++
+ my $doc_start = '^/\*\*\s*$'; # Allow whitespace at end of comment start.
+ my $doc_end = '\*/';
+ my $doc_com = '\s*\*\s*';
+@@ -833,6 +836,7 @@ sub output_blockhead_rst(%) {
+ 	next if (defined($nosymbol_table{$section}));
+ 
+ 	if ($output_selection != OUTPUT_INCLUDE) {
++	    print ".. _$section:\n\n";
+ 	    print "**$section**\n\n";
+ 	}
+         print_lineno($section_start_lines{$section});
+@@ -1203,6 +1207,11 @@ sub dump_struct($$) {
+ 	$declaration_name = $2;
+ 	my $members = $3;
+ 
++	if ($identifier ne $declaration_name) {
++	    print STDERR "${file}:$.: warning: expecting prototype for $decl_type $identifier. Prototype was for $decl_type $declaration_name instead\n";
++	    return;
++	}
++
+ 	# ignore members marked private:
+ 	$members =~ s/\/\*\s*private:.*?\/\*\s*public:.*?\*\///gosi;
+ 	$members =~ s/\/\*\s*private:.*//gosi;
+@@ -1391,6 +1400,11 @@ sub dump_enum($$) {
+     }
+ 
+     if ($members) {
++	if ($identifier ne $declaration_name) {
++	    print STDERR "${file}:$.: warning: expecting prototype for enum $identifier. Prototype was for enum $declaration_name instead\n";
++	    return;
++	}
++
+ 	my %_members;
+ 
+ 	$members =~ s/\s+$//;
+@@ -1451,6 +1465,11 @@ sub dump_typedef($$) {
+ 	my $args = $3;
+ 	$return_type =~ s/^\s+//;
+ 
++	if ($identifier ne $declaration_name) {
++	    print STDERR "${file}:$.: warning: expecting prototype for typedef $identifier. Prototype was for typedef $declaration_name instead\n";
++	    return;
++	}
++
+ 	create_parameterlist($args, ',', $file, $declaration_name);
+ 
+ 	output_declaration($declaration_name,
+@@ -1477,6 +1496,11 @@ sub dump_typedef($$) {
+     if ($x =~ /typedef.*\s+(\w+)\s*;/) {
+ 	$declaration_name = $1;
+ 
++	if ($identifier ne $declaration_name) {
++	    print STDERR "${file}:$.: warning: expecting prototype for typedef $identifier. Prototype was for typedef $declaration_name instead\n";
++	    return;
++	}
++
+ 	output_declaration($declaration_name,
+ 			   'typedef',
+ 			   {'typedef' => $declaration_name,
+@@ -1529,7 +1553,7 @@ sub create_parameterlist($$$$) {
+ 	} elsif ($arg =~ m/\(.+\)\s*\(/) {
+ 	    # pointer-to-function
+ 	    $arg =~ tr/#/,/;
+-	    $arg =~ m/[^\(]+\(\*?\s*([\w\.]*)\s*\)/;
++	    $arg =~ m/[^\(]+\(\*?\s*([\w\[\]\.]*)\s*\)/;
+ 	    $param = $1;
+ 	    $type = $arg;
+ 	    $type =~ s/([^\(]+\(\*?)\s*$param/$1/;
+@@ -1796,6 +1820,11 @@ sub dump_function($$) {
+ 	return;
+     }
+ 
++    if ($identifier ne $declaration_name) {
++	print STDERR "${file}:$.: warning: expecting prototype for $identifier(). Prototype was for $declaration_name() instead\n";
++	return;
++    }
++
+     my $prms = join " ", @parameterlist;
+     check_sections($file, $declaration_name, "function", $sectcheck, $prms);
+ 
+@@ -1878,6 +1907,7 @@ sub tracepoint_munge($) {
+ 			     "$prototype\n";
+ 	} else {
+ 		$prototype = "static inline void trace_$tracepointname($tracepointargs)";
++		$identifier = "trace_$identifier";
+ 	}
+ }
+ 
+@@ -2041,7 +2071,6 @@ sub process_normal() {
+ #
+ sub process_name($$) {
+     my $file = shift;
+-    my $identifier;
+     my $descr;
+ 
+     if (/$doc_block/o) {
+@@ -2054,12 +2083,19 @@ sub process_name($$) {
+ 	} else {
+ 	    $section = $1;
+ 	}
+-    }
+-    elsif (/$doc_decl/o) {
++    } elsif (/$doc_decl/o) {
+ 	$identifier = $1;
+-	if (/\s*([\w\s]+?)(\(\))?\s*-/) {
++	if (/\s*([\w\s]+?)(\(\))?\s*([-:].*)?$/) {
+ 	    $identifier = $1;
+ 	}
++	if ($identifier =~ m/^(struct|union|enum|typedef)\b\s*(\S*)/) {
++	    $decl_type = $1;
++	    $identifier = $2;
++	} else {
++	    $decl_type = 'function';
++	    $identifier =~ s/^define\s+//;
++	}
++	$identifier =~ s/\s+$//;
+ 
+ 	$state = STATE_BODY;
+ 	# if there's no @param blocks need to set up default section
+@@ -2067,7 +2103,7 @@ sub process_name($$) {
+ 	$contents = "";
+ 	$section = $section_default;
+ 	$new_start_line = $. + 1;
+-	if (/-(.*)/) {
++	if (/[-:](.*)/) {
+ 	    # strip leading/trailing/multiple spaces
+ 	    $descr= $1;
+ 	    $descr =~ s/^\s*//;
+@@ -2085,20 +2121,15 @@ sub process_name($$) {
+ 	    ++$warnings;
+ 	}
+ 
+-	if ($identifier =~ m/^struct\b/) {
+-	    $decl_type = 'struct';
+-	} elsif ($identifier =~ m/^union\b/) {
+-	    $decl_type = 'union';
+-	} elsif ($identifier =~ m/^enum\b/) {
+-	    $decl_type = 'enum';
+-	} elsif ($identifier =~ m/^typedef\b/) {
+-	    $decl_type = 'typedef';
+-	} else {
+-	    $decl_type = 'function';
++	if ($identifier eq "") {
++	    print STDERR "${file}:$.: warning: wrong kernel-doc identifier on line:\n";
++	    print STDERR $_;
++	    ++$warnings;
++	    $state = STATE_NORMAL;
+ 	}
+ 
+ 	if ($verbose) {
+-	    print STDERR "${file}:$.: info: Scanning doc for $identifier\n";
++	    print STDERR "${file}:$.: info: Scanning doc for $decl_type $identifier\n";
+ 	}
+     } else {
+ 	print STDERR "${file}:$.: warning: Cannot understand $_ on line $.",
+diff --git a/usr/include/Makefile b/usr/include/Makefile
+index 703a255cd..59ba5afaf 100644
+--- a/usr/include/Makefile
++++ b/usr/include/Makefile
+@@ -47,6 +47,9 @@ no-header-test += linux/v4l2-mediabus.h
+ no-header-test += linux/v4l2-subdev.h
+ no-header-test += linux/videodev2.h
+ no-header-test += linux/vm_sockets.h
++no-header-test += linux/xilinx-sdirxss.h
++no-header-test += linux/xilinx-hls.h
++no-header-test += linux/xilinx-v4l2-events.h
+ no-header-test += sound/asequencer.h
+ no-header-test += sound/asoc.h
+ no-header-test += sound/asound.h

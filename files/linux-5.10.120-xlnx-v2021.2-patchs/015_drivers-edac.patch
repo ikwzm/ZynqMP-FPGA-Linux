@@ -1,0 +1,2936 @@
+diff --git a/Documentation/ABI/testing/sysfs-driver-cortexa53-edac b/Documentation/ABI/testing/sysfs-driver-cortexa53-edac
+new file mode 100644
+index 000000000..87ed5ca3a
+--- /dev/null
++++ b/Documentation/ABI/testing/sysfs-driver-cortexa53-edac
+@@ -0,0 +1,10 @@
++What:		/sys/devices/system/edac/cpu_cache/inject_(L1/L2)_Cache_Error
++Date:		June 2016
++Contact:	nagasure@xilinx.com
++		punnaia@xilinx.com
++Description:    This control file allows to inject cache errors on cortexa53
++		L1 and L2 caches. arm provided error injection for cortexa53
++		caches (L1 and L2). Just echo 1 > /sys/devices/system/edac/
++		cpu_cache/inject_L1_Error for L1 cache error injection and
++		echo 1 > /sys/devices/system/edac/cpu_cache/inject_L2_Error
++		for L2 cache error injection.
+diff --git a/Documentation/devicetree/bindings/edac/cortex-arm64-edac.txt b/Documentation/devicetree/bindings/edac/cortex-arm64-edac.txt
+new file mode 100644
+index 000000000..552f0c777
+--- /dev/null
++++ b/Documentation/devicetree/bindings/edac/cortex-arm64-edac.txt
+@@ -0,0 +1,15 @@
++* ARM Cortex A57 and A53 L1/L2 cache error reporting
++
++CPU Memory Error Syndrome and L2 Memory Error Syndrome registers can be used
++for checking L1 and L2 memory errors.
++
++The following section describes the Cortex A57/A53 EDAC DT node binding.
++
++Required properties:
++- compatible: Should be "arm,cortex-a57-edac" or "arm,cortex-a53-edac"
++
++Example:
++	edac {
++		compatible = "arm,cortex-a57-edac";
++	};
++
+diff --git a/Documentation/devicetree/bindings/edac/pl310_edac_l2.txt b/Documentation/devicetree/bindings/edac/pl310_edac_l2.txt
+new file mode 100644
+index 000000000..94fbb8da2
+--- /dev/null
++++ b/Documentation/devicetree/bindings/edac/pl310_edac_l2.txt
+@@ -0,0 +1,19 @@
++Pl310 L2 Cache EDAC driver, it does reports the data and tag ram parity errors.
++
++Required properties:
++- compatible: Should be "arm,pl310-cache".
++- intterupts: Interrupt number to the cpu.
++- reg: Physical base address and size of cache controller's memory mapped
++  registers
++
++Example:
++++++++++
++
++	L2: cache-controller {
++		compatible = "arm,pl310-cache";
++		interrupts = <0 2 4>;
++		reg = <0xf8f02000 0x1000>;
++	};
++
++PL310 L2 Cache EDAC driver detects the Parity enable state by reading the
++appropriate control register.
+diff --git a/Documentation/devicetree/bindings/edac/xlnx,versal-ddrmc-edac.yaml b/Documentation/devicetree/bindings/edac/xlnx,versal-ddrmc-edac.yaml
+new file mode 100644
+index 000000000..b14fcb4f6
+--- /dev/null
++++ b/Documentation/devicetree/bindings/edac/xlnx,versal-ddrmc-edac.yaml
+@@ -0,0 +1,60 @@
++# SPDX-License-Identifier: GPL-2.0
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/edac/xlnx,versal-ddrmc-edac.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Versal DDRMC EDAC driver
++
++maintainers:
++  - Sai Krishna Potthuri <lakshmi.sai.krishna.potthuri@xilinx.com>
++
++description: |
++  Versal DDR controller has an optional ECC support which correct
++  single bit ECC errors and detect double bit ECC errors.
++
++properties:
++  compatible:
++    items:
++      - enum:
++          - xlnx,versal-ddrmc-edac
++
++  reg:
++    maxItems: 2
++    items:
++      - description: DDR Memory Controller registers
++      - description: NOC registers corresponding to DDR Memory Controller
++
++  reg-names:
++    items:
++      - const: ddrmc_base
++      - const: ddrmc_noc_base
++
++  interrupts:
++    maxItems: 1
++
++  xlnx,mc-id:
++    $ref: /schemas/types.yaml#/definitions/uint32
++    description: Instance number of the DDR Memory Controller
++
++required:
++  - compatible
++  - reg
++  - reg-names
++  - interrupts
++  - xlnx,mc-id
++
++examples:
++  - |
++    bus {
++      #address-cells = <2>;
++      #size-cells = <2>;
++      memory-controller@f6150000 {
++        compatible = "xlnx,versal-ddrmc-edac";
++        reg = <0x0 0xf6150000 0x0 0x2000>, <0x0 0xf6070000 0x0 0x20000>;
++        reg-names = "ddrmc_base", "ddrmc_noc_base";
++        interrupt-parent = <&gic>;
++        interrupts = <0 147 4>;
++        xlnx,mc-id = <0>;
++      };
++    };
+diff --git a/Documentation/devicetree/bindings/edac/zynqmp_ocm_edac.txt b/Documentation/devicetree/bindings/edac/zynqmp_ocm_edac.txt
+new file mode 100644
+index 000000000..252bb96be
+--- /dev/null
++++ b/Documentation/devicetree/bindings/edac/zynqmp_ocm_edac.txt
+@@ -0,0 +1,18 @@
++Xilinx ZynqMP OCM EDAC driver, it does reports the OCM ECC single bit errors
++that are corrected and double bit ecc errors that are detected by the OCM
++ECC controller.
++
++Required properties:
++- compatible: Should be "xlnx,zynqmp-ocmc-1.0".
++- reg: Should contain OCM controller registers location and length.
++- interrupt-parent: Should be core interrupt controller.
++- interrupts: Property with a value describing the interrupt number.
++
++Example:
++++++++++
++ocm: memory-controller@ff960000 {
++	compatible = "xlnx,zynqmp-ocmc-1.0";
++	reg = <0x0 0xff960000 0x1000>;
++	interrupt-parent = <&gic>;
++	interrupts = <0 10 4>;
++};
+diff --git a/drivers/edac/Kconfig b/drivers/edac/Kconfig
+index 7a47680d6..af2a60ddb 100644
+--- a/drivers/edac/Kconfig
++++ b/drivers/edac/Kconfig
+@@ -341,6 +341,13 @@ config EDAC_CPC925
+ 	  a companion chip to the PowerPC 970 family of
+ 	  processors.
+ 
++config EDAC_PL310_L2
++	tristate "Pl310 L2 Cache Controller"
++	depends on ARM
++	help
++	  Support for parity error detection on L2 cache controller
++	  data and tag ram memory
++
+ config EDAC_HIGHBANK_MC
+ 	tristate "Highbank Memory Controller"
+ 	depends on ARCH_HIGHBANK
+@@ -487,6 +494,13 @@ config EDAC_SYNOPSYS
+ 	  Support for error detection and correction on the Synopsys DDR
+ 	  memory controller.
+ 
++config EDAC_ZYNQMP_OCM
++	tristate "Xilinx ZynqMP OCM Controller"
++	depends on ARCH_ZYNQMP
++	help
++	  Support for error detection and correction on the xilinx ZynqMP OCM
++	  controller.
++
+ config EDAC_XGENE
+ 	tristate "APM X-Gene SoC"
+ 	depends on (ARM64 || COMPILE_TEST)
+@@ -494,6 +508,14 @@ config EDAC_XGENE
+ 	  Support for error detection and correction on the
+ 	  APM X-Gene family of SOCs.
+ 
++config EDAC_CORTEX_ARM64
++	tristate "ARM Cortex A57/A53"
++	default y if !CPU_IDLE
++	depends on !CPU_IDLE && ARM64
++	help
++	  Support for error detection and correction on the
++	  ARM Cortex A57 and A53.
++
+ config EDAC_TI
+ 	tristate "Texas Instruments DDR3 ECC Controller"
+ 	depends on ARCH_KEYSTONE || SOC_DRA7XX
+@@ -537,4 +559,15 @@ config EDAC_DMC520
+ 	  Support for error detection and correction on the
+ 	  SoCs with ARM DMC-520 DRAM controller.
+ 
++config EDAC_XILINX_DDR
++	tristate "Xilinx Versal DDR Memory Controller"
++	depends on ARCH_ZYNQMP
++	help
++	  Support for error detection and correction on the Xilinx Versal DDR
++	  memory controller.
++
++	  Report both Single Bit Errors (CE) and Double Bit Errors (UE).
++	  Support injecting both Correctable and UnCorrectable errors for debug
++	  purpose using sysfs entries.
++
+ endif # EDAC
+diff --git a/drivers/edac/Makefile b/drivers/edac/Makefile
+index 3a8491687..7e8af724a 100644
+--- a/drivers/edac/Makefile
++++ b/drivers/edac/Makefile
+@@ -80,12 +80,16 @@ obj-$(CONFIG_EDAC_OCTEON_PCI)		+= octeon_edac-pci.o
+ obj-$(CONFIG_EDAC_THUNDERX)		+= thunderx_edac.o
+ 
+ obj-$(CONFIG_EDAC_ALTERA)		+= altera_edac.o
++obj-$(CONFIG_EDAC_PL310_L2)		+= pl310_edac_l2.o
+ obj-$(CONFIG_EDAC_SIFIVE)		+= sifive_edac.o
+ obj-$(CONFIG_EDAC_ARMADA_XP)		+= armada_xp_edac.o
+ obj-$(CONFIG_EDAC_SYNOPSYS)		+= synopsys_edac.o
+ obj-$(CONFIG_EDAC_XGENE)		+= xgene_edac.o
++obj-$(CONFIG_EDAC_CORTEX_ARM64)		+= cortex_arm64_edac.o
++obj-$(CONFIG_EDAC_ZYNQMP_OCM)		+= zynqmp_ocm_edac.o
+ obj-$(CONFIG_EDAC_TI)			+= ti_edac.o
+ obj-$(CONFIG_EDAC_QCOM)			+= qcom_edac.o
+ obj-$(CONFIG_EDAC_ASPEED)		+= aspeed_edac.o
+ obj-$(CONFIG_EDAC_BLUEFIELD)		+= bluefield_edac.o
++obj-$(CONFIG_EDAC_XILINX_DDR)		+= xilinx_ddrmc_edac.o
+ obj-$(CONFIG_EDAC_DMC520)		+= dmc520_edac.o
+diff --git a/drivers/edac/cortex_arm64_edac.c b/drivers/edac/cortex_arm64_edac.c
+new file mode 100644
+index 000000000..2d882c651
+--- /dev/null
++++ b/drivers/edac/cortex_arm64_edac.c
+@@ -0,0 +1,471 @@
++/*
++ * Cortex A57 and A53 EDAC
++ *
++ * Copyright (c) 2015, Advanced Micro Devices
++ * Author: Brijesh Singh <brijeshkumar.singh@amd.com>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/module.h>
++#include <linux/of_device.h>
++#include <linux/platform_device.h>
++#include <ras/ras_event.h>
++
++#include "edac_module.h"
++
++#define DRV_NAME			"cortex_edac"
++
++#define CPUMERRSR_EL1_INDEX(x, y)	((x) & (y))
++#define CPUMERRSR_EL1_BANK_WAY(x, y)	(((x) >> 18) & (y))
++#define CPUMERRSR_EL1_RAMID(x)		(((x) >> 24) & 0x7f)
++#define CPUMERRSR_EL1_VALID(x)		((x) & (1 << 31))
++#define CPUMERRSR_EL1_REPEAT(x)		(((x) >> 32) & 0x7f)
++#define CPUMERRSR_EL1_OTHER(x)		(((x) >> 40) & 0xff)
++#define CPUMERRSR_EL1_FATAL(x)		((x) & (1UL << 63))
++#define L1_I_TAG_RAM			0x00
++#define L1_I_DATA_RAM			0x01
++#define L1_D_TAG_RAM			0x08
++#define L1_D_DATA_RAM			0x09
++#define L1_D_DIRTY_RAM			0x14
++#define TLB_RAM				0x18
++
++#define L2MERRSR_EL1_CPUID_WAY(x)	(((x) >> 18) & 0xf)
++#define L2MERRSR_EL1_RAMID(x)		(((x) >> 24) & 0x7f)
++#define L2MERRSR_EL1_VALID(x)		((x) & (1 << 31))
++#define L2MERRSR_EL1_REPEAT(x)		(((x) >> 32) & 0xff)
++#define L2MERRSR_EL1_OTHER(x)		(((x) >> 40) & 0xff)
++#define L2MERRSR_EL1_FATAL(x)		((x) & (1UL << 63))
++#define L2_TAG_RAM			0x10
++#define L2_DATA_RAM			0x11
++#define L2_SNOOP_RAM			0x12
++#define L2_DIRTY_RAM			0x14
++#define L2_INCLUSION_PF_RAM		0x18
++
++#define L1_CACHE			0
++#define L2_CACHE			1
++
++#define EDAC_MOD_STR			DRV_NAME
++
++/* Error injectin macros*/
++#define L1_DCACHE_ERRINJ_ENABLE		(1 << 6)
++#define L1_DCACHE_ERRINJ_DISABLE	(~(1 << 6))
++#define L2_DCACHE_ERRINJ_ENABLE		(1 << 29)
++#define L2_DCACHE_ERRINJ_DISABLE	(~(1 << 29))
++#define L2_ECC_PROTECTION		(1 << 22)
++
++static int poll_msec = 100;
++
++struct cortex_arm64_edac {
++	struct edac_device_ctl_info *edac_ctl;
++};
++
++static inline u64 read_cpumerrsr_el1(void)
++{
++	u64 val;
++
++	asm volatile("mrs %0, s3_1_c15_c2_2" : "=r" (val));
++	return val;
++}
++
++static inline void write_cpumerrsr_el1(u64 val)
++{
++	asm volatile("msr s3_1_c15_c2_2, %0" :: "r" (val));
++}
++
++static inline u64 read_l2merrsr_el1(void)
++{
++	u64 val;
++
++	asm volatile("mrs %0, s3_1_c15_c2_3" : "=r" (val));
++	return val;
++}
++
++static inline void write_l2merrsr_el1(u64 val)
++{
++	asm volatile("msr s3_1_c15_c2_3, %0" :: "r" (val));
++}
++
++static inline void cortexa53_edac_busy_on_inst(void)
++{
++	asm volatile("isb sy");
++}
++
++static inline void cortexa53_edac_busy_on_data(void)
++{
++	asm volatile("dsb sy");
++}
++
++static inline void write_l2actrl_el1(u64 val)
++{
++	asm volatile("msr s3_1_c15_c0_0, %0" :: "r" (val));
++	cortexa53_edac_busy_on_inst();
++}
++
++static inline u64 read_l2actrl_el1(void)
++{
++	u64 val;
++
++	asm volatile("mrs %0, s3_1_c15_c0_0" : "=r" (val));
++	return val;
++}
++
++static inline u64 read_l2ctlr_el1(void)
++{
++	u64 rval;
++
++	asm volatile("mrs %0,  S3_1_C11_C0_2" : "=r" (rval));
++	return rval;
++
++}
++
++static inline u64 read_l1actrl_el1(void)
++{
++	u64 rval;
++
++	asm volatile("mrs %0,  S3_1_C15_C2_0" : "=r" (rval));
++	return rval;
++}
++
++static inline void write_l1actrl_el1(u64 val)
++{
++	asm volatile("msr S3_1_C15_C2_0, %0" :: "r" (val));
++}
++
++static void parse_cpumerrsr(void *arg)
++{
++	int cpu, partnum, way;
++	unsigned int index = 0;
++	u64 val = read_cpumerrsr_el1();
++	int repeat_err, other_err;
++
++	/* we do not support fatal error handling so far */
++	if (CPUMERRSR_EL1_FATAL(val))
++		return;
++
++	/* check if we have valid error before continuing */
++	if (!CPUMERRSR_EL1_VALID(val))
++		return;
++
++	cpu = smp_processor_id();
++	partnum = read_cpuid_part_number();
++	repeat_err = CPUMERRSR_EL1_REPEAT(val);
++	other_err = CPUMERRSR_EL1_OTHER(val);
++
++	/* way/bank and index address bit ranges are different between
++	 * A57 and A53 */
++	if (partnum == ARM_CPU_PART_CORTEX_A57) {
++		index = CPUMERRSR_EL1_INDEX(val, 0x1ffff);
++		way = CPUMERRSR_EL1_BANK_WAY(val, 0x1f);
++	} else {
++		index = CPUMERRSR_EL1_INDEX(val, 0xfff);
++		way = CPUMERRSR_EL1_BANK_WAY(val, 0x7);
++	}
++
++	edac_printk(KERN_CRIT, EDAC_MOD_STR, "CPU%d L1 error detected!\n", cpu);
++	edac_printk(KERN_CRIT, EDAC_MOD_STR, "index=%#x, RAMID=", index);
++
++	switch (CPUMERRSR_EL1_RAMID(val)) {
++	case L1_I_TAG_RAM:
++		pr_cont("'L1-I Tag RAM' (way %d)", way);
++		break;
++	case L1_I_DATA_RAM:
++		pr_cont("'L1-I Data RAM' (bank %d)", way);
++		break;
++	case L1_D_TAG_RAM:
++		pr_cont("'L1-D Tag RAM' (way %d)", way);
++		break;
++	case L1_D_DATA_RAM:
++		pr_cont("'L1-D Data RAM' (bank %d)", way);
++		break;
++	case L1_D_DIRTY_RAM:
++		pr_cont("'L1 Dirty RAM'");
++		break;
++	case TLB_RAM:
++		pr_cont("'TLB RAM'");
++		break;
++	default:
++		pr_cont("'unknown'");
++		break;
++	}
++
++	pr_cont(", repeat=%d, other=%d (CPUMERRSR_EL1=%#llx)\n", repeat_err,
++		other_err, val);
++
++	trace_mc_event(HW_EVENT_ERR_CORRECTED, "L1 non-fatal error",
++		       "", repeat_err, 0, 0, 0, -1, index, 0, 0, DRV_NAME);
++	write_cpumerrsr_el1(0);
++}
++
++static void a57_parse_l2merrsr_way(u8 ramid, u8 val)
++{
++	switch (ramid) {
++	case L2_TAG_RAM:
++	case L2_DATA_RAM:
++	case L2_DIRTY_RAM:
++		pr_cont("(cpu%d tag, way %d)", val / 2, val % 2);
++		break;
++	case L2_SNOOP_RAM:
++		pr_cont("(cpu%d tag, way %d)", (val & 0x6) >> 1,
++			(val & 0x1));
++		break;
++	}
++}
++
++static void a53_parse_l2merrsr_way(u8 ramid, u8 val)
++{
++	switch (ramid) {
++	case L2_TAG_RAM:
++		pr_cont("(way %d)", val);
++		fallthrough;
++	case L2_DATA_RAM:
++		pr_cont("(bank %d)", val);
++		break;
++	case L2_SNOOP_RAM:
++		pr_cont("(cpu%d tag, way %d)", val / 2, val % 4);
++		break;
++	}
++}
++
++static void parse_l2merrsr(void *arg)
++{
++	int cpu, partnum;
++	unsigned int index;
++	int repeat_err, other_err;
++	u64 val = read_l2merrsr_el1();
++
++	/* we do not support fatal error handling so far */
++	if (L2MERRSR_EL1_FATAL(val))
++		return;
++
++	/* check if we have valid error before continuing */
++	if (!L2MERRSR_EL1_VALID(val))
++		return;
++
++	cpu = smp_processor_id();
++	partnum = read_cpuid_part_number();
++	repeat_err = L2MERRSR_EL1_REPEAT(val);
++	other_err = L2MERRSR_EL1_OTHER(val);
++
++	/* index address range is different between A57 and A53 */
++	if (partnum == ARM_CPU_PART_CORTEX_A57)
++		index = val & 0x1ffff;
++	else
++		index = (val >> 3) & 0x3fff;
++
++	edac_printk(KERN_CRIT, EDAC_MOD_STR, "CPU%d L2 error detected!\n", cpu);
++	edac_printk(KERN_CRIT, EDAC_MOD_STR, "index=%#x RAMID=", index);
++
++	switch (L2MERRSR_EL1_RAMID(val)) {
++	case L2_TAG_RAM:
++		pr_cont("'L2 Tag RAM'");
++		break;
++	case L2_DATA_RAM:
++		pr_cont("'L2 Data RAM'");
++		break;
++	case L2_SNOOP_RAM:
++		pr_cont("'L2 Snoop tag RAM'");
++		break;
++	case L2_DIRTY_RAM:
++		pr_cont("'L2 Dirty RAM'");
++		break;
++	case L2_INCLUSION_PF_RAM:
++		pr_cont("'L2 inclusion PF RAM'");
++		break;
++	default:
++		pr_cont("unknown");
++		break;
++	}
++
++	/* cpuid/way bit description is different between A57 and A53 */
++	if (partnum == ARM_CPU_PART_CORTEX_A57)
++		a57_parse_l2merrsr_way(L2MERRSR_EL1_RAMID(val),
++				       L2MERRSR_EL1_CPUID_WAY(val));
++	else
++		a53_parse_l2merrsr_way(L2MERRSR_EL1_RAMID(val),
++				       L2MERRSR_EL1_CPUID_WAY(val));
++
++	pr_cont(", repeat=%d, other=%d (L2MERRSR_EL1=%#llx)\n", repeat_err,
++		other_err, val);
++	trace_mc_event(HW_EVENT_ERR_CORRECTED, "L2 non-fatal error",
++		       "", repeat_err, 0, 0, 0, -1, index, 0, 0, DRV_NAME);
++	write_l2merrsr_el1(0);
++}
++
++static void cortex_arm64_edac_check(struct edac_device_ctl_info *edac_ctl)
++{
++	int cpu;
++	struct cpumask cluster_mask, old_mask;
++
++	cpumask_clear(&cluster_mask);
++	cpumask_clear(&old_mask);
++
++	get_online_cpus();
++	for_each_online_cpu(cpu) {
++		/* Check CPU L1 error */
++		smp_call_function_single(cpu, parse_cpumerrsr, NULL, 0);
++		cpumask_copy(&cluster_mask, topology_core_cpumask(cpu));
++		if (cpumask_equal(&cluster_mask, &old_mask))
++			continue;
++		cpumask_copy(&old_mask, &cluster_mask);
++		/* Check CPU L2 error */
++		smp_call_function_any(&cluster_mask, parse_l2merrsr, NULL, 0);
++	}
++	put_online_cpus();
++}
++
++static ssize_t cortexa53_edac_inject_L2_show(struct edac_device_ctl_info
++							*dci, char *data)
++{
++	return sprintf(data, "L2ACTLR_EL1: [0x%llx]\n\r", read_l2actrl_el1());
++}
++
++static ssize_t cortexa53_edac_inject_L2_store(
++		struct edac_device_ctl_info *dci, const char *data,
++		size_t count)
++{
++	u64 l2actrl, l2ecc;
++
++	if (!data)
++		return -EFAULT;
++
++	l2ecc = read_l2ctlr_el1();
++	if ((l2ecc & L2_ECC_PROTECTION)) {
++		l2actrl = read_l2actrl_el1();
++		l2actrl = l2actrl | L2_DCACHE_ERRINJ_ENABLE;
++		write_l2actrl_el1(l2actrl);
++		cortexa53_edac_busy_on_inst();
++	} else {
++		edac_printk(KERN_CRIT, EDAC_MOD_STR, "L2 ECC not enabled\n");
++	}
++
++	return count;
++}
++
++static ssize_t cortexa53_edac_inject_L1_show(struct edac_device_ctl_info
++							*dci, char *data)
++{
++	return sprintf(data, "L1CTLR_EL1: [0x%llx]\n\r", read_l1actrl_el1());
++}
++
++static ssize_t cortexa53_edac_inject_L1_store(
++		struct edac_device_ctl_info *dci, const char *data,
++		size_t count)
++{
++	u64 l1actrl;
++
++	if (!data)
++		return -EFAULT;
++
++	l1actrl = read_l1actrl_el1();
++	l1actrl |= L1_DCACHE_ERRINJ_ENABLE;
++	write_l1actrl_el1(l1actrl);
++	cortexa53_edac_busy_on_inst();
++
++	return count;
++}
++
++static struct edac_dev_sysfs_attribute cortexa53_edac_sysfs_attributes[] = {
++	{
++		.attr = {
++			.name = "inject_L2_Cache_Error",
++			.mode = (S_IRUGO | S_IWUSR)
++		},
++		.show = cortexa53_edac_inject_L2_show,
++		.store = cortexa53_edac_inject_L2_store},
++	{
++		.attr = {
++			.name = "inject_L1_Cache_Error",
++			.mode = (S_IRUGO | S_IWUSR)
++		},
++		.show = cortexa53_edac_inject_L1_show,
++		.store = cortexa53_edac_inject_L1_store},
++
++	/* End of list */
++	{
++		.attr = {.name = NULL}
++	}
++};
++
++static void cortexa53_set_edac_sysfs_attributes(struct edac_device_ctl_info
++						*edac_dev)
++{
++	edac_dev->sysfs_attributes = cortexa53_edac_sysfs_attributes;
++}
++
++static int cortex_arm64_edac_probe(struct platform_device *pdev)
++{
++	int rc;
++	struct cortex_arm64_edac *drv;
++	struct device *dev = &pdev->dev;
++
++	drv = devm_kzalloc(dev, sizeof(*drv), GFP_KERNEL);
++	if (!drv)
++		return -ENOMEM;
++
++	/* Only POLL mode is supported */
++	edac_op_state = EDAC_OPSTATE_POLL;
++
++	drv->edac_ctl = edac_device_alloc_ctl_info(0, "cpu_cache", 1, "L", 2,
++						   0, NULL, 0,
++						   edac_device_alloc_index());
++	if (IS_ERR(drv->edac_ctl))
++		return -ENOMEM;
++
++	drv->edac_ctl->poll_msec = poll_msec;
++	drv->edac_ctl->edac_check = cortex_arm64_edac_check;
++	drv->edac_ctl->dev = dev;
++	drv->edac_ctl->mod_name = dev_name(dev);
++	drv->edac_ctl->dev_name = dev_name(dev);
++	drv->edac_ctl->ctl_name = "cache_err";
++	platform_set_drvdata(pdev, drv);
++
++	cortexa53_set_edac_sysfs_attributes(drv->edac_ctl);
++
++	rc = edac_device_add_device(drv->edac_ctl);
++	if (rc)
++		edac_device_free_ctl_info(drv->edac_ctl);
++
++	return rc;
++}
++
++static int cortex_arm64_edac_remove(struct platform_device *pdev)
++{
++	struct cortex_arm64_edac *drv = dev_get_drvdata(&pdev->dev);
++	struct edac_device_ctl_info *edac_ctl = drv->edac_ctl;
++
++	edac_device_del_device(edac_ctl->dev);
++	edac_device_free_ctl_info(edac_ctl);
++
++	return 0;
++}
++
++static const struct of_device_id cortex_arm64_edac_of_match[] = {
++	{ .compatible = "arm,cortex-a57-edac" },
++	{ .compatible = "arm,cortex-a53-edac" },
++	{}
++};
++MODULE_DEVICE_TABLE(of, cortex_arm64_edac_of_match);
++
++static struct platform_driver cortex_arm64_edac_driver = {
++	.probe = cortex_arm64_edac_probe,
++	.remove = cortex_arm64_edac_remove,
++	.driver = {
++		.name = DRV_NAME,
++		.of_match_table = cortex_arm64_edac_of_match,
++	},
++};
++module_platform_driver(cortex_arm64_edac_driver);
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Brijesh Singh <brijeshkumar.singh@amd.com>");
++MODULE_DESCRIPTION("Cortex A57 and A53 EDAC driver");
++module_param(poll_msec, int, 0444);
++MODULE_PARM_DESC(poll_msec, "EDAC monitor poll interval in msec");
+diff --git a/drivers/edac/pl310_edac_l2.c b/drivers/edac/pl310_edac_l2.c
+new file mode 100644
+index 000000000..57f2f5b02
+--- /dev/null
++++ b/drivers/edac/pl310_edac_l2.c
+@@ -0,0 +1,233 @@
++/*
++ * Pl310 L2 Cache EDAC Driver
++ *
++ * Copyright (C) 2013-2014 Xilinx, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#include <linux/edac.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <asm/hardware/cache-l2x0.h>
++#include "edac_module.h"
++
++/* Auxilary control register definitions */
++#define L2X0_AUX_CTRL_PARITY_MASK	BIT(21)
++
++/* Interrupt imask/status/clear register definitions */
++#define L2X0_INTR_PARRD_MASK	0x4
++#define L2X0_INTR_PARRT_MASK	0x2
++
++/**
++ * struct pl310_edac_l2_priv - Zynq L2 cache controller private instance data
++ * @base:		Base address of the controller
++ * @irq:		Interrupt number
++ */
++struct pl310_edac_l2_priv {
++	void __iomem *base;
++	int irq;
++};
++
++/**
++ * pl310_edac_l2_parityerr_check - Check controller staus for parity errors
++ * @dci:	Pointer to the edac device controller instance
++ *
++ * This routine is used to check and post parity errors
++ */
++static void pl310_edac_l2_parityerr_check(struct edac_device_ctl_info *dci)
++{
++	struct pl310_edac_l2_priv *priv = dci->pvt_info;
++	u32 regval;
++
++	regval = readl(priv->base + L2X0_RAW_INTR_STAT);
++	if (regval & L2X0_INTR_PARRD_MASK) {
++		/* Data parity error will be reported as correctable error */
++		writel(L2X0_INTR_PARRD_MASK, priv->base + L2X0_INTR_CLEAR);
++		edac_device_handle_ce(dci, 0, 0, dci->ctl_name);
++	}
++	if (regval & L2X0_INTR_PARRT_MASK) {
++		/* tag parity error will be reported as uncorrectable error */
++		writel(L2X0_INTR_PARRT_MASK, priv->base + L2X0_INTR_CLEAR);
++		edac_device_handle_ue(dci, 0, 0, dci->ctl_name);
++	}
++}
++
++/**
++ * pl310_edac_l2_int_handler - ISR fucntion for l2cahe controller
++ * @irq:	Irq Number
++ * @device:	Pointer to the edac device controller instance
++ *
++ * This routine is triggered whenever there is parity error detected
++ *
++ * Return: Always returns IRQ_HANDLED
++ */
++static irqreturn_t pl310_edac_l2_int_handler(int irq, void *device)
++{
++	pl310_edac_l2_parityerr_check((struct edac_device_ctl_info *)device);
++	return IRQ_HANDLED;
++}
++
++/**
++ * pl310_edac_l2_poll_handler - Poll the status reg for parity errors
++ * @dci:	Pointer to the edac device controller instance
++ *
++ * This routine is used to check and post parity errors and is called by
++ * the EDAC polling thread
++ */
++static void pl310_edac_l2_poll_handler(struct edac_device_ctl_info *dci)
++{
++	pl310_edac_l2_parityerr_check(dci);
++}
++
++/**
++ * pl310_edac_l2_get_paritystate - check the parity enable/disable status
++ * @base:	Pointer to the contoller base address
++ *
++ * This routine returns the parity enable/diable status for the controller
++ *
++ * Return: true/false -  parity enabled/disabled.
++ */
++static bool pl310_edac_l2_get_paritystate(void __iomem *base)
++{
++	u32 regval;
++
++	regval = readl(base + L2X0_AUX_CTRL);
++	if (regval & L2X0_AUX_CTRL_PARITY_MASK)
++		return true;
++
++	return false;
++}
++
++/**
++ * pl310_edac_l2_probe - Check controller and bind driver
++ * @pdev:	Pointer to the platform_device struct
++ *
++ * This routine probes a specific arm,pl310-cache instance for binding
++ * with the driver.
++ *
++ * Return: 0 if the controller instance was successfully bound to the
++ * driver; otherwise, < 0 on error.
++ */
++static int pl310_edac_l2_probe(struct platform_device *pdev)
++{
++	struct edac_device_ctl_info *dci;
++	struct pl310_edac_l2_priv *priv;
++	int rc;
++	struct resource *res;
++	void __iomem *baseaddr;
++	u32 regval;
++
++	/* Get the data from the platform device */
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	baseaddr = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(baseaddr))
++		return PTR_ERR(baseaddr);
++
++	/* Check for the ecc enable status */
++	if (pl310_edac_l2_get_paritystate(baseaddr) == false) {
++		dev_err(&pdev->dev, "parity check not enabled\n");
++		return -ENXIO;
++	}
++
++	dci = edac_device_alloc_ctl_info(sizeof(*priv), "l2cache",
++					 1, "L", 1, 1, NULL, 0,
++					 edac_device_alloc_index());
++	if (IS_ERR(dci))
++		return PTR_ERR(dci);
++
++	priv = dci->pvt_info;
++	priv->base = baseaddr;
++	dci->dev = &pdev->dev;
++	dci->mod_name = "pl310_edac_l2";
++	dci->ctl_name = "pl310_l2_controller";
++	dci->dev_name = dev_name(&pdev->dev);
++
++	priv->irq = platform_get_irq(pdev, 0);
++	rc = devm_request_irq(&pdev->dev, priv->irq,
++				pl310_edac_l2_int_handler,
++				0, dev_name(&pdev->dev), (void *)dci);
++	if (rc < 0) {
++		dci->edac_check = pl310_edac_l2_poll_handler;
++		edac_op_state = EDAC_OPSTATE_POLL;
++	}
++
++	rc = edac_device_add_device(dci);
++	if (rc) {
++		dev_err(&pdev->dev, "failed to register with EDAC core\n");
++		goto del_edac_device;
++	}
++
++	if (edac_op_state != EDAC_OPSTATE_POLL) {
++		regval = readl(priv->base+L2X0_INTR_MASK);
++		regval |= (L2X0_INTR_PARRD_MASK | L2X0_INTR_PARRT_MASK);
++		writel(regval, priv->base+L2X0_INTR_MASK);
++	}
++
++	return rc;
++
++del_edac_device:
++	edac_device_del_device(&pdev->dev);
++	edac_device_free_ctl_info(dci);
++
++	return rc;
++}
++
++/**
++ * pl310_edac_l2_remove - Unbind driver from controller
++ * @pdev:	Pointer to the platform_device struct
++ *
++ * This routine unbinds the EDAC device controller instance associated
++ * with the specified arm,pl310-cache controller described by the
++ * OpenFirmware device tree node passed as a parameter.
++ *
++ * Return: Always returns 0
++ */
++static int pl310_edac_l2_remove(struct platform_device *pdev)
++{
++	struct edac_device_ctl_info *dci = platform_get_drvdata(pdev);
++	struct pl310_edac_l2_priv *priv = dci->pvt_info;
++	u32 regval;
++
++	if (edac_op_state != EDAC_OPSTATE_POLL) {
++		regval = readl(priv->base+L2X0_INTR_MASK);
++		regval &= ~(L2X0_INTR_PARRD_MASK | L2X0_INTR_PARRT_MASK);
++		writel(regval, priv->base+L2X0_INTR_MASK);
++	}
++
++	edac_device_del_device(&pdev->dev);
++	edac_device_free_ctl_info(dci);
++
++	return 0;
++}
++
++/* Device tree node type and compatible tuples this driver can match on */
++static const struct of_device_id pl310_edac_l2_match[] = {
++	{ .compatible = "arm,pl310-cache", },
++	{ /* end of table */ }
++};
++
++MODULE_DEVICE_TABLE(of, pl310_edac_l2_match);
++
++static struct platform_driver pl310_edac_l2_driver = {
++	.driver = {
++		 .name = "pl310-edac-l2",
++		 .of_match_table = pl310_edac_l2_match,
++	},
++	.probe = pl310_edac_l2_probe,
++	.remove = pl310_edac_l2_remove,
++};
++
++module_platform_driver(pl310_edac_l2_driver);
++
++MODULE_AUTHOR("Xilinx Inc.");
++MODULE_DESCRIPTION("pl310 L2 EDAC driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/edac/synopsys_edac.c b/drivers/edac/synopsys_edac.c
+index fea44dc04..6a5c3e442 100644
+--- a/drivers/edac/synopsys_edac.c
++++ b/drivers/edac/synopsys_edac.c
+@@ -433,6 +433,11 @@ static int zynqmp_get_error_info(struct synps_edac_priv *priv)
+ 	if (!regval)
+ 		return 1;
+ 
++	p->ce_cnt = (regval & ECC_STAT_CECNT_MASK) >> ECC_STAT_CECNT_SHIFT;
++	p->ue_cnt = (regval & ECC_STAT_UECNT_MASK) >> ECC_STAT_UECNT_SHIFT;
++	if (!p->ce_cnt)
++		goto ue_err;
++
+ 	p->ceinfo.bitpos = (regval & ECC_STAT_BITNUM_MASK);
+ 
+ 	regval = readl(base + ECC_CEADDR0_OFST);
+@@ -497,7 +502,7 @@ static void handle_error(struct mem_ctl_info *mci, struct synps_ecc_status *p)
+ 		}
+ 
+ 		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
+-				     p->ce_cnt, 0, 0, 0, 0, 0, -1,
++				     priv->ce_cnt, 0, 0, 0, 0, 0, -1,
+ 				     priv->message, "");
+ 	}
+ 
+@@ -515,7 +520,7 @@ static void handle_error(struct mem_ctl_info *mci, struct synps_ecc_status *p)
+ 		}
+ 
+ 		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
+-				     p->ue_cnt, 0, 0, 0, 0, 0, -1,
++				     priv->ue_cnt, 0, 0, 0, 0, 0, -1,
+ 				     priv->message, "");
+ 	}
+ 
+@@ -1350,14 +1355,16 @@ static int mc_probe(struct platform_device *pdev)
+ 
+ #ifdef CONFIG_EDAC_DEBUG
+ 	if (priv->p_data->quirks & DDR_ECC_DATA_POISON_SUPPORT) {
+-		if (edac_create_sysfs_attributes(mci)) {
++		rc = edac_create_sysfs_attributes(mci);
++		if (rc) {
+ 			edac_printk(KERN_ERR, EDAC_MC,
+ 					"Failed to create sysfs entries\n");
+ 			goto free_edac_mc;
+ 		}
+ 	}
+ 
+-	if (priv->p_data->quirks & DDR_ECC_INTR_SUPPORT)
++	if (of_device_is_compatible(pdev->dev.of_node,
++				    "xlnx,zynqmp-ddrc-2.40a"))
+ 		setup_address_map(priv);
+ #endif
+ 
+diff --git a/drivers/edac/xilinx_ddrmc_edac.c b/drivers/edac/xilinx_ddrmc_edac.c
+new file mode 100644
+index 000000000..d9122b3e6
+--- /dev/null
++++ b/drivers/edac/xilinx_ddrmc_edac.c
+@@ -0,0 +1,1268 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2020 Xilinx, Inc.
++ */
++
++#include <linux/edac.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/of_device.h>
++#include <linux/platform_device.h>
++#include <linux/sizes.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/firmware/xlnx-error-events.h>
++#include <linux/firmware/xlnx-event-manager.h>
++
++#include "edac_module.h"
++
++/* Granularity of reported error in bytes */
++#define XDDR_EDAC_ERR_GRAIN			1
++
++#define XDDR_EDAC_MSG_SIZE			256
++
++#define XDDR_PCSR_OFFSET			0xC
++#define XDDR_ISR_OFFSET				0x14
++#define XDDR_IRQ_EN_OFFSET			0x20
++#define XDDR_IRQ1_EN_OFFSET			0x2C
++#define XDDR_IRQ_DIS_OFFSET			0x24
++#define XDDR_IRQ_CE_MASK			GENMASK(18, 15)
++#define XDDR_IRQ_UE_MASK			GENMASK(14, 11)
++
++#define XDDR_REG_CONFIG0_OFFSET			0x258
++#define XDDR_REG_CONFIG0_BUS_WIDTH_MASK		GENMASK(19, 18)
++#define XDDR_REG_CONFIG0_BUS_WIDTH_SHIFT	18
++#define XDDR_REG_CONFIG0_NUM_CHANS_MASK		BIT(17)
++#define XDDR_REG_CONFIG0_NUM_CHANS_SHIFT	17
++#define XDDR_REG_CONFIG0_NUM_RANKS_MASK		GENMASK(15, 14)
++#define XDDR_REG_CONFIG0_NUM_RANKS_SHIFT	14
++#define XDDR_REG_CONFIG0_SIZE_MASK		GENMASK(10, 8)
++#define XDDR_REG_CONFIG0_SIZE_SHIFT		8
++
++#define XDDR_REG_PINOUT_OFFSET			0x25C
++#define XDDR_REG_PINOUT_ECC_EN_MASK		GENMASK(7, 5)
++
++#define ECCW0_FLIP_CTRL				0x109C
++#define ECCW0_FLIP0_OFFSET			0x10A0
++#define ECCW1_FLIP_CTRL				0x10AC
++#define ECCW1_FLIP0_OFFSET			0x10B0
++#define ECCR0_CERR_STAT_OFFSET			0x10BC
++#define ECCR0_CE_ADDR_LO_OFFSET			0x10C0
++#define ECCR0_CE_ADDR_LO_OFFSET			0x10C0
++#define ECCR0_CE_ADDR_HI_OFFSET			0x10C4
++#define ECCR0_CE_DATA_LO_OFFSET			0x10C8
++#define ECCR0_CE_DATA_HI_OFFSET			0x10CC
++#define ECCR0_CE_DATA_PAR_OFFSET		0x10D0
++
++#define ECCR0_UERR_STAT_OFFSET			0x10D4
++#define ECCR0_UE_ADDR_LO_OFFSET			0x10D8
++#define ECCR0_UE_ADDR_HI_OFFSET			0x10DC
++#define ECCR0_UE_DATA_LO_OFFSET			0x10E0
++#define ECCR0_UE_DATA_HI_OFFSET			0x10E4
++#define ECCR0_UE_DATA_PAR_OFFSET		0x10E8
++
++#define ECCR1_CERR_STAT_OFFSET			0x10F4
++#define ECCR1_CE_ADDR_LO_OFFSET			0x10F8
++#define ECCR1_CE_ADDR_HI_OFFSET			0x10FC
++#define ECCR1_CE_DATA_LO_OFFSET			0x1100
++#define ECCR1_CE_DATA_HI_OFFSET			0x110C
++#define ECCR1_CE_DATA_PAR_OFFSET		0x1108
++
++#define ECCR1_UERR_STAT_OFFSET			0x110C
++#define ECCR1_UE_ADDR_LO_OFFSET			0x1110
++#define ECCR1_UE_ADDR_HI_OFFSET			0x1114
++#define ECCR1_UE_DATA_LO_OFFSET			0x1118
++#define ECCR1_UE_DATA_HI_OFFSET			0x111C
++#define ECCR1_UE_DATA_PAR_OFFSET		0x1120
++
++#define XDDR_NOC_REG_ADEC4_OFFSET		0x44
++#define RANK_0_MASK				GENMASK(5, 0)
++#define RANK_1_MASK				GENMASK(11, 6)
++#define RANK_1_SHIFT				6
++#define LRANK_0_MASK				GENMASK(17, 12)
++#define LRANK_0_SHIFT				12
++#define LRANK_1_MASK				GENMASK(23, 18)
++#define LRANK_1_SHIFT				18
++#define LRANK_2_MASK				GENMASK(29, 24)
++#define LRANK_2_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC5_OFFSET		0x48
++#define ROW_0_MASK				GENMASK(5, 0)
++#define ROW_1_MASK				GENMASK(11, 6)
++#define ROW_1_SHIFT				6
++#define ROW_2_MASK				GENMASK(17, 12)
++#define ROW_2_SHIFT				12
++#define ROW_3_MASK				GENMASK(23, 18)
++#define ROW_3_SHIFT				18
++#define ROW_4_MASK				GENMASK(29, 24)
++#define ROW_4_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC6_OFFSET		0x4C
++#define ROW_5_MASK				GENMASK(5, 0)
++#define ROW_6_MASK				GENMASK(11, 6)
++#define ROW_6_SHIFT				6
++#define ROW_7_MASK				GENMASK(17, 12)
++#define ROW_7_SHIFT				12
++#define ROW_8_MASK				GENMASK(23, 18)
++#define ROW_8_SHIFT				18
++#define ROW_9_MASK				GENMASK(29, 24)
++#define ROW_9_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC7_OFFSET		0x50
++#define ROW_10_MASK				GENMASK(5, 0)
++#define ROW_11_MASK				GENMASK(11, 6)
++#define ROW_11_SHIFT				6
++#define ROW_12_MASK				GENMASK(17, 12)
++#define ROW_12_SHIFT				12
++#define ROW_13_MASK				GENMASK(23, 18)
++#define ROW_13_SHIFT				18
++#define ROW_14_MASK				GENMASK(29, 24)
++#define ROW_14_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC8_OFFSET		0x54
++#define ROW_15_MASK				GENMASK(5, 0)
++#define ROW_16_MASK				GENMASK(11, 6)
++#define ROW_16_SHIFT				6
++#define ROW_17_MASK				GENMASK(17, 12)
++#define ROW_17_SHIFT				12
++#define ROW_18_MASK				GENMASK(23, 18)
++#define ROW_18_SHIFT				18
++#define COL_0_MASK				GENMASK(29, 24)
++#define COL_0_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC9_OFFSET		0x58
++#define COL_1_MASK				GENMASK(5, 0)
++#define COL_2_MASK				GENMASK(11, 6)
++#define COL_2_SHIFT				6
++#define COL_3_MASK				GENMASK(17, 12)
++#define COL_3_SHIFT				12
++#define COL_4_MASK				GENMASK(23, 18)
++#define COL_4_SHIFT				18
++#define COL_5_MASK				GENMASK(29, 24)
++#define COL_5_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC10_OFFSET		0x5C
++#define COL_6_MASK				GENMASK(5, 0)
++#define COL_7_MASK				GENMASK(11, 6)
++#define COL_7_SHIFT				6
++#define COL_8_MASK				GENMASK(17, 12)
++#define COL_8_SHIFT				12
++#define COL_9_MASK				GENMASK(23, 18)
++#define COL_9_SHIFT				18
++#define BANK_0_MASK				GENMASK(29, 24)
++#define BANK_0_SHIFT				24
++
++#define XDDR_NOC_REG_ADEC11_OFFSET		0x60
++#define BANK_1_MASK				GENMASK(5, 0)
++#define GRP_0_MASK				GENMASK(11, 6)
++#define GRP_0_SHIFT				6
++#define GRP_1_MASK				GENMASK(17, 12)
++#define GRP_1_SHIFT				12
++#define CH_0_MASK				GENMASK(23, 18)
++#define CH_0_SHIFT				18
++
++#define XDDR_NOC_REG_ADEC12_OFFSET		0x71C
++#define XDDR_NOC_REG_ADEC13_OFFSET		0x720
++
++#define XDDR_NOC_REG_ADEC14_OFFSET		0x724
++#define XDDR_NOC_ROW_MATCH_MASK			GENMASK(17, 0)
++#define XDDR_NOC_COL_MATCH_MASK			GENMASK(27, 18)
++#define XDDR_NOC_COL_MATCH_SHIFT		18
++#define XDDR_NOC_BANK_MATCH_MASK		GENMASK(29, 28)
++#define XDDR_NOC_BANK_MATCH_SHIFT		28
++#define XDDR_NOC_GRP_MATCH_MASK			GENMASK(31, 30)
++#define XDDR_NOC_GRP_MATCH_SHIFT		30
++
++#define XDDR_NOC_REG_ADEC15_OFFSET		0x728
++#define XDDR_NOC_RANK_MATCH_MASK		GENMASK(1, 0)
++#define XDDR_NOC_LRANK_MATCH_MASK		GENMASK(4, 2)
++#define XDDR_NOC_LRANK_MATCH_SHIFT		2
++#define XDDR_NOC_CH_MATCH_MASK			BIT(5)
++#define XDDR_NOC_CH_MATCH_SHIFT			5
++#define XDDR_NOC_MOD_SEL_MASK			BIT(6)
++#define XDDR_NOC_MATCH_EN_MASK			BIT(8)
++
++#define ECCR_UE_CE_ADDR_LO_BP_MASK		GENMASK(2, 0)
++#define ECCR_UE_CE_ADDR_LO_LRANK_MASK		GENMASK(5, 3)
++#define ECCR_UE_CE_ADDR_LO_LRANK_SHIFT		3
++#define ECCR_UE_CE_ADDR_LO_RANK_MASK		GENMASK(7, 6)
++#define ECCR_UE_CE_ADDR_LO_RANK_SHIFT		6
++#define ECCR_UE_CE_ADDR_LO_GRP_MASK		GENMASK(9, 8)
++#define ECCR_UE_CE_ADDR_LO_GRP_SHIFT		8
++#define ECCR_UE_CE_ADDR_LO_BANK_MASK		GENMASK(11, 10)
++#define ECCR_UE_CE_ADDR_LO_BANK_SHIFT		10
++#define ECCR_UE_CE_ADDR_LO_COL_MASK		GENMASK(21, 12)
++#define ECCR_UE_CE_ADDR_LO_COL_SHIFT		12
++#define ECCR_UE_CE_ADDR_LO_ROW_MASK		GENMASK(31, 22)
++#define ECCR_UE_CE_ADDR_LO_ROW_SHIFT		22
++#define ECCR_UE_CE_ADDR_HI_ROW_MASK		GENMASK(7, 0)
++#define ECCR_UE_CE_ADDR_HI_ROW_SHIFT		10
++
++#define XDDR_EDAC_NR_CSROWS			1
++#define XDDR_EDAC_NR_CHANS			1
++
++#define XDDR_BUS_WIDTH_64			0
++#define XDDR_BUS_WIDTH_32			1
++#define XDDR_BUS_WIDTH_16			2
++
++#define ECC_CEPOISON_MASK			0x1
++#define ECC_UEPOISON_MASK			0x3
++
++#define XDDR_MAX_ROW_CNT			18
++#define XDDR_MAX_COL_CNT			10
++#define XDDR_MAX_RANK_CNT			2
++#define XDDR_MAX_LRANK_CNT			3
++#define XDDR_MAX_BANK_CNT			2
++#define XDDR_MAX_GRP_CNT			2
++
++#define PCSR_UNLOCK_VAL				0xF9E8D7C6
++#define XDDR_ERR_TYPE_CE			0
++#define XDDR_ERR_TYPE_UE			1
++
++#define XILINX_DRAM_SIZE_4G			0
++#define XILINX_DRAM_SIZE_6G			1
++#define XILINX_DRAM_SIZE_8G			2
++#define XILINX_DRAM_SIZE_12G			3
++#define XILINX_DRAM_SIZE_16G			4
++#define XILINX_DRAM_SIZE_32G			5
++
++/**
++ * struct xddr_ecc_error_info - ECC error log information.
++ * @rank:		Rank number.
++ * @lrank:		Logical Rank number.
++ * @row:		Row number.
++ * @col:		Column number.
++ * @bank:		Bank number.
++ * @group:		Group number.
++ * @burstpos:		Burst position.
++ */
++struct xddr_ecc_error_info {
++	u32 rank;
++	u32 lrank;
++	u32 row;
++	u32 col;
++	u32 bank;
++	u32 group;
++	u32 burstpos;
++};
++
++/**
++ * struct xddr_ecc_status - ECC status information to report.
++ * @ceinfo:	Correctable error log information.
++ * @ueinfo:	Uncorrectable error log information.
++ * @channel:	Channel number.
++ * @error_type:	Error type information.
++ */
++struct xddr_ecc_status {
++	struct xddr_ecc_error_info ceinfo[2];
++	struct xddr_ecc_error_info ueinfo[2];
++	u32 channel;
++	u8 error_type;
++};
++
++/**
++ * struct xddr_edac_priv - DDR memory controller private instance data.
++ * @ddrmc_baseaddr:	Base address of the DDR controller.
++ * @ddrmc_noc_baseaddr:	Base address of the DDRMC NOC.
++ * @message:		Buffer for framing the event specific info.
++ * @mc_id:		Memory controller ID.
++ * @ce_cnt:		Correctable error count.
++ * @ue_cnt:		UnCorrectable error count.
++ * @stat:		ECC status information.
++ * @lrank_bit:		Bit shifts for lrank bit.
++ * @rank_bit:		Bit shifts for rank bit.
++ * @row_bit:		Bit shifts for row bit.
++ * @col_bit:		Bit shifts for column bit.
++ * @bank_bit:		Bit shifts for bank bit.
++ * @grp_bit:		Bit shifts for group bit.
++ * @ch_bit:		Bit shifts for channel bit.
++ * @err_inject_addr:	Data poison address.
++ */
++struct xddr_edac_priv {
++	void __iomem *ddrmc_baseaddr;
++	void __iomem *ddrmc_noc_baseaddr;
++	char message[XDDR_EDAC_MSG_SIZE];
++	u32 mc_id;
++	u32 ce_cnt;
++	u32 ue_cnt;
++	struct xddr_ecc_status stat;
++	u32 lrank_bit[3];
++	u32 rank_bit[2];
++	u32 row_bit[18];
++	u32 col_bit[10];
++	u32 bank_bit[2];
++	u32 grp_bit[2];
++	u32 ch_bit;
++#ifdef CONFIG_EDAC_DEBUG
++	u64 err_inject_addr;
++#endif
++};
++
++/**
++ * xddr_get_error_info - Get the current ECC error info.
++ * @priv:	DDR memory controller private instance data.
++ *
++ * Return: one if there is no error otherwise returns zero.
++ */
++static int xddr_get_error_info(struct xddr_edac_priv *priv)
++{
++	struct xddr_ecc_status *p;
++	u32 eccr0_ceval, eccr1_ceval, eccr0_ueval, eccr1_ueval, regval;
++	void __iomem *ddrmc_base;
++
++	ddrmc_base = priv->ddrmc_baseaddr;
++	p = &priv->stat;
++
++	eccr0_ceval = readl(ddrmc_base + ECCR0_CERR_STAT_OFFSET);
++	eccr1_ceval = readl(ddrmc_base + ECCR1_CERR_STAT_OFFSET);
++	eccr0_ueval = readl(ddrmc_base + ECCR0_UERR_STAT_OFFSET);
++	eccr1_ueval = readl(ddrmc_base + ECCR1_UERR_STAT_OFFSET);
++
++	if (!eccr0_ceval && !eccr1_ceval && !eccr0_ueval && !eccr1_ueval)
++		return 1;
++	else if (!eccr0_ceval && !eccr1_ceval)
++		goto ue_err;
++	else if (!eccr0_ceval)
++		p->channel = 1;
++	else
++		p->channel = 0;
++
++	p->error_type = XDDR_ERR_TYPE_CE;
++	regval = readl(ddrmc_base + ECCR0_CE_ADDR_LO_OFFSET);
++	p->ceinfo[0].burstpos = (regval & ECCR_UE_CE_ADDR_LO_BP_MASK);
++	p->ceinfo[0].lrank = (regval & ECCR_UE_CE_ADDR_LO_LRANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_LRANK_SHIFT;
++	p->ceinfo[0].rank = (regval & ECCR_UE_CE_ADDR_LO_RANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_RANK_SHIFT;
++	p->ceinfo[0].group = (regval & ECCR_UE_CE_ADDR_LO_GRP_MASK) >>
++					ECCR_UE_CE_ADDR_LO_GRP_SHIFT;
++	p->ceinfo[0].bank = (regval & ECCR_UE_CE_ADDR_LO_BANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_BANK_SHIFT;
++	p->ceinfo[0].col = (regval & ECCR_UE_CE_ADDR_LO_COL_MASK) >>
++					ECCR_UE_CE_ADDR_LO_COL_SHIFT;
++	p->ceinfo[0].row = (regval & ECCR_UE_CE_ADDR_LO_ROW_MASK) >>
++					ECCR_UE_CE_ADDR_LO_ROW_SHIFT;
++	regval = readl(ddrmc_base + ECCR0_CE_ADDR_HI_OFFSET);
++	p->ceinfo[0].row |= ((regval & ECCR_UE_CE_ADDR_HI_ROW_MASK) <<
++					ECCR_UE_CE_ADDR_HI_ROW_SHIFT);
++
++	edac_dbg(2, "ERR DATA LOW: 0x%08X ERR DATA HIGH: 0x%08X ERR DATA PARITY: 0x%08X\n",
++		 readl(ddrmc_base + ECCR0_CE_DATA_LO_OFFSET),
++		 readl(ddrmc_base + ECCR0_CE_DATA_HI_OFFSET),
++		 readl(ddrmc_base + ECCR0_CE_DATA_PAR_OFFSET));
++
++	regval = readl(ddrmc_base + ECCR1_CE_ADDR_LO_OFFSET);
++	p->ceinfo[1].burstpos = (regval & ECCR_UE_CE_ADDR_LO_BP_MASK);
++	p->ceinfo[1].lrank = (regval & ECCR_UE_CE_ADDR_LO_LRANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_LRANK_SHIFT;
++	p->ceinfo[1].rank = (regval & ECCR_UE_CE_ADDR_LO_RANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_RANK_SHIFT;
++	p->ceinfo[1].group = (regval & ECCR_UE_CE_ADDR_LO_GRP_MASK) >>
++					ECCR_UE_CE_ADDR_LO_GRP_SHIFT;
++	p->ceinfo[1].bank = (regval & ECCR_UE_CE_ADDR_LO_BANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_BANK_SHIFT;
++	p->ceinfo[1].col = (regval & ECCR_UE_CE_ADDR_LO_COL_MASK) >>
++					ECCR_UE_CE_ADDR_LO_COL_SHIFT;
++	p->ceinfo[1].row = (regval & ECCR_UE_CE_ADDR_LO_ROW_MASK) >>
++					ECCR_UE_CE_ADDR_LO_ROW_SHIFT;
++	regval = readl(ddrmc_base + ECCR1_CE_ADDR_HI_OFFSET);
++	p->ceinfo[1].row |= ((regval & ECCR_UE_CE_ADDR_HI_ROW_MASK) <<
++					ECCR_UE_CE_ADDR_HI_ROW_SHIFT);
++
++	edac_dbg(2, "ERR DATA LOW: 0x%08X ERR DATA HIGH: 0x%08X ERR DATA PARITY: 0x%08X\n",
++		 readl(ddrmc_base + ECCR1_CE_DATA_LO_OFFSET),
++		 readl(ddrmc_base + ECCR1_CE_DATA_HI_OFFSET),
++		 readl(ddrmc_base + ECCR1_CE_DATA_PAR_OFFSET));
++ue_err:
++	if (!eccr0_ueval && !eccr1_ueval)
++		goto out;
++	else if (!eccr0_ueval)
++		p->channel = 1;
++	else
++		p->channel = 0;
++
++	p->error_type = XDDR_ERR_TYPE_UE;
++	regval = readl(ddrmc_base + ECCR0_UE_ADDR_LO_OFFSET);
++	p->ueinfo[0].burstpos = (regval & ECCR_UE_CE_ADDR_LO_BP_MASK);
++	p->ueinfo[0].lrank = (regval & ECCR_UE_CE_ADDR_LO_LRANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_LRANK_SHIFT;
++	p->ueinfo[0].rank = (regval & ECCR_UE_CE_ADDR_LO_RANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_RANK_SHIFT;
++	p->ueinfo[0].group = (regval & ECCR_UE_CE_ADDR_LO_GRP_MASK) >>
++					ECCR_UE_CE_ADDR_LO_GRP_SHIFT;
++	p->ueinfo[0].bank = (regval & ECCR_UE_CE_ADDR_LO_BANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_BANK_SHIFT;
++	p->ueinfo[0].col = (regval & ECCR_UE_CE_ADDR_LO_COL_MASK) >>
++					ECCR_UE_CE_ADDR_LO_COL_SHIFT;
++	p->ueinfo[0].row = (regval & ECCR_UE_CE_ADDR_LO_ROW_MASK) >>
++					ECCR_UE_CE_ADDR_LO_ROW_SHIFT;
++	regval = readl(ddrmc_base + ECCR0_UE_ADDR_HI_OFFSET);
++	p->ueinfo[0].row |= ((regval & ECCR_UE_CE_ADDR_HI_ROW_MASK) <<
++					ECCR_UE_CE_ADDR_HI_ROW_SHIFT);
++
++	edac_dbg(2, "ERR DATA LOW: 0x%08X ERR DATA HIGH: 0x%08X ERR DATA PARITY: 0x%08X\n",
++		 readl(ddrmc_base + ECCR0_UE_DATA_LO_OFFSET),
++		 readl(ddrmc_base + ECCR0_UE_DATA_HI_OFFSET),
++		 readl(ddrmc_base + ECCR0_UE_DATA_PAR_OFFSET));
++
++	regval = readl(ddrmc_base + ECCR1_UE_ADDR_LO_OFFSET);
++	p->ueinfo[1].burstpos = (regval & ECCR_UE_CE_ADDR_LO_BP_MASK);
++	p->ueinfo[1].lrank = (regval & ECCR_UE_CE_ADDR_LO_LRANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_LRANK_SHIFT;
++	p->ueinfo[1].rank = (regval & ECCR_UE_CE_ADDR_LO_RANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_RANK_SHIFT;
++	p->ueinfo[1].group = (regval & ECCR_UE_CE_ADDR_LO_GRP_MASK) >>
++					ECCR_UE_CE_ADDR_LO_GRP_SHIFT;
++	p->ueinfo[1].bank = (regval & ECCR_UE_CE_ADDR_LO_BANK_MASK) >>
++					ECCR_UE_CE_ADDR_LO_BANK_SHIFT;
++	p->ueinfo[1].col = (regval & ECCR_UE_CE_ADDR_LO_COL_MASK) >>
++					ECCR_UE_CE_ADDR_LO_COL_SHIFT;
++	p->ueinfo[1].row = (regval & ECCR_UE_CE_ADDR_LO_ROW_MASK) >>
++					ECCR_UE_CE_ADDR_LO_ROW_SHIFT;
++	regval = readl(ddrmc_base + ECCR1_UE_ADDR_HI_OFFSET);
++	p->ueinfo[1].row |= ((regval & ECCR_UE_CE_ADDR_HI_ROW_MASK) <<
++					ECCR_UE_CE_ADDR_HI_ROW_SHIFT);
++
++	edac_dbg(2, "ERR DATA LOW: 0x%08X ERR DATA HIGH: 0x%08X ERR DATA PARITY: 0x%08X\n",
++		 readl(ddrmc_base + ECCR1_UE_DATA_LO_OFFSET),
++		 readl(ddrmc_base + ECCR1_UE_DATA_HI_OFFSET),
++		 readl(ddrmc_base + ECCR1_UE_DATA_PAR_OFFSET));
++
++out:
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, ddrmc_base + XDDR_PCSR_OFFSET);
++
++	writel(0, ddrmc_base + ECCR0_CERR_STAT_OFFSET);
++	writel(0, ddrmc_base + ECCR1_CERR_STAT_OFFSET);
++	writel(0, ddrmc_base + ECCR0_UERR_STAT_OFFSET);
++	writel(0, ddrmc_base + ECCR1_UERR_STAT_OFFSET);
++
++	/* Lock the PCSR registers */
++	writel(1, ddrmc_base + XDDR_PCSR_OFFSET);
++
++	return 0;
++}
++
++/**
++ * xddr_convert_to_physical - Convert to physical address.
++ * @priv:	DDR memory controller private instance data.
++ * @pinf:	ECC error info structure.
++ *
++ * Return: Physical address of the DDR memory.
++ */
++static ulong xddr_convert_to_physical(struct xddr_edac_priv *priv,
++				      struct xddr_ecc_error_info pinf)
++{
++	ulong err_addr = 0;
++	u32 index;
++
++	for (index = 0; index < XDDR_MAX_ROW_CNT; index++) {
++		err_addr |= (pinf.row & BIT(0)) << priv->row_bit[index];
++		pinf.row >>= 1;
++	}
++
++	for (index = 0; index < XDDR_MAX_COL_CNT; index++) {
++		err_addr |= (pinf.col & BIT(0)) << priv->col_bit[index];
++		pinf.col >>= 1;
++	}
++
++	for (index = 0; index < XDDR_MAX_BANK_CNT; index++) {
++		err_addr |= (pinf.bank & BIT(0)) << priv->bank_bit[index];
++		pinf.bank >>= 1;
++	}
++
++	for (index = 0; index < XDDR_MAX_GRP_CNT; index++) {
++		err_addr |= (pinf.group & BIT(0)) << priv->grp_bit[index];
++		pinf.group >>= 1;
++	}
++
++	for (index = 0; index < XDDR_MAX_RANK_CNT; index++) {
++		err_addr |= (pinf.rank & BIT(0)) << priv->rank_bit[index];
++		pinf.rank >>= 1;
++	}
++
++	for (index = 0; index < XDDR_MAX_LRANK_CNT; index++) {
++		err_addr |= (pinf.lrank & BIT(0)) << priv->lrank_bit[index];
++		pinf.lrank >>= 1;
++	}
++
++	err_addr |= (priv->stat.channel & BIT(0)) << priv->ch_bit;
++
++	return err_addr;
++}
++
++/**
++ * xddr_handle_error - Handle Correctable and Uncorrectable errors.
++ * @mci:	EDAC memory controller instance.
++ * @stat:	ECC status structure.
++ *
++ * Handles ECC correctable and uncorrectable errors.
++ */
++static void xddr_handle_error(struct mem_ctl_info *mci,
++			      struct xddr_ecc_status *stat)
++{
++	struct xddr_edac_priv *priv = mci->pvt_info;
++	struct xddr_ecc_error_info pinf;
++
++	if (stat->error_type == XDDR_ERR_TYPE_CE) {
++		priv->ce_cnt++;
++		pinf = stat->ceinfo[stat->channel];
++		snprintf(priv->message, XDDR_EDAC_MSG_SIZE,
++			 "Error type:%s MC ID: %d Addr at %lx Burst Pos: %d\n",
++			 "CE", priv->mc_id,
++			 xddr_convert_to_physical(priv, pinf), pinf.burstpos);
++
++		edac_mc_handle_error(HW_EVENT_ERR_CORRECTED, mci,
++				     priv->ce_cnt, 0, 0, 0, 0, 0, -1,
++				     priv->message, "");
++	}
++
++	if (stat->error_type == XDDR_ERR_TYPE_UE) {
++		priv->ue_cnt++;
++		pinf = stat->ueinfo[stat->channel];
++		snprintf(priv->message, XDDR_EDAC_MSG_SIZE,
++			 "Error type:%s MC ID: %d Addr at %lx Burst Pos: %d\n",
++			 "UE", priv->mc_id,
++			 xddr_convert_to_physical(priv, pinf), pinf.burstpos);
++
++		edac_mc_handle_error(HW_EVENT_ERR_UNCORRECTED, mci,
++				     priv->ue_cnt, 0, 0, 0, 0, 0, -1,
++				     priv->message, "");
++	}
++
++	memset(stat, 0, sizeof(*stat));
++}
++
++/**
++ * xddr_intr_handler - Interrupt Handler for ECC interrupts.
++ * @irq:	IRQ number
++ * @dev_id:	Device ID
++ *
++ * Return: IRQ_NONE, if interrupt not set or IRQ_HANDLED otherwise.
++ */
++static irqreturn_t xddr_intr_handler(int irq, void *dev_id)
++{
++	struct mem_ctl_info *mci = dev_id;
++	struct xddr_edac_priv *priv;
++	int status, regval;
++
++	priv = mci->pvt_info;
++	regval = readl(priv->ddrmc_baseaddr + XDDR_ISR_OFFSET);
++	regval &= (XDDR_IRQ_CE_MASK | XDDR_IRQ_UE_MASK);
++	if (!regval)
++		return IRQ_NONE;
++
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	/* Clear the ISR */
++	writel(regval, priv->ddrmc_baseaddr + XDDR_ISR_OFFSET);
++
++	/* Lock the PCSR registers */
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	status = xddr_get_error_info(priv);
++	if (status)
++		return IRQ_NONE;
++
++	xddr_handle_error(mci, &priv->stat);
++
++	edac_dbg(3, "Total error count CE %d UE %d\n",
++		 priv->ce_cnt, priv->ue_cnt);
++
++	return IRQ_HANDLED;
++}
++
++/**
++ * xddr_err_callback - Handle Correctable and Uncorrectable errors.
++ * @payload:	payload data.
++ * @data:	mci controller data.
++ *
++ * Handles ECC correctable and uncorrectable errors.
++ */
++static void xddr_err_callback(const u32 *payload, void *data)
++{
++	struct mem_ctl_info *mci = (struct mem_ctl_info *)data;
++	struct xddr_edac_priv *priv;
++	int status, regval;
++	struct xddr_ecc_status *p;
++
++	priv = mci->pvt_info;
++	p = &priv->stat;
++
++	regval = readl(priv->ddrmc_baseaddr + XDDR_ISR_OFFSET);
++	regval &= (XDDR_IRQ_CE_MASK | XDDR_IRQ_UE_MASK);
++	if (!regval)
++		return;
++
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	/* Clear the ISR */
++	writel(regval, priv->ddrmc_baseaddr + XDDR_ISR_OFFSET);
++	/* Lock the PCSR registers */
++
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++	if (payload[2] == XPM_EVENT_ERROR_MASK_DDRMC_CR)
++		p->error_type = XDDR_ERR_TYPE_CE;
++	if (payload[2] == XPM_EVENT_ERROR_MASK_DDRMC_NCR)
++		p->error_type = XDDR_ERR_TYPE_UE;
++
++	status = xddr_get_error_info(priv);
++	if (status)
++		return;
++
++	xddr_handle_error(mci, &priv->stat);
++
++	edac_dbg(3, "Total error count CE %d UE %d\n",
++		 priv->ce_cnt, priv->ue_cnt);
++}
++
++/**
++ * xddr_get_dtype - Return the controller memory width.
++ * @base:	DDR memory controller base address.
++ *
++ * Get the EDAC device type width appropriate for the controller
++ * configuration.
++ *
++ * Return: a device type width enumeration.
++ */
++static enum dev_type xddr_get_dwidth(const void __iomem *base)
++{
++	enum dev_type dt;
++	u32 regval;
++
++	regval = readl(base + XDDR_REG_CONFIG0_OFFSET);
++	regval = (regval & XDDR_REG_CONFIG0_BUS_WIDTH_MASK) >>
++				XDDR_REG_CONFIG0_BUS_WIDTH_SHIFT;
++	switch (regval) {
++	case XDDR_BUS_WIDTH_16:
++		dt = DEV_X2;
++		break;
++	case XDDR_BUS_WIDTH_32:
++		dt = DEV_X4;
++		break;
++	case XDDR_BUS_WIDTH_64:
++		dt = DEV_X8;
++		break;
++	default:
++		dt = DEV_UNKNOWN;
++	}
++
++	return dt;
++}
++
++/**
++ * xddr_get_ecc_state - Return the controller ECC enable/disable status.
++ * @base:	DDR memory controller base address.
++ *
++ * Get the ECC enable/disable status for the controller.
++ *
++ * Return: a ECC status boolean i.e true/false - enabled/disabled.
++ */
++static bool xddr_get_ecc_state(void __iomem *base)
++{
++	enum dev_type dt;
++	u32 ecctype;
++
++	dt = xddr_get_dwidth(base);
++	if (dt == DEV_UNKNOWN)
++		return false;
++
++	ecctype = readl(base + XDDR_REG_PINOUT_OFFSET);
++	ecctype &= XDDR_REG_PINOUT_ECC_EN_MASK;
++	if (ecctype)
++		return true;
++
++	return false;
++}
++
++/**
++ * xddr_get_memsize - Get the size of the attached memory device.
++ * @priv:	DDR memory controller private instance data.
++ *
++ * Return: the memory size in bytes.
++ */
++static u64 xddr_get_memsize(struct xddr_edac_priv *priv)
++{
++	u64 size;
++	u32 regval;
++
++	regval = readl(priv->ddrmc_baseaddr + XDDR_REG_CONFIG0_OFFSET) &
++				XDDR_REG_CONFIG0_SIZE_MASK;
++	regval >>= XDDR_REG_CONFIG0_SIZE_SHIFT;
++	switch (regval) {
++	case XILINX_DRAM_SIZE_4G:
++		size = (4U * SZ_1G);
++		break;
++	case XILINX_DRAM_SIZE_6G:
++		size = (6U * SZ_1G);
++		break;
++	case XILINX_DRAM_SIZE_8G:
++		size = (8U * SZ_1G);
++		break;
++	case XILINX_DRAM_SIZE_12G:
++		size = (12U * SZ_1G);
++		break;
++	case XILINX_DRAM_SIZE_16G:
++		size = (16U * SZ_1G);
++		break;
++	case XILINX_DRAM_SIZE_32G:
++		size = (32U * SZ_1G);
++		break;
++	default:
++		/* Invalid configuration */
++		size = 0;
++		break;
++	}
++
++	return size;
++}
++
++/**
++ * xddr_init_csrows - Initialize the csrow data.
++ * @mci:	EDAC memory controller instance.
++ *
++ * Initialize the chip select rows associated with the EDAC memory
++ * controller instance.
++ */
++static void xddr_init_csrows(struct mem_ctl_info *mci)
++{
++	struct xddr_edac_priv *priv = mci->pvt_info;
++	struct csrow_info *csi;
++	struct dimm_info *dimm;
++	u32 row;
++	int ch;
++	unsigned long size;
++
++	size = xddr_get_memsize(priv);
++	for (row = 0; row < mci->nr_csrows; row++) {
++		csi = mci->csrows[row];
++		for (ch = 0; ch < csi->nr_channels; ch++) {
++			dimm = csi->channels[ch]->dimm;
++			dimm->edac_mode	= EDAC_SECDED;
++			dimm->mtype = MEM_DDR4;
++			dimm->nr_pages = (size >> PAGE_SHIFT) /
++						csi->nr_channels;
++			dimm->grain = XDDR_EDAC_ERR_GRAIN;
++			dimm->dtype = xddr_get_dwidth(priv->ddrmc_baseaddr);
++		}
++	}
++}
++
++/**
++ * xddr_mc_init - Initialize one driver instance.
++ * @mci:	EDAC memory controller instance.
++ * @pdev:	platform device.
++ *
++ * Perform initialization of the EDAC memory controller instance and
++ * related driver-private data associated with the memory controller the
++ * instance is bound to.
++ */
++static void xddr_mc_init(struct mem_ctl_info *mci, struct platform_device *pdev)
++{
++	mci->pdev = &pdev->dev;
++	platform_set_drvdata(pdev, mci);
++
++	/* Initialize controller capabilities and configuration */
++	mci->mtype_cap = MEM_FLAG_DDR4;
++	mci->edac_ctl_cap = EDAC_FLAG_NONE | EDAC_FLAG_SECDED;
++	mci->scrub_cap = SCRUB_HW_SRC;
++	mci->scrub_mode = SCRUB_NONE;
++
++	mci->edac_cap = EDAC_FLAG_SECDED;
++	mci->ctl_name = "xlnx_ddr_controller";
++	mci->dev_name = dev_name(&pdev->dev);
++	mci->mod_name = "xlnx_edac";
++
++	edac_op_state = EDAC_OPSTATE_INT;
++
++	xddr_init_csrows(mci);
++}
++
++static void xddr_enable_intr(struct xddr_edac_priv *priv)
++{
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	/* Enable UE and CE Interrupts to support the interrupt case */
++	writel(XDDR_IRQ_CE_MASK | XDDR_IRQ_UE_MASK,
++	       priv->ddrmc_baseaddr + XDDR_IRQ_EN_OFFSET);
++
++	writel(XDDR_IRQ_UE_MASK,
++	       priv->ddrmc_baseaddr + XDDR_IRQ1_EN_OFFSET);
++	/* Lock the PCSR registers */
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++}
++
++static void xddr_disable_intr(struct xddr_edac_priv *priv)
++{
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	/* Disable UE/CE Interrupts */
++	writel(XDDR_IRQ_CE_MASK | XDDR_IRQ_UE_MASK,
++	       priv->ddrmc_baseaddr + XDDR_IRQ_DIS_OFFSET);
++
++	/* Lock the PCSR registers */
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++}
++
++static int xddr_setup_irq(struct mem_ctl_info *mci,
++			  struct platform_device *pdev)
++{
++	int ret, irq;
++
++	irq = platform_get_irq(pdev, 0);
++	if (irq < 0) {
++		edac_printk(KERN_ERR, EDAC_MC,
++			    "No IRQ %d in DT\n", irq);
++		return irq;
++	}
++
++	ret = devm_request_irq(&pdev->dev, irq, xddr_intr_handler,
++			       IRQF_SHARED, dev_name(&pdev->dev), mci);
++	if (ret < 0) {
++		edac_printk(KERN_ERR, EDAC_MC, "Failed to request IRQ\n");
++		return ret;
++	}
++
++	return 0;
++}
++
++#ifdef CONFIG_EDAC_DEBUG
++#define to_mci(k) container_of(k, struct mem_ctl_info, dev)
++
++/**
++ * ddr_poison_setup - Update poison registers.
++ * @priv:	DDR memory controller private instance data.
++ *
++ * Update poison registers as per DDR mapping.
++ * Return: none.
++ */
++static void xddr_poison_setup(struct xddr_edac_priv *priv)
++{
++	u32 col = 0, row = 0, bank = 0, grp = 0, rank = 0, lrank = 0, ch = 0;
++	u32 index, regval;
++
++	for (index = 0; index < XDDR_MAX_ROW_CNT; index++) {
++		row |= (((priv->err_inject_addr >> priv->row_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	for (index = 0; index < XDDR_MAX_COL_CNT; index++) {
++		col |= (((priv->err_inject_addr >> priv->col_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	for (index = 0; index < XDDR_MAX_BANK_CNT; index++) {
++		bank |= (((priv->err_inject_addr >> priv->bank_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	for (index = 0; index < XDDR_MAX_GRP_CNT; index++) {
++		grp |= (((priv->err_inject_addr >> priv->grp_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	for (index = 0; index < XDDR_MAX_RANK_CNT; index++) {
++		rank |= (((priv->err_inject_addr >> priv->rank_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	for (index = 0; index < XDDR_MAX_LRANK_CNT; index++) {
++		lrank |= (((priv->err_inject_addr >> priv->lrank_bit[index]) &
++						BIT(0)) << index);
++	}
++
++	ch = (priv->err_inject_addr >> priv->ch_bit) & BIT(0);
++	if (ch)
++		writel(0xFF, priv->ddrmc_baseaddr + ECCW1_FLIP_CTRL);
++	else
++		writel(0xFF, priv->ddrmc_baseaddr + ECCW0_FLIP_CTRL);
++
++	writel(0, priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC12_OFFSET);
++	writel(0, priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC13_OFFSET);
++
++	regval = (row & XDDR_NOC_ROW_MATCH_MASK);
++	regval |= (col << XDDR_NOC_COL_MATCH_SHIFT) & XDDR_NOC_COL_MATCH_MASK;
++	regval |= (bank << XDDR_NOC_BANK_MATCH_SHIFT) &
++			XDDR_NOC_BANK_MATCH_MASK;
++	regval |= (grp << XDDR_NOC_GRP_MATCH_SHIFT) & XDDR_NOC_GRP_MATCH_MASK;
++	writel(regval, priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC14_OFFSET);
++
++	regval = (rank & XDDR_NOC_RANK_MATCH_MASK);
++	regval |= (lrank << XDDR_NOC_LRANK_MATCH_SHIFT) &
++			XDDR_NOC_LRANK_MATCH_MASK;
++	regval |= (ch << XDDR_NOC_CH_MATCH_SHIFT) & XDDR_NOC_CH_MATCH_MASK;
++	regval |= (XDDR_NOC_MOD_SEL_MASK | XDDR_NOC_MATCH_EN_MASK);
++	writel(regval, priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC15_OFFSET);
++}
++
++static ssize_t inject_data_error_show(struct device *dev,
++				      struct device_attribute *mattr,
++				      char *data)
++{
++	struct mem_ctl_info *mci = to_mci(dev);
++	struct xddr_edac_priv *priv = mci->pvt_info;
++
++	return sprintf(data, "Error injection Address: 0x%llx\n\r",
++			priv->err_inject_addr);
++}
++
++static ssize_t inject_data_error_store(struct device *dev,
++				       struct device_attribute *mattr,
++				       const char *data, size_t count)
++{
++	struct mem_ctl_info *mci = to_mci(dev);
++	struct xddr_edac_priv *priv = mci->pvt_info;
++
++	if (kstrtoull(data, 0, &priv->err_inject_addr))
++		return -EINVAL;
++
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_noc_baseaddr + XDDR_PCSR_OFFSET);
++
++	xddr_poison_setup(priv);
++
++	/* Lock the PCSR registers */
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++	writel(1, priv->ddrmc_noc_baseaddr + XDDR_PCSR_OFFSET);
++
++	return count;
++}
++
++static ssize_t inject_data_poison_show(struct device *dev,
++				       struct device_attribute *mattr,
++				       char *data)
++{
++	struct mem_ctl_info *mci = to_mci(dev);
++	struct xddr_edac_priv *priv = mci->pvt_info;
++	u32 regval;
++
++	regval = readl(priv->ddrmc_baseaddr + ECCW0_FLIP0_OFFSET);
++	return sprintf(data, "Data Poisoning: %s\n\r",
++			((regval & 0x3) == 1)
++			? ("Correctable Error") : ("UnCorrectable Error"));
++}
++
++static ssize_t inject_data_poison_store(struct device *dev,
++					struct device_attribute *mattr,
++					const char *data, size_t count)
++{
++	struct mem_ctl_info *mci = to_mci(dev);
++	struct xddr_edac_priv *priv = mci->pvt_info;
++
++	/* Unlock the PCSR registers */
++	writel(PCSR_UNLOCK_VAL, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	writel(0, priv->ddrmc_baseaddr + ECCW0_FLIP0_OFFSET);
++	writel(0, priv->ddrmc_baseaddr + ECCW1_FLIP0_OFFSET);
++	if (strncmp(data, "CE", 2) == 0) {
++		writel(ECC_CEPOISON_MASK, priv->ddrmc_baseaddr +
++		       ECCW0_FLIP0_OFFSET);
++		writel(ECC_CEPOISON_MASK, priv->ddrmc_baseaddr +
++		       ECCW1_FLIP0_OFFSET);
++	} else {
++		writel(ECC_UEPOISON_MASK, priv->ddrmc_baseaddr +
++		       ECCW0_FLIP0_OFFSET);
++		writel(ECC_UEPOISON_MASK, priv->ddrmc_baseaddr +
++		       ECCW1_FLIP0_OFFSET);
++	}
++
++	/* Lock the PCSR registers */
++	writel(1, priv->ddrmc_baseaddr + XDDR_PCSR_OFFSET);
++
++	return count;
++}
++
++static DEVICE_ATTR_RW(inject_data_error);
++static DEVICE_ATTR_RW(inject_data_poison);
++
++static int edac_create_sysfs_attributes(struct mem_ctl_info *mci)
++{
++	int rc;
++
++	rc = device_create_file(&mci->dev, &dev_attr_inject_data_error);
++	if (rc < 0)
++		return rc;
++
++	rc = device_create_file(&mci->dev, &dev_attr_inject_data_poison);
++	if (rc < 0)
++		return rc;
++
++	return 0;
++}
++
++static void edac_remove_sysfs_attributes(struct mem_ctl_info *mci)
++{
++	device_remove_file(&mci->dev, &dev_attr_inject_data_error);
++	device_remove_file(&mci->dev, &dev_attr_inject_data_poison);
++}
++
++static void xddr_setup_row_address_map(struct xddr_edac_priv *priv)
++{
++	u32 regval;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC5_OFFSET);
++	priv->row_bit[0] = regval & ROW_0_MASK;
++	priv->row_bit[1] = (regval & ROW_1_MASK) >> ROW_1_SHIFT;
++	priv->row_bit[2] = (regval & ROW_2_MASK) >> ROW_2_SHIFT;
++	priv->row_bit[3] = (regval & ROW_3_MASK) >> ROW_3_SHIFT;
++	priv->row_bit[4] = (regval & ROW_4_MASK) >> ROW_4_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC6_OFFSET);
++	priv->row_bit[5] = regval & ROW_5_MASK;
++	priv->row_bit[6] = (regval & ROW_6_MASK) >> ROW_6_SHIFT;
++	priv->row_bit[7] = (regval & ROW_7_MASK) >> ROW_7_SHIFT;
++	priv->row_bit[8] = (regval & ROW_8_MASK) >> ROW_8_SHIFT;
++	priv->row_bit[9] = (regval & ROW_9_MASK) >> ROW_9_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC7_OFFSET);
++	priv->row_bit[10] = regval & ROW_10_MASK;
++	priv->row_bit[11] = (regval & ROW_11_MASK) >> ROW_11_SHIFT;
++	priv->row_bit[12] = (regval & ROW_12_MASK) >> ROW_12_SHIFT;
++	priv->row_bit[13] = (regval & ROW_13_MASK) >> ROW_13_SHIFT;
++	priv->row_bit[14] = (regval & ROW_14_MASK) >> ROW_14_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC8_OFFSET);
++
++	priv->row_bit[15] = regval & ROW_15_MASK;
++	priv->row_bit[16] = (regval & ROW_16_MASK) >> ROW_16_SHIFT;
++	priv->row_bit[17] = (regval & ROW_17_MASK) >> ROW_17_SHIFT;
++}
++
++static void xddr_setup_column_address_map(struct xddr_edac_priv *priv)
++{
++	u32 regval;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC8_OFFSET);
++	priv->col_bit[0] = (regval & COL_0_MASK) >> COL_0_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC9_OFFSET);
++	priv->col_bit[1] = (regval & COL_1_MASK);
++	priv->col_bit[2] = (regval & COL_2_MASK) >> COL_2_SHIFT;
++	priv->col_bit[3] = (regval & COL_3_MASK) >> COL_3_SHIFT;
++	priv->col_bit[4] = (regval & COL_4_MASK) >> COL_4_SHIFT;
++	priv->col_bit[5] = (regval & COL_5_MASK) >> COL_5_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC10_OFFSET);
++	priv->col_bit[6] = (regval & COL_6_MASK);
++	priv->col_bit[7] = (regval & COL_7_MASK) >> COL_7_SHIFT;
++	priv->col_bit[8] = (regval & COL_8_MASK) >> COL_8_SHIFT;
++	priv->col_bit[9] = (regval & COL_9_MASK) >> COL_9_SHIFT;
++}
++
++static void xddr_setup_bank_grp_ch_address_map(struct xddr_edac_priv *priv)
++{
++	u32 regval;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC10_OFFSET);
++	priv->bank_bit[0] = (regval & BANK_0_MASK) >> BANK_0_SHIFT;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC11_OFFSET);
++	priv->bank_bit[1] = (regval & BANK_1_MASK);
++	priv->grp_bit[0] = (regval & GRP_0_MASK) >> GRP_0_SHIFT;
++	priv->grp_bit[1] = (regval & GRP_1_MASK) >> GRP_1_SHIFT;
++	priv->ch_bit = (regval & CH_0_MASK) >> CH_0_SHIFT;
++}
++
++static void xddr_setup_rank_lrank_address_map(struct xddr_edac_priv *priv)
++{
++	u32 regval;
++
++	regval = readl(priv->ddrmc_noc_baseaddr + XDDR_NOC_REG_ADEC4_OFFSET);
++	priv->rank_bit[0] = (regval & RANK_0_MASK);
++	priv->rank_bit[1] = (regval & RANK_1_MASK) >> RANK_1_SHIFT;
++	priv->lrank_bit[0] = (regval & LRANK_0_MASK) >> LRANK_0_SHIFT;
++	priv->lrank_bit[1] = (regval & LRANK_1_MASK) >> LRANK_1_SHIFT;
++	priv->lrank_bit[2] = (regval & LRANK_2_MASK) >> LRANK_2_SHIFT;
++}
++
++/**
++ * xddr_setup_address_map - Set Address Map by querying ADDRMAP registers.
++ * @priv:	DDR memory controller private instance data.
++ *
++ * Set Address Map by querying ADDRMAP registers.
++ *
++ * Return: none.
++ */
++static void xddr_setup_address_map(struct xddr_edac_priv *priv)
++{
++	xddr_setup_row_address_map(priv);
++
++	xddr_setup_column_address_map(priv);
++
++	xddr_setup_bank_grp_ch_address_map(priv);
++
++	xddr_setup_rank_lrank_address_map(priv);
++}
++#endif /* CONFIG_EDAC_DEBUG */
++
++/**
++ * xddr_mc_probe - Check controller and bind driver.
++ * @pdev:	platform device.
++ *
++ * Probe a specific controller instance for binding with the driver.
++ *
++ * Return: 0 if the controller instance was successfully bound to the
++ * driver; otherwise, < 0 on error.
++ */
++static int xddr_mc_probe(struct platform_device *pdev)
++{
++	struct edac_mc_layer layers[2];
++	struct xddr_edac_priv *priv;
++	struct mem_ctl_info *mci;
++	void __iomem *ddrmc_baseaddr, *ddrmc_noc_baseaddr;
++	struct resource *res;
++	int rc;
++	u8 num_chans, num_csrows;
++	u32 edac_mc_id, regval;
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ddrmc_base");
++	ddrmc_baseaddr = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(ddrmc_baseaddr))
++		return PTR_ERR(ddrmc_baseaddr);
++
++	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
++					   "ddrmc_noc_base");
++	ddrmc_noc_baseaddr = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(ddrmc_noc_baseaddr))
++		return PTR_ERR(ddrmc_noc_baseaddr);
++
++	if (!xddr_get_ecc_state(ddrmc_baseaddr))
++		return -ENXIO;
++
++	rc = of_property_read_u32(pdev->dev.of_node, "xlnx,mc-id",
++				  &edac_mc_id);
++	if (rc)
++		return rc;
++
++	regval = readl(ddrmc_baseaddr + XDDR_REG_CONFIG0_OFFSET);
++	num_chans = (regval & XDDR_REG_CONFIG0_NUM_CHANS_MASK) >>
++			XDDR_REG_CONFIG0_NUM_CHANS_SHIFT;
++	num_chans++;
++
++	num_csrows = (regval & XDDR_REG_CONFIG0_NUM_RANKS_MASK) >>
++			XDDR_REG_CONFIG0_NUM_RANKS_SHIFT;
++	num_csrows *= 2;
++	if (!num_csrows)
++		num_csrows = 1;
++
++	layers[0].type = EDAC_MC_LAYER_CHIP_SELECT;
++	layers[0].size = num_csrows;
++	layers[0].is_virt_csrow = true;
++	layers[1].type = EDAC_MC_LAYER_CHANNEL;
++	layers[1].size = num_chans;
++	layers[1].is_virt_csrow = false;
++
++	mci = edac_mc_alloc(edac_mc_id, ARRAY_SIZE(layers), layers,
++			    sizeof(struct xddr_edac_priv));
++	if (!mci) {
++		edac_printk(KERN_ERR, EDAC_MC,
++			    "Failed memory allocation for mc instance\n");
++		return -ENOMEM;
++	}
++
++	priv = mci->pvt_info;
++	priv->ddrmc_baseaddr = ddrmc_baseaddr;
++	priv->ddrmc_noc_baseaddr = ddrmc_noc_baseaddr;
++	priv->ce_cnt = 0;
++	priv->ue_cnt = 0;
++
++	xddr_mc_init(mci, pdev);
++
++	rc = edac_mc_add_mc(mci);
++	if (rc) {
++		edac_printk(KERN_ERR, EDAC_MC,
++			    "Failed to register with EDAC core\n");
++		goto free_edac_mc;
++	}
++
++#ifdef CONFIG_EDAC_DEBUG
++	if (edac_create_sysfs_attributes(mci)) {
++		edac_printk(KERN_ERR, EDAC_MC,
++			    "Failed to create sysfs entries\n");
++		goto del_edac_mc;
++	}
++
++	xddr_setup_address_map(priv);
++#endif
++
++	rc = xlnx_register_event(PM_NOTIFY_CB, XPM_NODETYPE_EVENT_ERROR_PMC_ERR1,
++				 XPM_EVENT_ERROR_MASK_DDRMC_CR | XPM_EVENT_ERROR_MASK_DDRMC_NCR,
++				 false, xddr_err_callback, mci);
++	if (rc == -ENODEV) {
++		rc = xddr_setup_irq(mci, pdev);
++		if (rc)
++			goto del_edac_mc;
++	}
++	if (rc) {
++		if (rc == -EACCES)
++			rc = -EPROBE_DEFER;
++
++		goto del_edac_mc;
++	}
++
++	xddr_enable_intr(priv);
++
++	return rc;
++
++del_edac_mc:
++	edac_mc_del_mc(&pdev->dev);
++free_edac_mc:
++	edac_mc_free(mci);
++
++	return rc;
++}
++
++/**
++ * xddr_mc_remove - Unbind driver from controller.
++ * @pdev:	Platform device.
++ *
++ * Return: Unconditionally 0
++ */
++static int xddr_mc_remove(struct platform_device *pdev)
++{
++	struct mem_ctl_info *mci = platform_get_drvdata(pdev);
++	struct xddr_edac_priv *priv = mci->pvt_info;
++
++	xddr_disable_intr(priv);
++
++#ifdef CONFIG_EDAC_DEBUG
++	edac_remove_sysfs_attributes(mci);
++#endif
++
++	xlnx_unregister_event(PM_NOTIFY_CB, XPM_NODETYPE_EVENT_ERROR_PMC_ERR1,
++			      XPM_EVENT_ERROR_MASK_DDRMC_CR | XPM_EVENT_ERROR_MASK_DDRMC_NCR,
++			      xddr_err_callback);
++	edac_mc_del_mc(&pdev->dev);
++	edac_mc_free(mci);
++
++	return 0;
++}
++
++static const struct of_device_id xlnx_edac_match[] = {
++	{ .compatible = "xlnx,versal-ddrmc-edac", },
++	{
++		/* end of table */
++	}
++};
++
++MODULE_DEVICE_TABLE(of, xlnx_edac_match);
++
++static struct platform_driver xilinx_ddr_edac_mc_driver = {
++	.driver = {
++		.name = "xilinx-ddrmc-edac",
++		.of_match_table = xlnx_edac_match,
++	},
++	.probe = xddr_mc_probe,
++	.remove = xddr_mc_remove,
++};
++
++module_platform_driver(xilinx_ddr_edac_mc_driver);
++
++MODULE_AUTHOR("Xilinx Inc");
++MODULE_DESCRIPTION("Xilinx DDRMC ECC driver");
++MODULE_LICENSE("GPL");
+diff --git a/drivers/edac/zynqmp_ocm_edac.c b/drivers/edac/zynqmp_ocm_edac.c
+new file mode 100644
+index 000000000..4957a8c9d
+--- /dev/null
++++ b/drivers/edac/zynqmp_ocm_edac.c
+@@ -0,0 +1,651 @@
++/*
++ * Xilinx ZynqMP OCM ECC Driver
++ * This driver is based on mpc85xx_edac.c drivers
++ *
++ * Copyright (C) 2016 Xilinx, Inc.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * This file is subject to the terms and conditions of the GNU General Public
++ * License.  See the file "COPYING" in the main directory of this archive
++ * for more details
++ */
++
++#include <linux/edac.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/interrupt.h>
++#include <linux/of.h>
++#include <linux/of_platform.h>
++
++#include "edac_module.h"
++
++#define ZYNQMP_OCM_EDAC_MSG_SIZE	256
++
++#define ZYNQMP_OCM_EDAC_STRING	"zynqmp_ocm"
++#define ZYNQMP_OCM_EDAC_MOD_VER	"1"
++
++/* Controller registers */
++#define CTRL_OFST		0x0
++#define OCM_ISR_OFST		0x04
++#define OCM_IMR_OFST		0x08
++#define OCM_IEN_OFST		0x0C
++#define OCM_IDS_OFST		0x10
++
++/* ECC control register */
++#define ECC_CTRL_OFST		0x14
++
++/* Correctable error info registers */
++#define CE_FFA_OFST		0x1C
++#define CE_FFD0_OFST		0x20
++#define CE_FFD1_OFST		0x24
++#define CE_FFD2_OFST		0x28
++#define CE_FFD3_OFST		0x2C
++#define CE_FFE_OFST		0x30
++
++/* Uncorrectable error info registers */
++#define UE_FFA_OFST		0x34
++#define UE_FFD0_OFST		0x38
++#define UE_FFD1_OFST		0x3C
++#define UE_FFD2_OFST		0x40
++#define UE_FFD3_OFST		0x44
++#define UE_FFE_OFST		0x48
++
++/* ECC control register bit field definitions */
++#define ECC_CTRL_CLR_CE_ERR	0x40
++#define ECC_CTRL_CLR_UE_ERR	0x80
++
++/* Fault injection data and count registers */
++#define OCM_FID0_OFST		0x4C
++#define OCM_FID1_OFST		0x50
++#define OCM_FID2_OFST		0x54
++#define OCM_FID3_OFST		0x58
++#define OCM_FIC_OFST		0x74
++
++/* Interrupt masks */
++#define OCM_CEINTR_MASK	0x40
++#define OCM_UEINTR_MASK	0x80
++#define OCM_ECC_ENABLE_MASK	0x1
++#define OCM_FICOUNT_MASK	0x0FFFFFFF
++#define OCM_BASEVAL	0xFFFC0000
++#define EDAC_DEVICE "ZynqMP-OCM"
++#define OCM_CEUE_MASK	0xC0
++
++/**
++ * struct ecc_error_info - ECC error log information
++ * @addr:	Fault generated at this address
++ * @data0:	Generated fault data
++ * @data1:	Generated fault data
++ */
++struct ecc_error_info {
++	u32 addr;
++	u32 data0;
++	u32 data1;
++};
++
++/**
++ * struct zynqmp_ocm_ecc_status - ECC status information to report
++ * @ce_cnt:	Correctable error count
++ * @ue_cnt:	Uncorrectable error count
++ * @ceinfo:	Correctable error log information
++ * @ueinfo:	Uncorrectable error log information
++ */
++struct zynqmp_ocm_ecc_status {
++	u32 ce_cnt;
++	u32 ue_cnt;
++	struct ecc_error_info ceinfo;
++	struct ecc_error_info ueinfo;
++};
++
++/**
++ * struct zynqmp_ocm_edac_priv - DDR memory controller private instance data
++ * @baseaddr:	Base address of the DDR controller
++ * @message:	Buffer for framing the event specific info
++ * @stat:	ECC status information
++ * @p_data:	Pointer to platform data
++ * @ce_cnt:	Correctable Error count
++ * @ue_cnt:	Uncorrectable Error count
++ * @ce_bitpos:	Bit position for Correctable Error
++ * @ue_bitpos0:	First bit position for Uncorrectable Error
++ * @ue_bitpos1:	Second bit position for Uncorrectable Error
++ */
++struct zynqmp_ocm_edac_priv {
++	void __iomem *baseaddr;
++	char message[ZYNQMP_OCM_EDAC_MSG_SIZE];
++	struct zynqmp_ocm_ecc_status stat;
++	const struct zynqmp_ocm_platform_data *p_data;
++	u32 ce_cnt;
++	u32 ue_cnt;
++	u8 ce_bitpos;
++	u8 ue_bitpos0;
++	u8 ue_bitpos1;
++};
++
++/**
++ * zynqmp_ocm_edac_geterror_info - Get the current ecc error info
++ * @base:	Pointer to the base address of the ddr memory controller
++ * @p:		Pointer to the ocm ecc status structure
++ * @mask:	Status register mask value
++ *
++ * Determines there is any ecc error or not
++ *
++ */
++static void zynqmp_ocm_edac_geterror_info(void __iomem *base,
++				    struct zynqmp_ocm_ecc_status *p, int mask)
++{
++	if (mask & OCM_CEINTR_MASK) {
++		p->ce_cnt++;
++		p->ceinfo.data0 = readl(base + CE_FFD0_OFST);
++		p->ceinfo.data1 = readl(base + CE_FFD1_OFST);
++		p->ceinfo.addr = (OCM_BASEVAL | readl(base + CE_FFA_OFST));
++		writel(ECC_CTRL_CLR_CE_ERR, base + OCM_ISR_OFST);
++	} else if (mask & OCM_UEINTR_MASK) {
++		p->ue_cnt++;
++		p->ueinfo.data0 = readl(base + UE_FFD0_OFST);
++		p->ueinfo.data1 = readl(base + UE_FFD1_OFST);
++		p->ueinfo.addr = (OCM_BASEVAL | readl(base + UE_FFA_OFST));
++		writel(ECC_CTRL_CLR_UE_ERR, base + OCM_ISR_OFST);
++	}
++}
++
++/**
++ * zynqmp_ocm_edac_handle_error - Handle controller error types CE and UE
++ * @dci:	Pointer to the edac device controller instance
++ * @p:		Pointer to the ocm ecc status structure
++ *
++ * Handles the controller ECC correctable and un correctable error.
++ */
++static void zynqmp_ocm_edac_handle_error(struct edac_device_ctl_info *dci,
++				    struct zynqmp_ocm_ecc_status *p)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++	struct ecc_error_info *pinf;
++
++	if (p->ce_cnt) {
++		pinf = &p->ceinfo;
++		snprintf(priv->message, ZYNQMP_OCM_EDAC_MSG_SIZE,
++			 "\n\rOCM ECC error type :%s\n\r"
++			 "Addr: [0x%X]\n\rFault Data[31:0]: [0x%X]\n\r"
++			 "Fault Data[63:32]: [0x%X]",
++			 "CE", pinf->addr, pinf->data0, pinf->data1);
++		edac_device_handle_ce(dci, 0, 0, priv->message);
++	}
++
++	if (p->ue_cnt) {
++		pinf = &p->ueinfo;
++		snprintf(priv->message, ZYNQMP_OCM_EDAC_MSG_SIZE,
++			 "\n\rOCM ECC error type :%s\n\r"
++			 "Addr: [0x%X]\n\rFault Data[31:0]: [0x%X]\n\r"
++			 "Fault Data[63:32]: [0x%X]",
++			 "UE", pinf->addr, pinf->data0, pinf->data1);
++		edac_device_handle_ue(dci, 0, 0, priv->message);
++	}
++
++	memset(p, 0, sizeof(*p));
++}
++
++/**
++ * zynqmp_ocm_edac_intr_handler - isr routine
++ * @irq:        irq number
++ * @dev_id:     device id poniter
++ *
++ * This is the Isr routine called by edac core interrupt thread.
++ * Used to check and post ECC errors.
++ *
++ * Return: IRQ_NONE, if interrupt not set or IRQ_HANDLED otherwise
++ */
++static irqreturn_t zynqmp_ocm_edac_intr_handler(int irq, void *dev_id)
++{
++	struct edac_device_ctl_info *dci = dev_id;
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++	int regval;
++
++	regval = readl(priv->baseaddr + OCM_ISR_OFST);
++	if (!(regval & OCM_CEUE_MASK))
++		return IRQ_NONE;
++
++	zynqmp_ocm_edac_geterror_info(priv->baseaddr,
++				&priv->stat, regval);
++
++	priv->ce_cnt += priv->stat.ce_cnt;
++	priv->ue_cnt += priv->stat.ue_cnt;
++	zynqmp_ocm_edac_handle_error(dci, &priv->stat);
++
++	return IRQ_HANDLED;
++}
++
++/**
++ * zynqmp_ocm_edac_get_eccstate - Return the controller ecc status
++ * @base:	Pointer to the ddr memory controller base address
++ *
++ * Get the ECC enable/disable status for the controller
++ *
++ * Return: ecc status 0/1.
++ */
++static bool zynqmp_ocm_edac_get_eccstate(void __iomem *base)
++{
++	return readl(base + ECC_CTRL_OFST) & OCM_ECC_ENABLE_MASK;
++}
++
++static const struct of_device_id zynqmp_ocm_edac_match[] = {
++	{ .compatible = "xlnx,zynqmp-ocmc-1.0"},
++	{ /* end of table */ }
++};
++
++MODULE_DEVICE_TABLE(of, zynqmp_ocm_edac_match);
++
++/**
++ * zynqmp_ocm_edac_inject_fault_count_show - Shows fault injection count
++ * @dci:        Pointer to the edac device struct
++ * @data:       Pointer to user data
++ *
++ * Shows the fault injection count, once the counter reaches
++ * zero, it injects errors
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_fault_count_show(
++		struct edac_device_ctl_info *dci, char *data)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	return sprintf(data, "FIC: 0x%x\n\r",
++			readl(priv->baseaddr + OCM_FIC_OFST));
++}
++
++/**
++ * zynqmp_ocm_edac_inject_fault_count_store - write fi count
++ * @dci:	Pointer to the edac device struct
++ * @data:	Pointer to user data
++ * @count:	read the size bytes from buffer
++ *
++ * Update the fault injection count register, once the counter reaches
++ * zero, it injects errors
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_fault_count_store(
++		struct edac_device_ctl_info *dci, const char *data,
++		size_t count)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++	u32 ficount;
++
++	if (!data)
++		return -EFAULT;
++
++	if (kstrtouint(data, 0, &ficount))
++		return -EINVAL;
++
++	ficount &= OCM_FICOUNT_MASK;
++	writel(ficount, priv->baseaddr + OCM_FIC_OFST);
++
++	return count;
++}
++
++/**
++ * zynqmp_ocm_edac_inject_cebitpos_show - Shows CE bit position
++ * @dci:        Pointer to the edac device struct
++ * @data:       Pointer to user data
++ *
++ * Shows the Correctable error bit position,
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_cebitpos_show(struct edac_device_ctl_info
++							*dci, char *data)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	if (priv->ce_bitpos <= 31)
++		return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID0_OFST))));
++
++	return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID1_OFST))));
++}
++
++/**
++ * zynqmp_ocm_edac_inject_cebitpos_store - Set CE bit postion
++ * @dci:	Pointer to the edac device struct
++ * @data:	Pointer to user data
++ * @count:	read the size bytes from buffer
++ *
++ * Set any one bit to inject CE error
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_cebitpos_store(
++		struct edac_device_ctl_info *dci, const char *data,
++		size_t count)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	if (!data)
++		return -EFAULT;
++
++	if (kstrtou8(data, 0, &priv->ce_bitpos))
++		return -EINVAL;
++
++	if (priv->ce_bitpos <= 31) {
++		writel(1 << priv->ce_bitpos, priv->baseaddr + OCM_FID0_OFST);
++		writel(0, priv->baseaddr + OCM_FID1_OFST);
++	} else if (priv->ce_bitpos >= 32 && priv->ce_bitpos <= 63) {
++		writel(1 << (priv->ce_bitpos - 32),
++				priv->baseaddr + OCM_FID1_OFST);
++		writel(0, priv->baseaddr + OCM_FID0_OFST);
++	} else {
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++			"Bit number > 64 is not valid\n");
++	}
++
++	return count;
++}
++
++/**
++ * zynqmp_ocm_edac_inject_uebitpos0_show - Shows UE bit postion0
++ * @dci:        Pointer to the edac device struct
++ * @data:       Pointer to user data
++ *
++ * Shows the one of bit position for UE error
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_uebitpos0_show(
++		struct edac_device_ctl_info *dci, char *data)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	if (priv->ue_bitpos0 <= 31)
++		return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID0_OFST))));
++
++	return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID1_OFST))));
++}
++
++/**
++ * zynqmp_ocm_edac_inject_uebitpos0_store - set UE bit position0
++ * @dci:	Pointer to the edac device struct
++ * @data:	Pointer to user data
++ * @count:	read the size bytes from buffer
++ *
++ * Set the first bit postion for UE Error generation,we need to configure
++ * any two bitpositions to inject UE Error
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_uebitpos0_store(
++		struct edac_device_ctl_info *dci,
++		const char *data, size_t count)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	if (!data)
++		return -EFAULT;
++
++	if (kstrtou8(data, 0, &priv->ue_bitpos0))
++		return -EINVAL;
++
++	if (priv->ue_bitpos0 <= 31)
++		writel(1 << priv->ue_bitpos0, priv->baseaddr + OCM_FID0_OFST);
++	else if (priv->ue_bitpos0 >= 32 && priv->ue_bitpos0 <= 63)
++		writel(1 << (priv->ue_bitpos0 - 32),
++				priv->baseaddr + OCM_FID1_OFST);
++	else
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++			"Bit position > 64 is not valid\n");
++	edac_printk(KERN_INFO, EDAC_DEVICE,
++			"Set another bit position for UE\n");
++	return count;
++}
++
++/**
++ * zynqmp_ocm_edac_inject_uebitpos1_show - Shows UE bit postion1
++ * @dci:        Pointer to the edac device struct
++ * @data:       Pointer to user data
++ *
++ * Shows the second bit postion configured for UE error
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_uebitpos1_show(
++		struct edac_device_ctl_info *dci, char *data)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	if (priv->ue_bitpos1 <= 31)
++		return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID0_OFST))));
++
++	return sprintf(data, "Fault Injection Data Reg: [0x%x]\n\r",
++			((readl(priv->baseaddr + OCM_FID1_OFST))));
++
++}
++
++/**
++ * zynqmp_ocm_edac_inject_uebitposition1_store - Set UE second bit postion
++ * @dci:	Pointer to the edac device struct
++ * @data:	Pointer to user data
++ * @count:	read the size bytes from buffer
++ *
++ * Set the second bit postion for UE Error generation,we need to configure
++ * any two bitpositions to inject UE Error
++ * Return: Number of bytes copied.
++ */
++static ssize_t zynqmp_ocm_edac_inject_uebitpos1_store(
++		struct edac_device_ctl_info *dci, const char *data,
++		size_t count)
++{
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++	u32 mask;
++
++	if (!data)
++		return -EFAULT;
++
++	if (kstrtou8(data, 0, &priv->ue_bitpos1))
++		return -EINVAL;
++
++	if (priv->ue_bitpos0 == priv->ue_bitpos1) {
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++				"Bit positions should not be equal\n");
++		return -EINVAL;
++	}
++
++	/* If both bit postions are referring to 32 bit data, then configure
++	 * only FID0 register or if it is 64 bit data, then configure only
++	 * FID1 register.
++	 */
++	if (priv->ue_bitpos0 <= 31 &&
++	    priv->ue_bitpos1 <= 31) {
++		mask = (1 << priv->ue_bitpos0);
++		mask |= (1 << priv->ue_bitpos1);
++		writel(mask, priv->baseaddr + OCM_FID0_OFST);
++		writel(0, priv->baseaddr + OCM_FID1_OFST);
++	} else if ((priv->ue_bitpos0 >= 32 && priv->ue_bitpos0 <= 63) &&
++			(priv->ue_bitpos1 >= 32 && priv->ue_bitpos1 <= 63)) {
++		mask = (1 << (priv->ue_bitpos0 - 32));
++		mask |= (1 << (priv->ue_bitpos1 - 32));
++		writel(mask, priv->baseaddr + OCM_FID1_OFST);
++		writel(0, priv->baseaddr + OCM_FID0_OFST);
++	}
++
++	/* If one bit position is referring a bit in 32 bit data and other in
++	 * 64 bit data, just configure FID0/FID1 based on uebitpos1.
++	 */
++	if ((priv->ue_bitpos0 <= 31) &&
++	    (priv->ue_bitpos1 >= 32 && priv->ue_bitpos1 <= 63)) {
++		writel(1 << (priv->ue_bitpos1 - 32),
++				priv->baseaddr + OCM_FID1_OFST);
++	} else if ((priv->ue_bitpos0 >= 32 && priv->ue_bitpos0 <= 63) &&
++			(priv->ue_bitpos1 <= 31)) {
++		writel(1 << priv->ue_bitpos1,
++				priv->baseaddr + OCM_FID0_OFST);
++	} else {
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++			"Bit position > 64 is not valid, Valid bits:[63:0]\n");
++	}
++
++	edac_printk(KERN_INFO, EDAC_DEVICE,
++			"UE at Bit Position0: %d Bit Position1: %d\n",
++			priv->ue_bitpos0, priv->ue_bitpos1);
++	return count;
++}
++
++static struct edac_dev_sysfs_attribute zynqmp_ocm_edac_sysfs_attributes[] = {
++	{
++		.attr = {
++			.name = "inject_cebitpos",
++			.mode = (0644)
++		},
++		.show = zynqmp_ocm_edac_inject_cebitpos_show,
++		.store = zynqmp_ocm_edac_inject_cebitpos_store},
++	{
++		.attr = {
++			.name = "inject_uebitpos0",
++			.mode = (0644)
++		},
++		.show = zynqmp_ocm_edac_inject_uebitpos0_show,
++		.store = zynqmp_ocm_edac_inject_uebitpos0_store},
++	{
++		.attr = {
++			.name = "inject_uebitpos1",
++			.mode = (0644)
++		},
++		.show = zynqmp_ocm_edac_inject_uebitpos1_show,
++		.store = zynqmp_ocm_edac_inject_uebitpos1_store},
++	{
++		.attr = {
++			.name = "inject_fault_count",
++			.mode = (0644)
++		},
++		.show = zynqmp_ocm_edac_inject_fault_count_show,
++		.store = zynqmp_ocm_edac_inject_fault_count_store},
++	/* End of list */
++	{
++		.attr = {.name = NULL}
++	}
++};
++
++/**
++ * zynqmp_set_ocm_edac_sysfs_attributes - create sysfs attributes
++ * @edac_dev:	Pointer to the edac device struct
++ *
++ * Creates sysfs entires for error injection
++ * Return: None.
++ */
++static void zynqmp_set_ocm_edac_sysfs_attributes(struct edac_device_ctl_info
++						*edac_dev)
++{
++	edac_dev->sysfs_attributes = zynqmp_ocm_edac_sysfs_attributes;
++}
++
++/**
++ * zynqmp_ocm_edac_probe - Check controller and bind driver
++ * @pdev:	Pointer to the platform_device struct
++ *
++ * Probes a specific controller instance for binding with the driver.
++ *
++ * Return: 0 if the controller instance was successfully bound to the
++ * driver; otherwise, < 0 on error.
++ */
++static int zynqmp_ocm_edac_probe(struct platform_device *pdev)
++{
++	struct edac_device_ctl_info *dci;
++	struct zynqmp_ocm_edac_priv *priv;
++	int irq, status;
++	struct resource *res;
++	void __iomem *baseaddr;
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	baseaddr = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(baseaddr))
++		return PTR_ERR(baseaddr);
++
++	if (!zynqmp_ocm_edac_get_eccstate(baseaddr)) {
++		edac_printk(KERN_INFO, EDAC_DEVICE,
++				"ECC not enabled - Disabling EDAC driver\n");
++		return -ENXIO;
++	}
++
++	dci = edac_device_alloc_ctl_info(sizeof(*priv), ZYNQMP_OCM_EDAC_STRING,
++			1, ZYNQMP_OCM_EDAC_STRING, 1, 0, NULL, 0,
++			edac_device_alloc_index());
++	if (!dci) {
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++				"Unable to allocate EDAC device\n");
++		return -ENOMEM;
++	}
++
++	priv = dci->pvt_info;
++	platform_set_drvdata(pdev, dci);
++	dci->dev = &pdev->dev;
++	priv->baseaddr = baseaddr;
++	dci->mod_name = pdev->dev.driver->name;
++	dci->ctl_name = ZYNQMP_OCM_EDAC_STRING;
++	dci->dev_name = dev_name(&pdev->dev);
++
++	zynqmp_set_ocm_edac_sysfs_attributes(dci);
++	if (edac_device_add_device(dci))
++		goto free_dev_ctl;
++
++	irq = platform_get_irq(pdev, 0);
++	if (irq < 0) {
++		edac_printk(KERN_ERR, EDAC_DEVICE,
++				"No irq %d in DT\n", irq);
++		return irq;
++	}
++
++	status = devm_request_irq(&pdev->dev, irq,
++		zynqmp_ocm_edac_intr_handler,
++		0, dev_name(&pdev->dev), dci);
++	if (status < 0) {
++		edac_printk(KERN_ERR, EDAC_DEVICE, "Failed to request Irq\n");
++		goto free_edac_dev;
++	}
++
++	writel(OCM_CEUE_MASK, priv->baseaddr + OCM_IEN_OFST);
++
++	return 0;
++
++free_edac_dev:
++	edac_device_del_device(&pdev->dev);
++free_dev_ctl:
++	edac_device_free_ctl_info(dci);
++
++	return -1;
++}
++
++/**
++ * zynqmp_ocm_edac_remove - Unbind driver from controller
++ * @pdev:	Pointer to the platform_device struct
++ *
++ * Return: Unconditionally 0
++ */
++static int zynqmp_ocm_edac_remove(struct platform_device *pdev)
++{
++	struct edac_device_ctl_info *dci = platform_get_drvdata(pdev);
++	struct zynqmp_ocm_edac_priv *priv = dci->pvt_info;
++
++	writel(OCM_CEUE_MASK, priv->baseaddr + OCM_IDS_OFST);
++	edac_device_del_device(&pdev->dev);
++	edac_device_free_ctl_info(dci);
++
++	return 0;
++}
++
++static struct platform_driver zynqmp_ocm_edac_driver = {
++	.driver = {
++		   .name = "zynqmp-ocm-edac",
++		   .of_match_table = zynqmp_ocm_edac_match,
++		   },
++	.probe = zynqmp_ocm_edac_probe,
++	.remove = zynqmp_ocm_edac_remove,
++};
++
++module_platform_driver(zynqmp_ocm_edac_driver);
++
++MODULE_AUTHOR("Xilinx Inc");
++MODULE_DESCRIPTION("ZynqMP OCM ECC driver");
++MODULE_LICENSE("GPL v2");

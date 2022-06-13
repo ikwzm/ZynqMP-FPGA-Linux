@@ -1,0 +1,17 @@
+diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
+index f6424d1b9..8fd2da7cc 100644
+--- a/arch/arm64/configs/xilinx_zynqmp_defconfig
++++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
+@@ -398,6 +398,12 @@ CONFIG_NFS_V4=y
+ CONFIG_NFS_V4_1=y
+ CONFIG_NFS_V4_2=y
+ CONFIG_ROOT_NFS=y
++CONFIG_CIFS=m
++CONFIG_CIFS_STATS2=y
++CONFIG_CIFS_ALLOW_INSECURE_LEGACY=y
++CONFIG_CIFS_XATTR=y
++CONFIG_CIFS_POSIX=y
++CONFIG_CIFS_DEBUG=y
+ CONFIG_NLS_CODEPAGE_437=y
+ CONFIG_NLS_ISO8859_1=y
+ # CONFIG_CRYPTO_MANAGER_DISABLE_TESTS is not set

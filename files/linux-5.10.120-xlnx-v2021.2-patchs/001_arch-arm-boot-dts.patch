@@ -1,0 +1,1394 @@
+diff --git a/Documentation/devicetree/bindings/arm/xilinx.yaml b/Documentation/devicetree/bindings/arm/xilinx.yaml
+index e0c6787f6..c8d15e379 100644
+--- a/Documentation/devicetree/bindings/arm/xilinx.yaml
++++ b/Documentation/devicetree/bindings/arm/xilinx.yaml
+@@ -58,12 +58,6 @@ properties:
+           - const: xlnx,zynqmp-zc1254
+           - const: xlnx,zynqmp
+ 
+-      - description: Xilinx internal board zc1275
+-        items:
+-          - const: xlnx,zynqmp-zc1275-revA
+-          - const: xlnx,zynqmp-zc1275
+-          - const: xlnx,zynqmp
+-
+       - description: Xilinx 96boards compatible board zcu100
+         items:
+           - const: xlnx,zynqmp-zcu100-revC
+@@ -91,6 +85,7 @@ properties:
+         items:
+           - enum:
+               - xlnx,zynqmp-zcu104-revA
++              - xlnx,zynqmp-zcu104-revC
+               - xlnx,zynqmp-zcu104-rev1.0
+           - const: xlnx,zynqmp-zcu104
+           - const: xlnx,zynqmp
+@@ -107,10 +102,43 @@ properties:
+         items:
+           - enum:
+               - xlnx,zynqmp-zcu111-revA
+-              - xlnx,zynqmp-zcu11-rev1.0
++              - xlnx,zynqmp-zcu111-rev1.0
+           - const: xlnx,zynqmp-zcu111
+           - const: xlnx,zynqmp
+ 
++      - description: Xilinx evaluation board zcu208
++        items:
++          - enum:
++              - xlnx,zynqmp-zcu208-revA
++              - xlnx,zynqmp-zcu208-rev1.0
++          - const: xlnx,zynqmp-zcu208
++          - const: xlnx,zynqmp
++
++      - description: Xilinx evaluation board zcu216
++        items:
++          - enum:
++              - xlnx,zynqmp-zcu216-revA
++              - xlnx,zynqmp-zcu216-rev1.0
++          - const: xlnx,zynqmp-zcu216
++          - const: xlnx,zynqmp
++
++      - description: Xilinx evaluation board zcu1275
++        items:
++          - enum:
++              - xlnx,zynqmp-zcu1275-revA
++              - xlnx,zynqmp-zcu1275-revB
++              - xlnx,zynqmp-zcu1275-rev1.0
++          - const: xlnx,zynqmp-zcu1275
++          - const: xlnx,zynqmp
++
++      - description: Xilinx evaluation board zcu1285
++        items:
++          - enum:
++              - xlnx,zynqmp-zcu1285-revA
++              - xlnx,zynqmp-zcu1285-rev1.0
++          - const: xlnx,zynqmp-zcu1285
++          - const: xlnx,zynqmp
++
+ additionalProperties: true
+ 
+ ...
+diff --git a/Documentation/devicetree/bindings/arm/zynq/zynq-efuse.txt b/Documentation/devicetree/bindings/arm/zynq/zynq-efuse.txt
+new file mode 100644
+index 000000000..39817e975
+--- /dev/null
++++ b/Documentation/devicetree/bindings/arm/zynq/zynq-efuse.txt
+@@ -0,0 +1,15 @@
++Device tree bindings for Zynq's eFuse Controller
++
++The Zynq eFuse controller provides the access to the chip efuses which contain
++information about device DNA, security settings and also device status.
++
++Required properties:
++ compatible: Compatibility string. Must be "xlnx,zynq-efuse".
++ reg: Specify the base and size of the EFUSE controller registers
++      in the memory map. E.g.: reg = <0xf800d000 0x20>;
++
++Example:
++efuse: efuse@f800d000 {
++	compatible = "xlnx,zynq-efuse";
++	reg = <0xf800d000 0x20>;
++};
+diff --git a/Documentation/devicetree/bindings/arm/zynq/zynq-ocmc.txt b/Documentation/devicetree/bindings/arm/zynq/zynq-ocmc.txt
+new file mode 100644
+index 000000000..b6dbf05b4
+--- /dev/null
++++ b/Documentation/devicetree/bindings/arm/zynq/zynq-ocmc.txt
+@@ -0,0 +1,17 @@
++Device tree bindings for Zynq's OCM Controller
++
++The OCM is divided to 4 64kB segments which can be separately configured
++to low or high location. Location is controlled via SLCR.
++
++Required properties:
++ compatible: Compatibility string. Must be "xlnx,zynq-ocmc-1.0".
++ reg: Specify the base and size of the OCM controller registers
++      in the memory map. E.g.: reg = <0xf800c000 0x1000>;
++
++Example:
++ocmc: ocmc@f800c000 {
++	compatible = "xlnx,zynq-ocmc-1.0";
++	interrupt-parent = <&intc>;
++	interrupts = <0 3 4>;
++	reg = <0xf800c000 0x1000>;
++} ;
+diff --git a/arch/arm/boot/dts/Makefile b/arch/arm/boot/dts/Makefile
+index 7e8151681..bf7ed9744 100644
+--- a/arch/arm/boot/dts/Makefile
++++ b/arch/arm/boot/dts/Makefile
+@@ -1303,6 +1303,7 @@ dtb-$(CONFIG_ARCH_ZYNQ) += \
+ 	zynq-zc770-xm013.dtb \
+ 	zynq-zed.dtb \
+ 	zynq-zturn.dtb \
++	zynq-zturn-v5.dtb \
+ 	zynq-zybo.dtb \
+ 	zynq-zybo-z7.dtb
+ dtb-$(CONFIG_MACH_ARMADA_370) += \
+diff --git a/arch/arm/boot/dts/zynq-7000.dtsi b/arch/arm/boot/dts/zynq-7000.dtsi
+index db3899b07..971af0d54 100644
+--- a/arch/arm/boot/dts/zynq-7000.dtsi
++++ b/arch/arm/boot/dts/zynq-7000.dtsi
+@@ -1,6 +1,9 @@
+-// SPDX-License-Identifier: GPL-2.0
++// SPDX-License-Identifier: GPL-2.0+
+ /*
+- * Copyright (C) 2011 - 2014 Xilinx
++ * Xilinx Zynq 7000 DTSI
++ * Describes the hardware common to all Zynq 7000-based boards.
++ *
++ *  Copyright (C) 2011 - 2015 Xilinx
+  */
+ 
+ / {
+@@ -92,7 +95,8 @@
+ 		};
+ 	};
+ 
+-	amba: amba {
++	amba: axi {
++		u-boot,dm-pre-reloc;
+ 		compatible = "simple-bus";
+ 		#address-cells = <1>;
+ 		#size-cells = <1>;
+@@ -188,6 +192,13 @@
+ 			reg = <0xf8006000 0x1000>;
+ 		};
+ 
++		ocmc: ocmc@f800c000 {
++			compatible = "xlnx,zynq-ocmc-1.0";
++			interrupt-parent = <&intc>;
++			interrupts = <0 3 4>;
++			reg = <0xf800c000 0x1000>;
++		};
++
+ 		uart0: serial@e0000000 {
+ 			compatible = "xlnx,xuartps", "cdns,uart-r1p8";
+ 			status = "disabled";
+@@ -230,6 +241,45 @@
+ 			#size-cells = <0>;
+ 		};
+ 
++		qspi: spi@e000d000 {
++			clock-names = "ref_clk", "pclk";
++			clocks = <&clkc 10>, <&clkc 43>;
++			compatible = "xlnx,zynq-qspi-1.0";
++			status = "disabled";
++			interrupt-parent = <&intc>;
++			interrupts = <0 19 4>;
++			reg = <0xe000d000 0x1000>;
++			#address-cells = <1>;
++			#size-cells = <0>;
++		};
++
++		smcc: memory-controller@e000e000 {
++			#address-cells = <1>;
++			#size-cells = <1>;
++			status = "disabled";
++			clock-names = "memclk", "apb_pclk";
++			clocks = <&clkc 11>, <&clkc 44>;
++			compatible = "arm,pl353-smc-r2p1", "arm,primecell";
++			interrupt-parent = <&intc>;
++			interrupts = <0 18 4>;
++			ranges ;
++			reg = <0xe000e000 0x1000>;
++			nand0: flash@e1000000 {
++				status = "disabled";
++				compatible = "arm,pl353-nand-r2p1";
++				reg = <0xe1000000 0x1000000>;
++				#address-cells = <1>;
++				#size-cells = <1>;
++			};
++			nor0: flash@e2000000 {
++				status = "disabled";
++				compatible = "cfi-flash";
++				reg = <0xe2000000 0x2000000>;
++				#address-cells = <1>;
++				#size-cells = <1>;
++			};
++		};
++
+ 		gem0: ethernet@e000b000 {
+ 			compatible = "cdns,zynq-gem", "cdns,gem";
+ 			reg = <0xe000b000 0x1000>;
+@@ -273,15 +323,17 @@
+ 		};
+ 
+ 		slcr: slcr@f8000000 {
++			u-boot,dm-pre-reloc;
+ 			#address-cells = <1>;
+ 			#size-cells = <1>;
+ 			compatible = "xlnx,zynq-slcr", "syscon", "simple-mfd";
+ 			reg = <0xF8000000 0x1000>;
+ 			ranges;
+ 			clkc: clkc@100 {
++				u-boot,dm-pre-reloc;
+ 				#clock-cells = <1>;
+ 				compatible = "xlnx,ps7-clkc";
+-				fclk-enable = <0>;
++				fclk-enable = <0xf>;
+ 				clock-output-names = "armpll", "ddrpll", "iopll", "cpu_6or4x",
+ 						"cpu_3or2x", "cpu_2x", "cpu_1x", "ddr2x", "ddr3x",
+ 						"dci", "lqspi", "smc", "pcap", "gem0", "gem1",
+@@ -330,14 +382,19 @@
+ 
+ 		devcfg: devcfg@f8007000 {
+ 			compatible = "xlnx,zynq-devcfg-1.0";
+-			reg = <0xf8007000 0x100>;
+ 			interrupt-parent = <&intc>;
+ 			interrupts = <0 8 4>;
+-			clocks = <&clkc 12>;
+-			clock-names = "ref_clk";
++			reg = <0xf8007000 0x100>;
++			clocks = <&clkc 12>, <&clkc 15>, <&clkc 16>, <&clkc 17>, <&clkc 18>;
++			clock-names = "ref_clk", "fclk0", "fclk1", "fclk2", "fclk3";
+ 			syscon = <&slcr>;
+ 		};
+ 
++		efuse: efuse@f800d000 {
++			compatible = "xlnx,zynq-efuse";
++			reg = <0xf800d000 0x20>;
++		};
++
+ 		global_timer: timer@f8f00200 {
+ 			compatible = "arm,cortex-a9-global-timer";
+ 			reg = <0xf8f00200 0x20>;
+diff --git a/arch/arm/boot/dts/zynq-cc108.dts b/arch/arm/boot/dts/zynq-cc108.dts
+index 8b9ab9bba..036106e22 100644
+--- a/arch/arm/boot/dts/zynq-cc108.dts
++++ b/arch/arm/boot/dts/zynq-cc108.dts
+@@ -18,6 +18,7 @@
+ 	aliases {
+ 		ethernet0 = &gem0;
+ 		serial0 = &uart0;
++		spi0 = &qspi;
+ 	};
+ 
+ 	chosen {
+@@ -52,6 +53,45 @@
+ 	};
+ };
+ 
++&qspi {
++	status = "okay";
++	is-dual = <0>;
++	num-cs = <1>;
++	flash@0 { /* 16 MB */
++		compatible = "n25q128a11", "jedec,spi-nor";
++		reg = <0x0>;
++		spi-max-frequency = <50000000>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot-bs";
++			reg = <0x0 0x400000>; /* 4MB */
++		};
++		partition@400000 {
++			label = "qspi-linux";
++			reg = <0x400000 0x400000>; /* 4MB */
++		};
++		partition@800000 {
++			label = "qspi-rootfs";
++			reg = <0x800000 0x400000>; /* 4MB */
++		};
++		partition@c00000 {
++			label = "qspi-devicetree";
++			reg = <0xc00000 0x100000>; /* 1MB */
++		};
++		partition@d00000 {
++			label = "qspi-scratch";
++			reg = <0xd00000 0x200000>; /* 2MB */
++		};
++		partition@f00000 {
++			label = "qspi-uboot-env";
++			reg = <0xf00000 0x100000>; /* 1MB */
++		};
++	};
++};
++
+ &sdhci1 {
+ 	status = "okay";
+ 	broken-cd ;
+@@ -59,6 +99,7 @@
+ };
+ 
+ &uart0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+diff --git a/arch/arm/boot/dts/zynq-zc702.dts b/arch/arm/boot/dts/zynq-zc702.dts
+index 27cd6cb52..fb918a14f 100644
+--- a/arch/arm/boot/dts/zynq-zc702.dts
++++ b/arch/arm/boot/dts/zynq-zc702.dts
+@@ -1,6 +1,6 @@
+-// SPDX-License-Identifier: GPL-2.0
++// SPDX-License-Identifier: GPL-2.0+
+ /*
+- *  Copyright (C) 2011 - 2014 Xilinx
++ *  Copyright (C) 2011 - 2015 Xilinx
+  *  Copyright (C) 2012 National Instruments Corp.
+  */
+ /dts-v1/;
+@@ -14,7 +14,9 @@
+ 		ethernet0 = &gem0;
+ 		i2c0 = &i2c0;
+ 		serial0 = &uart1;
++		spi0 = &qspi;
+ 		mmc0 = &sdhci0;
++		usb0 = &usb0;
+ 	};
+ 
+ 	memory@0 {
+@@ -49,16 +51,19 @@
+ 	leds {
+ 		compatible = "gpio-leds";
+ 
+-		ds23 {
++		led-ds23 {
+ 			label = "ds23";
+ 			gpios = <&gpio0 10 0>;
+ 			linux,default-trigger = "heartbeat";
+ 		};
+ 	};
+ 
+-	usb_phy0: phy0 {
+-		compatible = "usb-nop-xceiv";
++	usb_phy0: phy0@e0002000 {
++		compatible = "ulpi-phy";
+ 		#phy-cells = <0>;
++		reg = <0xe0002000 0x1000>;
++		view-port = <0x0170>;
++		drv-vbus;
+ 	};
+ };
+ 
+@@ -66,6 +71,12 @@
+ 	ocm: sram@fffc0000 {
+ 		compatible = "mmio-sram";
+ 		reg = <0xfffc0000 0x10000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges = <0 0xfffc0000 0x10000>;
++		ocm-sram@0 {
++			reg = <0x0 0x10000>;
++		};
+ 	};
+ };
+ 
+@@ -85,6 +96,8 @@
+ 	phy-handle = <&ethernet_phy>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_gem0_default>;
++	phy-reset-gpio = <&gpio0 11 0>;
++	phy-reset-active-low;
+ 
+ 	ethernet_phy: ethernet-phy@7 {
+ 		reg = <7>;
+@@ -100,8 +113,11 @@
+ &i2c0 {
+ 	status = "okay";
+ 	clock-frequency = <400000>;
+-	pinctrl-names = "default";
++	pinctrl-names = "default", "gpio";
+ 	pinctrl-0 = <&pinctrl_i2c0_default>;
++	pinctrl-1 = <&pinctrl_i2c0_gpio>;
++	scl-gpios = <&gpio0 50 0>;
++	sda-gpios = <&gpio0 51 0>;
+ 
+ 	i2c-mux@74 {
+ 		compatible = "nxp,pca9548";
+@@ -200,7 +216,7 @@
+ 		conf {
+ 			groups = "can0_9_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-rx {
+@@ -223,7 +239,7 @@
+ 		conf {
+ 			groups = "ethernet0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <4>;
++			power-source = <4>;
+ 		};
+ 
+ 		conf-rx {
+@@ -246,7 +262,7 @@
+ 		conf-mdio {
+ 			groups = "mdio0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 			bias-disable;
+ 		};
+ 	};
+@@ -264,7 +280,7 @@
+ 				 "gpio0_10_grp", "gpio0_11_grp", "gpio0_12_grp",
+ 				 "gpio0_13_grp", "gpio0_14_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-pull-up {
+@@ -288,7 +304,20 @@
+ 			groups = "i2c0_10_grp";
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
++		};
++	};
++
++	pinctrl_i2c0_gpio: i2c0-gpio {
++		mux {
++			groups = "gpio0_50_grp", "gpio0_51_grp";
++			function = "gpio0";
++		};
++
++		conf {
++			groups = "gpio0_50_grp", "gpio0_51_grp";
++			slew-rate = <0>;
++			power-source = <1>;
+ 		};
+ 	};
+ 
+@@ -301,7 +330,7 @@
+ 		conf {
+ 			groups = "sdio0_2_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 			bias-disable;
+ 		};
+ 
+@@ -315,7 +344,7 @@
+ 			bias-high-impedance;
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		mux-wp {
+@@ -328,7 +357,7 @@
+ 			bias-high-impedance;
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 	};
+ 
+@@ -341,7 +370,7 @@
+ 		conf {
+ 			groups = "uart1_10_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-rx {
+@@ -364,7 +393,7 @@
+ 		conf {
+ 			groups = "usb0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-rx {
+@@ -380,13 +409,51 @@
+ 	};
+ };
+ 
++&qspi {
++	u-boot,dm-pre-reloc;
++	status = "okay";
++	is-dual = <0>;
++	num-cs = <1>;
++	flash@0 {
++		compatible = "n25q128a11", "jedec,spi-nor";
++		reg = <0x0>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		spi-max-frequency = <50000000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot";
++			reg = <0x0 0x100000>;
++		};
++		partition@100000 {
++			label = "qspi-linux";
++			reg = <0x100000 0x500000>;
++		};
++		partition@600000 {
++			label = "qspi-device-tree";
++			reg = <0x600000 0x20000>;
++		};
++		partition@620000 {
++			label = "qspi-rootfs";
++			reg = <0x620000 0x5E0000>;
++		};
++		partition@c00000 {
++			label = "qspi-bitstream";
++			reg = <0xC00000 0x400000>;
++		};
++	};
++};
++
+ &sdhci0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_sdhci0_default>;
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_uart1_default>;
+diff --git a/arch/arm/boot/dts/zynq-zc706.dts b/arch/arm/boot/dts/zynq-zc706.dts
+index 77943c16d..cb6e9117f 100644
+--- a/arch/arm/boot/dts/zynq-zc706.dts
++++ b/arch/arm/boot/dts/zynq-zc706.dts
+@@ -1,6 +1,6 @@
+-// SPDX-License-Identifier: GPL-2.0
++// SPDX-License-Identifier: GPL-2.0+
+ /*
+- *  Copyright (C) 2011 - 2014 Xilinx
++ *  Copyright (C) 2011 - 2015 Xilinx
+  *  Copyright (C) 2012 National Instruments Corp.
+  */
+ /dts-v1/;
+@@ -14,6 +14,7 @@
+ 		ethernet0 = &gem0;
+ 		i2c0 = &i2c0;
+ 		serial0 = &uart1;
++		spi0 = &qspi;
+ 		mmc0 = &sdhci0;
+ 	};
+ 
+@@ -27,9 +28,12 @@
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
+-	usb_phy0: phy0 {
+-		compatible = "usb-nop-xceiv";
++	usb_phy0: phy0@e0002000 {
++		compatible = "ulpi-phy";
+ 		#phy-cells = <0>;
++		reg = <0xe0002000 0x1000>;
++		view-port = <0x0170>;
++		drv-vbus;
+ 	};
+ };
+ 
+@@ -150,7 +154,7 @@
+ 		conf {
+ 			groups = "ethernet0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <4>;
++			power-source = <4>;
+ 		};
+ 
+ 		conf-rx {
+@@ -173,7 +177,7 @@
+ 		conf-mdio {
+ 			groups = "mdio0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 			bias-disable;
+ 		};
+ 	};
+@@ -187,7 +191,7 @@
+ 		conf {
+ 			groups = "gpio0_7_grp", "gpio0_46_grp", "gpio0_47_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-pull-up {
+@@ -211,7 +215,7 @@
+ 			groups = "i2c0_10_grp";
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 	};
+ 
+@@ -224,7 +228,7 @@
+ 		conf {
+ 			groups = "sdio0_2_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 			bias-disable;
+ 		};
+ 
+@@ -238,7 +242,7 @@
+ 			bias-high-impedance;
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		mux-wp {
+@@ -251,7 +255,7 @@
+ 			bias-high-impedance;
+ 			bias-pull-up;
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 	};
+ 
+@@ -264,7 +268,7 @@
+ 		conf {
+ 			groups = "uart1_10_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-rx {
+@@ -287,7 +291,7 @@
+ 		conf {
+ 			groups = "usb0_0_grp";
+ 			slew-rate = <0>;
+-			io-standard = <1>;
++			power-source = <1>;
+ 		};
+ 
+ 		conf-rx {
+@@ -303,13 +307,51 @@
+ 	};
+ };
+ 
++&qspi {
++	u-boot,dm-pre-reloc;
++	status = "okay";
++	is-dual = <1>;
++	num-cs = <1>;
++	flash@0 {
++		compatible = "n25q128a11", "jedec,spi-nor";
++		reg = <0x0>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		spi-max-frequency = <50000000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot";
++			reg = <0x0 0x100000>;
++		};
++		partition@100000 {
++			label = "qspi-linux";
++			reg = <0x100000 0x500000>;
++		};
++		partition@600000 {
++			label = "qspi-device-tree";
++			reg = <0x600000 0x20000>;
++		};
++		partition@620000 {
++			label = "qspi-rootfs";
++			reg = <0x620000 0x5E0000>;
++		};
++		partition@c00000 {
++			label = "qspi-bitstream";
++			reg = <0xC00000 0x400000>;
++		};
++	};
++};
++
+ &sdhci0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_sdhci0_default>;
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_uart1_default>;
+@@ -322,3 +364,7 @@
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_usb0_default>;
+ };
++
++&watchdog0 {
++	reset-on-timeout;
++};
+diff --git a/arch/arm/boot/dts/zynq-zc770-xm010.dts b/arch/arm/boot/dts/zynq-zc770-xm010.dts
+index 0dd352289..82888141b 100644
+--- a/arch/arm/boot/dts/zynq-zc770-xm010.dts
++++ b/arch/arm/boot/dts/zynq-zc770-xm010.dts
+@@ -15,6 +15,7 @@
+ 		ethernet0 = &gem0;
+ 		i2c0 = &i2c0;
+ 		serial0 = &uart1;
++		spi0 = &qspi;
+ 		spi1 = &spi1;
+ 	};
+ 
+@@ -57,7 +58,41 @@
+ 		compatible = "atmel,24c02";
+ 		reg = <0x52>;
+ 	};
++};
+ 
++&qspi {
++	status = "okay";
++	is-dual = <0>;
++	num-cs = <1>;
++	flash@0 {
++		compatible = "n25q128a11", "jedec,spi-nor";
++		reg = <0x0>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		spi-max-frequency = <50000000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot";
++			reg = <0x0 0x100000>;
++		};
++		partition@100000 {
++			label = "qspi-linux";
++			reg = <0x100000 0x500000>;
++		};
++		partition@600000 {
++			label = "qspi-device-tree";
++			reg = <0x600000 0x20000>;
++		};
++		partition@620000 {
++			label = "qspi-rootfs";
++			reg = <0x620000 0x5E0000>;
++		};
++		partition@c00000 {
++			label = "qspi-bitstream";
++			reg = <0xC00000 0x400000>;
++		};
++	};
+ };
+ 
+ &sdhci0 {
+@@ -85,6 +120,7 @@
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+diff --git a/arch/arm/boot/dts/zynq-zc770-xm011.dts b/arch/arm/boot/dts/zynq-zc770-xm011.dts
+index b7f65862c..d659fdc59 100644
+--- a/arch/arm/boot/dts/zynq-zc770-xm011.dts
++++ b/arch/arm/boot/dts/zynq-zc770-xm011.dts
+@@ -1,6 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0+
+ /*
+- * Xilinx ZC770 XM013 board DTS
++ * Xilinx ZC770 XM011 board DTS
+  *
+  * Copyright (C) 2013-2018 Xilinx, Inc.
+  */
+@@ -47,6 +47,47 @@
+ 	};
+ };
+ 
++&nand0 {
++	status = "okay";
++	arm,nand-cycle-t0 = <0x4>;
++	arm,nand-cycle-t1 = <0x4>;
++	arm,nand-cycle-t2 = <0x1>;
++	arm,nand-cycle-t3 = <0x2>;
++	arm,nand-cycle-t4 = <0x2>;
++	arm,nand-cycle-t5 = <0x2>;
++	arm,nand-cycle-t6 = <0x4>;
++
++	partition@0 {
++		label = "nand-fsbl-uboot";
++		reg = <0x0 0x100000>;
++	};
++	partition@100000 {
++		label = "nand-linux";
++		reg = <0x100000 0x500000>;
++	};
++	partition@600000 {
++		label = "nand-device-tree";
++		reg = <0x600000 0x20000>;
++	};
++	partition@620000 {
++		label = "nand-rootfs";
++		reg = <0x620000 0x5E0000>;
++	};
++	partition@c00000 {
++		label = "nand-bitstream";
++		reg = <0xC00000 0x400000>;
++	};
++};
++
++&smcc {
++	status = "okay";
++	arm,addr25 = <0x0>;
++	arm,nor-chip-sel0 = <0x0>;
++	arm,nor-chip-sel1 = <0x0>;
++	arm,sram-chip-sel0 = <0x0>;
++	arm,sram-chip-sel1 = <0x0>;
++};
++
+ &spi0 {
+ 	status = "okay";
+ 	num-cs = <4>;
+@@ -54,6 +95,7 @@
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+diff --git a/arch/arm/boot/dts/zynq-zc770-xm012.dts b/arch/arm/boot/dts/zynq-zc770-xm012.dts
+index d2359b789..849230ee4 100644
+--- a/arch/arm/boot/dts/zynq-zc770-xm012.dts
++++ b/arch/arm/boot/dts/zynq-zc770-xm012.dts
+@@ -53,6 +53,47 @@
+ 	};
+ };
+ 
++&nor0 {
++	status = "okay";
++	bank-width = <1>;
++	xlnx,sram-cycle-t0 = <0xb>;
++	xlnx,sram-cycle-t1 = <0xb>;
++	xlnx,sram-cycle-t2 = <0x4>;
++	xlnx,sram-cycle-t3 = <0x4>;
++	xlnx,sram-cycle-t4 = <0x3>;
++	xlnx,sram-cycle-t5 = <0x3>;
++	xlnx,sram-cycle-t6 = <0x2>;
++	partition@0 {
++		label = "nor-fsbl-uboot";
++		reg = <0x0 0x100000>;
++	};
++	partition@100000 {
++		label = "nor-linux";
++		reg = <0x100000 0x500000>;
++	};
++	partition@600000 {
++		label = "nor-device-tree";
++		reg = <0x600000 0x20000>;
++	};
++	partition@620000 {
++		label = "nor-rootfs";
++		reg = <0x620000 0x5E0000>;
++	};
++	partition@c00000 {
++		label = "nor-bitstream";
++		reg = <0xC00000 0x400000>;
++	};
++};
++
++&smcc {
++	status = "okay";
++	arm,addr25 = <0x1>;
++	arm,nor-chip-sel0 = <0x1>;
++	arm,nor-chip-sel1 = <0x0>;
++	arm,sram-chip-sel0 = <0x0>;
++	arm,sram-chip-sel1 = <0x0>;
++};
++
+ &spi1 {
+ 	status = "okay";
+ 	num-cs = <4>;
+@@ -60,5 +101,6 @@
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+diff --git a/arch/arm/boot/dts/zynq-zc770-xm013.dts b/arch/arm/boot/dts/zynq-zc770-xm013.dts
+index 4ae2c85df..c9b5bef2c 100644
+--- a/arch/arm/boot/dts/zynq-zc770-xm013.dts
++++ b/arch/arm/boot/dts/zynq-zc770-xm013.dts
+@@ -15,6 +15,7 @@
+ 		ethernet0 = &gem1;
+ 		i2c0 = &i2c1;
+ 		serial0 = &uart0;
++		spi0 = &qspi;
+ 		spi1 = &spi0;
+ 	};
+ 
+@@ -58,21 +59,56 @@
+ 	};
+ };
+ 
++&qspi {
++	status = "okay";
++	is-dual = <1>;
++	num-cs = <1>;
++	flash@0 {
++		compatible = "n25q128a11", "jedec,spi-nor";
++		reg = <0x0>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		spi-max-frequency = <50000000>;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot";
++			reg = <0x0 0x100000>;
++		};
++		partition@100000 {
++			label = "qspi-linux";
++			reg = <0x100000 0x500000>;
++		};
++		partition@600000 {
++			label = "qspi-device-tree";
++			reg = <0x600000 0x20000>;
++		};
++		partition@620000 {
++			label = "qspi-rootfs";
++			reg = <0x620000 0x5E0000>;
++		};
++		partition@c00000 {
++			label = "qspi-bitstream";
++			reg = <0xC00000 0x400000>;
++		};
++	};
++};
++
+ &spi0 {
+ 	status = "okay";
+ 	num-cs = <4>;
+ 	is-decoded-cs = <0>;
+ 	eeprom: eeprom@2 {
+-		at25,byte-len = <8192>;
+-		at25,addr-mode = <2>;
+-		at25,page-size = <32>;
+-
+ 		compatible = "atmel,at25";
+ 		reg = <2>;
+ 		spi-max-frequency = <1000000>;
++		size = <8192>;
++		address-width = <16>;
++		pagesize = <32>;
+ 	};
+ };
+ 
+ &uart0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+diff --git a/arch/arm/boot/dts/zynq-zed.dts b/arch/arm/boot/dts/zynq-zed.dts
+index 6a5a93aa6..2d531a6ea 100644
+--- a/arch/arm/boot/dts/zynq-zed.dts
++++ b/arch/arm/boot/dts/zynq-zed.dts
+@@ -1,6 +1,6 @@
+-// SPDX-License-Identifier: GPL-2.0
++// SPDX-License-Identifier: GPL-2.0+
+ /*
+- *  Copyright (C) 2011 - 2014 Xilinx
++ *  Copyright (C) 2011 - 2015 Xilinx
+  *  Copyright (C) 2012 National Instruments Corp.
+  */
+ /dts-v1/;
+@@ -13,6 +13,7 @@
+ 	aliases {
+ 		ethernet0 = &gem0;
+ 		serial0 = &uart1;
++		spi0 = &qspi;
+ 		mmc0 = &sdhci0;
+ 	};
+ 
+@@ -26,9 +27,12 @@
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
+-	usb_phy0: phy0 {
+-		compatible = "usb-nop-xceiv";
++	usb_phy0: phy0@e0002000 {
++		compatible = "ulpi-phy";
+ 		#phy-cells = <0>;
++		reg = <0xe0002000 0x1000>;
++		view-port = <0x0170>;
++		drv-vbus;
+ 	};
+ };
+ 
+@@ -47,11 +51,50 @@
+ 	};
+ };
+ 
++&qspi {
++	u-boot,dm-pre-reloc;
++	status = "okay";
++	is-dual = <0>;
++	num-cs = <1>;
++	flash@0 {
++		compatible = "spansion,s25fl256s1", "jedec,spi-nor";
++		reg = <0>;
++		spi-tx-bus-width = <1>;
++		spi-rx-bus-width = <4>;
++		spi-max-frequency = <50000000>;
++		m25p,fast-read;
++		#address-cells = <1>;
++		#size-cells = <1>;
++		partition@0 {
++			label = "qspi-fsbl-uboot";
++			reg = <0x0 0x100000>;
++		};
++		partition@100000 {
++			label = "qspi-linux";
++			reg = <0x100000 0x500000>;
++		};
++		partition@600000 {
++			label = "qspi-device-tree";
++			reg = <0x600000 0x20000>;
++		};
++		partition@620000 {
++			label = "qspi-rootfs";
++			reg = <0x620000 0x5E0000>;
++		};
++		partition@c00000 {
++			label = "qspi-bitstream";
++			reg = <0xC00000 0x400000>;
++		};
++	};
++};
++
+ &sdhci0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+diff --git a/arch/arm/boot/dts/zynq-zturn-common.dtsi b/arch/arm/boot/dts/zynq-zturn-common.dtsi
+new file mode 100644
+index 000000000..bf5d1c456
+--- /dev/null
++++ b/arch/arm/boot/dts/zynq-zturn-common.dtsi
+@@ -0,0 +1,112 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ *  Copyright (C) 2015 Andrea Merello <adnrea.merello@gmail.com>
++ *  Copyright (C) 2017 Alexander Graf <agraf@suse.de>
++ *
++ *  Based on zynq-zed.dts which is:
++ *  Copyright (C) 2011 - 2014 Xilinx
++ *  Copyright (C) 2012 National Instruments Corp.
++ *
++ */
++
++/dts-v1/;
++/include/ "zynq-7000.dtsi"
++
++/ {
++	compatible = "xlnx,zynq-7000";
++
++	aliases {
++		ethernet0 = &gem0;
++		serial0 = &uart1;
++		serial1 = &uart0;
++		mmc0 = &sdhci0;
++	};
++
++	memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x40000000>;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	gpio-leds {
++		compatible = "gpio-leds";
++		usr-led1 {
++			label = "usr-led1";
++			gpios = <&gpio0 0x0 0x1>;
++			default-state = "off";
++		};
++
++		usr-led2 {
++			label = "usr-led2";
++			gpios = <&gpio0 0x9 0x1>;
++			default-state = "off";
++		};
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++		autorepeat;
++		K1 {
++			label = "K1";
++			gpios = <&gpio0 0x32 0x1>;
++			linux,code = <0x66>;
++			wakeup-source;
++			autorepeat;
++		};
++	};
++};
++
++&clkc {
++	ps-clk-frequency = <33333333>;
++};
++
++&gem0 {
++	status = "okay";
++	phy-mode = "rgmii-id";
++	phy-handle = <&ethernet_phy>;
++
++	ethernet_phy: ethernet-phy@0 {
++	};
++};
++
++&sdhci0 {
++	status = "okay";
++};
++
++&uart0 {
++	status = "okay";
++};
++
++&uart1 {
++	status = "okay";
++};
++
++&usb0 {
++	status = "okay";
++	dr_mode = "host";
++};
++
++&can0 {
++	status = "okay";
++};
++
++&i2c0 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++	stlm75@49 {
++		status = "okay";
++		compatible = "lm75";
++		reg = <0x49>;
++	};
++
++	accelerometer@53 {
++		compatible = "adi,adxl345";
++		reg = <0x53>;
++		interrupt-parent = <&intc>;
++		interrupts = <0x0 0x1e 0x4>;
++	};
++};
+diff --git a/arch/arm/boot/dts/zynq-zturn-v5.dts b/arch/arm/boot/dts/zynq-zturn-v5.dts
+new file mode 100644
+index 000000000..536632a09
+--- /dev/null
++++ b/arch/arm/boot/dts/zynq-zturn-v5.dts
+@@ -0,0 +1,15 @@
++// SPDX-License-Identifier: GPL-2.0
++
++/dts-v1/;
++/include/ "zynq-zturn-common.dtsi"
++
++/ {
++	model = "Zynq Z-Turn MYIR Board V5";
++	compatible = "myir,zynq-zturn-v5", "xlnx,zynq-7000";
++};
++
++&gem0 {
++	ethernet_phy: ethernet-phy@0 {
++		reg = <0x3>;
++	};
++};
+diff --git a/arch/arm/boot/dts/zynq-zturn.dts b/arch/arm/boot/dts/zynq-zturn.dts
+index 5ec616ebc..620b24a25 100644
+--- a/arch/arm/boot/dts/zynq-zturn.dts
++++ b/arch/arm/boot/dts/zynq-zturn.dts
+@@ -1,114 +1,15 @@
+ // SPDX-License-Identifier: GPL-2.0
+-/*
+- *  Copyright (C) 2015 Andrea Merello <adnrea.merello@gmail.com>
+- *  Copyright (C) 2017 Alexander Graf <agraf@suse.de>
+- *
+- *  Based on zynq-zed.dts which is:
+- *  Copyright (C) 2011 - 2014 Xilinx
+- *  Copyright (C) 2012 National Instruments Corp.
+- *
+- */
+ 
+ /dts-v1/;
+-/include/ "zynq-7000.dtsi"
++/include/ "zynq-zturn-common.dtsi"
+ 
+ / {
+ 	model = "Zynq Z-Turn MYIR Board";
+ 	compatible = "myir,zynq-zturn", "xlnx,zynq-7000";
+-
+-	aliases {
+-		ethernet0 = &gem0;
+-		serial0 = &uart1;
+-		serial1 = &uart0;
+-		mmc0 = &sdhci0;
+-	};
+-
+-	memory@0 {
+-		device_type = "memory";
+-		reg = <0x0 0x40000000>;
+-	};
+-
+-	chosen {
+-		stdout-path = "serial0:115200n8";
+-	};
+-
+-	gpio-leds {
+-		compatible = "gpio-leds";
+-		usr-led1 {
+-			label = "usr-led1";
+-			gpios = <&gpio0 0x0 0x1>;
+-			default-state = "off";
+-		};
+-
+-		usr-led2 {
+-			label = "usr-led2";
+-			gpios = <&gpio0 0x9 0x1>;
+-			default-state = "off";
+-		};
+-	};
+-
+-	gpio-keys {
+-		compatible = "gpio-keys";
+-		autorepeat;
+-		K1 {
+-			label = "K1";
+-			gpios = <&gpio0 0x32 0x1>;
+-			linux,code = <0x66>;
+-			wakeup-source;
+-			autorepeat;
+-		};
+-	};
+-};
+-
+-&clkc {
+-	ps-clk-frequency = <33333333>;
+ };
+ 
+ &gem0 {
+-	status = "okay";
+-	phy-mode = "rgmii-id";
+-	phy-handle = <&ethernet_phy>;
+-
+ 	ethernet_phy: ethernet-phy@0 {
+ 		reg = <0x0>;
+ 	};
+ };
+-
+-&sdhci0 {
+-	status = "okay";
+-};
+-
+-&uart0 {
+-	status = "okay";
+-};
+-
+-&uart1 {
+-	status = "okay";
+-};
+-
+-&usb0 {
+-	status = "okay";
+-	dr_mode = "host";
+-};
+-
+-&can0 {
+-	status = "okay";
+-};
+-
+-&i2c0 {
+-	status = "okay";
+-	clock-frequency = <400000>;
+-
+-	stlm75@49 {
+-		status = "okay";
+-		compatible = "lm75";
+-		reg = <0x49>;
+-	};
+-
+-	accelerometer@53 {
+-		compatible = "adi,adxl345", "adxl345", "adi,adxl34x", "adxl34x";
+-		reg = <0x53>;
+-		interrupt-parent = <&intc>;
+-		interrupts = <0x0 0x1e 0x4>;
+-	};
+-};
+diff --git a/arch/arm/boot/dts/zynq-zybo-z7.dts b/arch/arm/boot/dts/zynq-zybo-z7.dts
+index 357b78a5c..7b87e10d3 100644
+--- a/arch/arm/boot/dts/zynq-zybo-z7.dts
++++ b/arch/arm/boot/dts/zynq-zybo-z7.dts
+@@ -25,7 +25,7 @@
+ 	gpio-leds {
+ 		compatible = "gpio-leds";
+ 
+-		ld4 {
++		led-ld4 {
+ 			label = "zynq-zybo-z7:green:ld4";
+ 			gpios = <&gpio0 7 GPIO_ACTIVE_HIGH>;
+ 		};
+diff --git a/arch/arm/boot/dts/zynq-zybo.dts b/arch/arm/boot/dts/zynq-zybo.dts
+index 755f6f109..0ac54ebbd 100644
+--- a/arch/arm/boot/dts/zynq-zybo.dts
++++ b/arch/arm/boot/dts/zynq-zybo.dts
+@@ -1,6 +1,6 @@
+-// SPDX-License-Identifier: GPL-2.0
++// SPDX-License-Identifier: GPL-2.0+
+ /*
+- *  Copyright (C) 2011 - 2014 Xilinx
++ *  Copyright (C) 2011 - 2015 Xilinx
+  *  Copyright (C) 2012 National Instruments Corp.
+  */
+ /dts-v1/;
+@@ -13,6 +13,7 @@
+ 	aliases {
+ 		ethernet0 = &gem0;
+ 		serial0 = &uart1;
++		spi0 = &qspi;
+ 		mmc0 = &sdhci0;
+ 	};
+ 
+@@ -48,11 +49,18 @@
+ 	};
+ };
+ 
++&qspi {
++	u-boot,dm-pre-reloc;
++	status = "okay";
++};
++
+ &sdhci0 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 
+ &uart1 {
++	u-boot,dm-pre-reloc;
+ 	status = "okay";
+ };
+ 

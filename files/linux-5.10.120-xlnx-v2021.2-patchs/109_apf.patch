@@ -1,0 +1,13 @@
+diff --git a/arch/arm64/configs/xilinx_zynqmp_defconfig b/arch/arm64/configs/xilinx_zynqmp_defconfig
+index 8fd2da7cc..1328a0b78 100644
+--- a/arch/arm64/configs/xilinx_zynqmp_defconfig
++++ b/arch/arm64/configs/xilinx_zynqmp_defconfig
+@@ -337,6 +337,8 @@ CONFIG_STAGING=y
+ CONFIG_ION=y
+ CONFIG_ION_SYSTEM_HEAP=y
+ CONFIG_ION_CMA_HEAP=y
++CONFIG_XILINX_APF=y
++CONFIG_XILINX_DMA_APF=y
+ CONFIG_XILINX_FCLK=y
+ CONFIG_XLNX_SYNC=y
+ CONFIG_COMMON_CLK_SI5341=y

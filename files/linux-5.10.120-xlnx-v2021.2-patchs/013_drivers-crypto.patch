@@ -1,0 +1,925 @@
+diff --git a/Documentation/devicetree/bindings/crypto/zynqmp-rsa.txt b/Documentation/devicetree/bindings/crypto/zynqmp-rsa.txt
+new file mode 100644
+index 000000000..6b4c0e044
+--- /dev/null
++++ b/Documentation/devicetree/bindings/crypto/zynqmp-rsa.txt
+@@ -0,0 +1,12 @@
++Xilinx ZynqMP RSA hw acceleration support
++
++The zynqmp PS-RSA hw accelerator is used to encrypt/decrypt
++the given user data.
++
++Required properties:
++- compatible:	should contain "xlnx,zynqmp-rsa"
++
++Example:
++	xlnx_rsa: zynqmp_rsa {
++		compatible = "xlnx,zynqmp-rsa";
++	};
+diff --git a/Documentation/devicetree/bindings/crypto/zynqmp-sha.txt b/Documentation/devicetree/bindings/crypto/zynqmp-sha.txt
+new file mode 100644
+index 000000000..c7be6e2ce
+--- /dev/null
++++ b/Documentation/devicetree/bindings/crypto/zynqmp-sha.txt
+@@ -0,0 +1,12 @@
++Xilinx ZynqMP SHA3(keccak-384) hw acceleration support.
++
++The ZynqMp PS-SHA hw accelerator is used to calculate the
++SHA3(keccak-384) hash value on the given user data.
++
++Required properties:
++- compatible:	should contain "xlnx,zynqmp-keccak-384"
++
++Example:
++	xlnx_keccak_384: sha384 {
++		compatible = "xlnx,zynqmp-keccak-384";
++	};
+diff --git a/drivers/crypto/Kconfig b/drivers/crypto/Kconfig
+index ff5e85eef..5c3e72e5a 100644
+--- a/drivers/crypto/Kconfig
++++ b/drivers/crypto/Kconfig
+@@ -761,6 +761,27 @@ config CRYPTO_DEV_ROCKCHIP
+ 	  This driver interfaces with the hardware crypto accelerator.
+ 	  Supporting cbc/ecb chainmode, and aes/des/des3_ede cipher mode.
+ 
++config CRYPTO_DEV_ZYNQMP_SHA3
++	tristate "Support for Xilinx ZynqMP SHA3 hw accelerator"
++	depends on ARCH_ZYNQMP
++	select CRYPTO_HASH
++	help
++	  Xilinx processors have SHA384 engine used for calculation
++	  of hash. This driver interfaces with SHA3 hw accelerator.
++	  Select this if you want to use the ZynqMP module for
++	  Keccak-SHA384 algorithms.
++
++config CRYPTO_DEV_XILINX_RSA
++	tristate "Support for Xilinx ZynqMP RSA hw accelerator"
++	depends on ARCH_ZYNQMP || COMPILE_TEST
++	select CRYPTO_AES
++	select CRYPTO_BLKCIPHER
++	help
++	  Xilinx processors have RSA hw accelerator used for signature
++	  generation and verification. This driver interfaces with RSA
++	  hw accelerator. Select this if you want to use the ZynqMP module
++	  for RSA algorithms.
++
+ config CRYPTO_DEV_ZYNQMP_AES
+ 	tristate "Support for Xilinx ZynqMP AES hw accelerator"
+ 	depends on ZYNQMP_FIRMWARE || COMPILE_TEST
+@@ -773,6 +794,18 @@ config CRYPTO_DEV_ZYNQMP_AES
+ 	  accelerator. Select this if you want to use the ZynqMP module
+ 	  for AES algorithms.
+ 
++config CRYPTO_DEV_ZYNQMP_AES_SKCIPHER
++	tristate "Support for Xilinx ZynqMP AES hw accelerator (skcipher)"
++	depends on ZYNQMP_FIRMWARE || COMPILE_TEST
++	depends on !CRYPTO_DEV_ZYNQMP_AES
++	select CRYPTO_AES
++	select CRYPTO_SKCIPHER
++	help
++	  Xilinx ZynqMP has AES-GCM engine used for symmetric key
++	  encryption and decryption. This driver interfaces with AES hw
++	  accelerator. Select this if you want to use the ZynqMP module
++	  for AES algorithms.
++
+ config CRYPTO_DEV_MEDIATEK
+ 	tristate "MediaTek's EIP97 Cryptographic Engine driver"
+ 	depends on (ARM && ARCH_MEDIATEK) || COMPILE_TEST
+diff --git a/drivers/crypto/Makefile b/drivers/crypto/Makefile
+index 53fc115cf..eeaa5b904 100644
+--- a/drivers/crypto/Makefile
++++ b/drivers/crypto/Makefile
+@@ -48,6 +48,6 @@ obj-$(CONFIG_CRYPTO_DEV_VMX) += vmx/
+ obj-$(CONFIG_CRYPTO_DEV_BCM_SPU) += bcm/
+ obj-$(CONFIG_CRYPTO_DEV_SAFEXCEL) += inside-secure/
+ obj-$(CONFIG_CRYPTO_DEV_ARTPEC6) += axis/
+-obj-$(CONFIG_CRYPTO_DEV_ZYNQMP_AES) += xilinx/
++obj-y += xilinx/
+ obj-y += hisilicon/
+ obj-$(CONFIG_CRYPTO_DEV_AMLOGIC_GXL) += amlogic/
+diff --git a/drivers/crypto/xilinx/Makefile b/drivers/crypto/xilinx/Makefile
+index 534e32daf..ff688816f 100644
+--- a/drivers/crypto/xilinx/Makefile
++++ b/drivers/crypto/xilinx/Makefile
+@@ -1,2 +1,5 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ obj-$(CONFIG_CRYPTO_DEV_ZYNQMP_AES) += zynqmp-aes-gcm.o
++obj-$(CONFIG_CRYPTO_DEV_ZYNQMP_AES_SKCIPHER) += zynqmp-aes.o
++obj-$(CONFIG_CRYPTO_DEV_ZYNQMP_SHA3) += zynqmp-sha.o
++obj-$(CONFIG_CRYPTO_DEV_XILINX_RSA) += zynqmp-rsa.o
+diff --git a/drivers/crypto/xilinx/zynqmp-aes.c b/drivers/crypto/xilinx/zynqmp-aes.c
+new file mode 100644
+index 000000000..85f2abeb8
+--- /dev/null
++++ b/drivers/crypto/xilinx/zynqmp-aes.c
+@@ -0,0 +1,284 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Xilinx ZynqMP AES Driver.
++ * Copyright (c) 2018 Xilinx Inc.
++ */
++
++#include <crypto/aes.h>
++#include <crypto/internal/skcipher.h>
++#include <crypto/scatterwalk.h>
++#include <linux/dma-mapping.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/of_device.h>
++#include <linux/scatterlist.h>
++#include <linux/spinlock.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++
++#define ZYNQMP_AES_QUEUE_LENGTH			1
++#define ZYNQMP_AES_IV_SIZE			12
++#define ZYNQMP_AES_GCM_SIZE			16
++#define ZYNQMP_AES_KEY_SIZE			32
++
++#define ZYNQMP_AES_DECRYPT			0
++#define ZYNQMP_AES_ENCRYPT			1
++
++#define ZYNQMP_AES_KUP_KEY			0
++
++#define ZYNQMP_AES_GCM_TAG_MISMATCH_ERR		0x01
++#define ZYNQMP_AES_SIZE_ERR			0x06
++#define ZYNQMP_AES_WRONG_KEY_SRC_ERR		0x13
++#define ZYNQMP_AES_PUF_NOT_PROGRAMMED		0xE300
++
++#define ZYNQMP_AES_BLOCKSIZE			0x04
++
++#define ZYNQMP_KEY_SRC_SEL_KEY_LEN		1U
++
++struct zynqmp_aes_dev *aes_dd;
++
++struct zynqmp_aes_op {
++	struct zynqmp_aes_dev *dd;
++	void *src;
++	void *dst;
++	int len;
++	u8 key[ZYNQMP_AES_KEY_SIZE];
++	u8 *iv;
++	u32 keylen;
++	u32 keytype;
++};
++
++struct zynqmp_aes_dev {
++	struct device	*dev;
++};
++
++struct zynqmp_aes_data {
++	u64 src;
++	u64 iv;
++	u64 key;
++	u64 dst;
++	u64 size;
++	u64 optype;
++	u64 keysrc;
++};
++
++static struct zynqmp_aes_dev *zynqmp_aes_find_dev(struct zynqmp_aes_op *ctx)
++{
++	struct zynqmp_aes_dev *dd = aes_dd;
++
++	if (!ctx->dd)
++		ctx->dd = dd;
++	else
++		dd = ctx->dd;
++
++	return dd;
++}
++
++static int zynqmp_setkey_blk(struct crypto_skcipher *tfm, const u8 *key,
++			     unsigned int len)
++{
++	struct zynqmp_aes_op *op = crypto_skcipher_ctx(tfm);
++
++	if (len == ZYNQMP_KEY_SRC_SEL_KEY_LEN) {
++		op->keytype = *key;
++	} else {
++		op->keylen = len;
++		if (len == ZYNQMP_AES_KEY_SIZE) {
++			op->keytype = ZYNQMP_AES_KUP_KEY;
++			memcpy(op->key, key, len);
++		}
++	}
++
++	return 0;
++}
++
++static int zynqmp_aes_xcrypt(struct skcipher_request *req, unsigned int flags)
++{
++	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
++	struct zynqmp_aes_op *op = crypto_skcipher_ctx(tfm);
++	struct zynqmp_aes_dev *dd = zynqmp_aes_find_dev(op);
++	int err, ret, src_data = 0, dst_data = 0;
++	dma_addr_t dma_addr, dma_addr_buf;
++	struct zynqmp_aes_data *abuf;
++	struct skcipher_walk walk = {0};
++	unsigned int data_size;
++	size_t dma_size;
++	char *kbuf;
++
++	if (op->keytype == ZYNQMP_AES_KUP_KEY)
++		dma_size = req->cryptlen + ZYNQMP_AES_IV_SIZE + ZYNQMP_AES_KEY_SIZE;
++	else
++		dma_size = req->cryptlen + ZYNQMP_AES_IV_SIZE;
++
++	kbuf = dma_alloc_coherent(dd->dev, dma_size, &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	abuf = dma_alloc_coherent(dd->dev, sizeof(struct zynqmp_aes_data),
++				  &dma_addr_buf, GFP_KERNEL);
++	if (!abuf) {
++		dma_free_coherent(dd->dev, dma_size, kbuf, dma_addr);
++		return -ENOMEM;
++	}
++
++	err = skcipher_walk_virt(&walk, req, false);
++	if (err)
++		goto END;
++	op->iv = walk.iv;
++
++	while ((data_size = walk.nbytes)) {
++		op->src = walk.src.virt.addr;
++		memcpy(kbuf + src_data, op->src, data_size);
++		src_data = src_data + data_size;
++		err = skcipher_walk_done(&walk, 0);
++		if (err)
++			goto END;
++	}
++	memcpy(kbuf + req->cryptlen, op->iv, ZYNQMP_AES_IV_SIZE);
++	abuf->src = dma_addr;
++	abuf->dst = dma_addr;
++	abuf->iv = abuf->src + req->cryptlen;
++	abuf->size = req->cryptlen - ZYNQMP_AES_GCM_SIZE;
++	abuf->optype = flags;
++	abuf->keysrc = op->keytype;
++
++	if (op->keytype == ZYNQMP_AES_KUP_KEY) {
++		memcpy(kbuf + req->cryptlen + ZYNQMP_AES_IV_SIZE,
++		       op->key, ZYNQMP_AES_KEY_SIZE);
++
++		abuf->key = abuf->src + req->cryptlen + ZYNQMP_AES_IV_SIZE;
++	} else {
++		abuf->key = 0;
++	}
++
++	zynqmp_pm_aes_engine(dma_addr_buf, (u32 *)&ret);
++
++	if (ret != 0) {
++		switch (ret) {
++		case ZYNQMP_AES_GCM_TAG_MISMATCH_ERR:
++			dev_err(dd->dev, "ERROR: Gcm Tag mismatch\n");
++			break;
++		case ZYNQMP_AES_SIZE_ERR:
++			dev_err(dd->dev, "ERROR : Non word aligned data\n");
++			break;
++		case ZYNQMP_AES_WRONG_KEY_SRC_ERR:
++			dev_err(dd->dev, "ERROR: Wrong KeySrc, enable secure mode\n");
++			break;
++		case ZYNQMP_AES_PUF_NOT_PROGRAMMED:
++			dev_err(dd->dev, "ERROR: PUF is not registered\n");
++			break;
++		default:
++			dev_err(dd->dev, "ERROR: Invalid\n");
++			break;
++		}
++		goto END;
++	}
++	if (!flags)
++		req->cryptlen = req->cryptlen - ZYNQMP_AES_GCM_SIZE;
++
++	err = skcipher_walk_virt(&walk, req, false);
++	if (err)
++		goto END;
++
++	while ((data_size = walk.nbytes)) {
++		memcpy(walk.dst.virt.addr, kbuf + dst_data, data_size);
++		dst_data = dst_data + data_size;
++		err = skcipher_walk_done(&walk, 0);
++		if (err)
++			goto END;
++	}
++END:
++	dma_free_coherent(dd->dev, dma_size, kbuf, dma_addr);
++	dma_free_coherent(dd->dev, sizeof(struct zynqmp_aes_data),
++			  abuf, dma_addr_buf);
++	return err;
++}
++
++static int zynqmp_aes_decrypt(struct skcipher_request *req)
++{
++	return zynqmp_aes_xcrypt(req, ZYNQMP_AES_DECRYPT);
++}
++
++static int zynqmp_aes_encrypt(struct skcipher_request *req)
++{
++	return zynqmp_aes_xcrypt(req, ZYNQMP_AES_ENCRYPT);
++}
++
++static struct skcipher_alg zynqmp_alg = {
++	.base.cra_name		=	"xilinx-zynqmp-aes",
++	.base.cra_driver_name	=	"zynqmp-aes",
++	.base.cra_priority	=	400,
++	.base.cra_flags		=	CRYPTO_ALG_TYPE_SKCIPHER |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++	.base.cra_blocksize	=	ZYNQMP_AES_BLOCKSIZE,
++	.base.cra_ctxsize	=	sizeof(struct zynqmp_aes_op),
++	.base.cra_alignmask	=	15,
++	.base.cra_module	=	THIS_MODULE,
++	.min_keysize		=	0,
++	.max_keysize		=	ZYNQMP_AES_KEY_SIZE,
++	.setkey			=	zynqmp_setkey_blk,
++	.encrypt		=	zynqmp_aes_encrypt,
++	.decrypt		=	zynqmp_aes_decrypt,
++	.ivsize			=	ZYNQMP_AES_IV_SIZE,
++};
++
++static const struct of_device_id zynqmp_aes_dt_ids[] = {
++	{ .compatible = "xlnx,zynqmp-aes" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, zynqmp_aes_dt_ids);
++
++static int zynqmp_aes_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	int ret;
++
++	aes_dd = devm_kzalloc(dev, sizeof(*aes_dd), GFP_KERNEL);
++	if (!aes_dd)
++		return -ENOMEM;
++
++	aes_dd->dev = dev;
++	platform_set_drvdata(pdev, aes_dd);
++
++	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
++	if (ret < 0) {
++		dev_err(dev, "no usable DMA configuration");
++		return ret;
++	}
++
++	ret = crypto_register_skcipher(&zynqmp_alg);
++	if (ret)
++		goto err_algs;
++
++	dev_info(dev, "AES Successfully Registered\n");
++	return 0;
++
++err_algs:
++	dev_err(dev, "initialization failed.\n");
++
++	return ret;
++}
++
++static int zynqmp_aes_remove(struct platform_device *pdev)
++{
++	aes_dd = platform_get_drvdata(pdev);
++	if (!aes_dd)
++		return -ENODEV;
++	crypto_unregister_skcipher(&zynqmp_alg);
++	return 0;
++}
++
++static struct platform_driver xilinx_aes_driver = {
++	.probe = zynqmp_aes_probe,
++	.remove = zynqmp_aes_remove,
++	.driver = {
++		.name = "zynqmp_aes",
++		.of_match_table = of_match_ptr(zynqmp_aes_dt_ids),
++	},
++};
++
++module_platform_driver(xilinx_aes_driver);
++
++MODULE_DESCRIPTION("Xilinx ZynqMP AES hw acceleration support.");
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Nava kishore Manne <nava.manne@xilinx.com>");
++MODULE_AUTHOR("Kalyani Akula <kalyani.akula@xilinx.com>");
+diff --git a/drivers/crypto/xilinx/zynqmp-rsa.c b/drivers/crypto/xilinx/zynqmp-rsa.c
+new file mode 100644
+index 000000000..555a1e08b
+--- /dev/null
++++ b/drivers/crypto/xilinx/zynqmp-rsa.c
+@@ -0,0 +1,220 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright (C) 2017 Xilinx, Inc.
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/crypto.h>
++#include <linux/spinlock.h>
++#include <crypto/algapi.h>
++#include <crypto/aes.h>
++#include <crypto/internal/skcipher.h>
++#include <linux/io.h>
++#include <linux/device.h>
++#include <linux/of_device.h>
++#include <linux/platform_device.h>
++#include <linux/dma-mapping.h>
++#include <linux/scatterlist.h>
++#include <crypto/scatterwalk.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++
++#define ZYNQMP_RSA_QUEUE_LENGTH	1
++#define ZYNQMP_RSA_MAX_KEY_SIZE	1024
++#define ZYNQMP_RSA_BLOCKSIZE	64
++
++static struct zynqmp_rsa_dev *rsa_dd;
++
++struct zynqmp_rsa_op {
++	struct zynqmp_rsa_dev    *dd;
++	void *src;
++	void *dst;
++	int len;
++	u8 key[ZYNQMP_RSA_MAX_KEY_SIZE];
++	u8 *iv;
++	u32 keylen;
++};
++
++struct zynqmp_rsa_dev {
++	struct list_head        list;
++	struct device           *dev;
++	/* the lock protects queue and dev list*/
++	spinlock_t              lock;
++	struct crypto_queue     queue;
++};
++
++struct zynqmp_rsa_drv {
++	struct list_head        dev_list;
++	/* the lock protects queue and dev list*/
++	spinlock_t              lock;
++};
++
++static struct zynqmp_rsa_drv zynqmp_rsa = {
++	.dev_list = LIST_HEAD_INIT(zynqmp_rsa.dev_list),
++	.lock = __SPIN_LOCK_UNLOCKED(zynqmp_rsa.lock),
++};
++
++static struct zynqmp_rsa_dev *zynqmp_rsa_find_dev(struct zynqmp_rsa_op *ctx)
++{
++	struct zynqmp_rsa_dev *dd = rsa_dd;
++
++	spin_lock_bh(&zynqmp_rsa.lock);
++	if (!ctx->dd)
++		ctx->dd = dd;
++	else
++		dd = ctx->dd;
++	spin_unlock_bh(&zynqmp_rsa.lock);
++
++	return dd;
++}
++
++static int zynqmp_setkey_blk(struct crypto_skcipher *tfm, const u8 *key,
++			     unsigned int len)
++{
++	struct zynqmp_rsa_op *op = crypto_skcipher_ctx(tfm);
++
++	op->keylen = len;
++	memcpy(op->key, key, len);
++	return 0;
++}
++
++static int zynqmp_rsa_xcrypt(struct skcipher_request *req, unsigned int flags)
++{
++	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
++	struct zynqmp_rsa_op *op = crypto_skcipher_ctx(tfm);
++	struct zynqmp_rsa_dev *dd = zynqmp_rsa_find_dev(op);
++	int err, datasize, src_data = 0, dst_data = 0;
++	struct skcipher_walk walk = {0};
++	unsigned int nbytes;
++	char *kbuf;
++	size_t dma_size;
++	dma_addr_t dma_addr;
++
++	nbytes = req->cryptlen;
++	dma_size = nbytes + op->keylen;
++	kbuf = dma_alloc_coherent(dd->dev, dma_size, &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	err = skcipher_walk_virt(&walk, req, false);
++	if (err)
++		goto out;
++
++	while ((datasize = walk.nbytes)) {
++		op->src = walk.src.virt.addr;
++		memcpy(kbuf + src_data, op->src, datasize);
++		src_data = src_data + datasize;
++		err = skcipher_walk_done(&walk, 0);
++		if (err)
++			goto out;
++	}
++	memcpy(kbuf + nbytes, op->key, op->keylen);
++	zynqmp_pm_rsa(dma_addr, nbytes, flags);
++
++	err = skcipher_walk_virt(&walk, req, false);
++	if (err)
++		goto out;
++
++	while ((datasize = walk.nbytes)) {
++		memcpy(walk.dst.virt.addr, kbuf + dst_data, datasize);
++		dst_data = dst_data + datasize;
++		err = skcipher_walk_done(&walk, 0);
++	}
++
++out:
++	dma_free_coherent(dd->dev, dma_size, kbuf, dma_addr);
++	return err;
++}
++
++static int zynqmp_rsa_decrypt(struct skcipher_request *req)
++{
++	return zynqmp_rsa_xcrypt(req, 0);
++}
++
++static int zynqmp_rsa_encrypt(struct skcipher_request *req)
++{
++	return zynqmp_rsa_xcrypt(req, 1);
++}
++
++static struct skcipher_alg zynqmp_alg = {
++	.base.cra_name		=	"xilinx-zynqmp-rsa",
++	.base.cra_driver_name	=	"zynqmp-rsa",
++	.base.cra_priority	=	400,
++	.base.cra_flags		=	CRYPTO_ALG_TYPE_SKCIPHER |
++					CRYPTO_ALG_KERN_DRIVER_ONLY,
++	.base.cra_blocksize	=	ZYNQMP_RSA_BLOCKSIZE,
++	.base.cra_ctxsize	=	sizeof(struct zynqmp_rsa_op),
++	.base.cra_alignmask	=	15,
++	.base.cra_module	=	THIS_MODULE,
++	.min_keysize		=	0,
++	.max_keysize		=	ZYNQMP_RSA_MAX_KEY_SIZE,
++	.setkey			=	zynqmp_setkey_blk,
++	.encrypt		=	zynqmp_rsa_encrypt,
++	.decrypt		=	zynqmp_rsa_decrypt,
++	.ivsize			=	1,
++};
++
++static const struct of_device_id zynqmp_rsa_dt_ids[] = {
++	{ .compatible = "xlnx,zynqmp-rsa" },
++	{ /* sentinel */ }
++};
++
++MODULE_DEVICE_TABLE(of, zynqmp_rsa_dt_ids);
++
++static int zynqmp_rsa_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	int ret;
++
++	rsa_dd = devm_kzalloc(&pdev->dev, sizeof(*rsa_dd), GFP_KERNEL);
++	if (!rsa_dd)
++		return -ENOMEM;
++
++	rsa_dd->dev = dev;
++	platform_set_drvdata(pdev, rsa_dd);
++
++	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
++	if (ret < 0)
++		dev_err(dev, "no usable DMA configuration");
++
++	INIT_LIST_HEAD(&rsa_dd->list);
++	spin_lock_init(&rsa_dd->lock);
++	crypto_init_queue(&rsa_dd->queue, ZYNQMP_RSA_QUEUE_LENGTH);
++	spin_lock(&zynqmp_rsa.lock);
++	list_add_tail(&rsa_dd->list, &zynqmp_rsa.dev_list);
++	spin_unlock(&zynqmp_rsa.lock);
++
++	ret = crypto_register_skcipher(&zynqmp_alg);
++	if (ret)
++		goto err_algs;
++
++	return 0;
++
++err_algs:
++	spin_lock(&zynqmp_rsa.lock);
++	list_del(&rsa_dd->list);
++	spin_unlock(&zynqmp_rsa.lock);
++	dev_err(dev, "initialization failed.\n");
++	return ret;
++}
++
++static int zynqmp_rsa_remove(struct platform_device *pdev)
++{
++	crypto_unregister_skcipher(&zynqmp_alg);
++	return 0;
++}
++
++static struct platform_driver xilinx_rsa_driver = {
++	.probe = zynqmp_rsa_probe,
++	.remove = zynqmp_rsa_remove,
++	.driver = {
++		.name = "zynqmp_rsa",
++		.of_match_table = of_match_ptr(zynqmp_rsa_dt_ids),
++	},
++};
++
++module_platform_driver(xilinx_rsa_driver);
++
++MODULE_DESCRIPTION("ZynqMP RSA hw acceleration support.");
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Nava kishore Manne <navam@xilinx.com>");
+diff --git a/drivers/crypto/xilinx/zynqmp-sha.c b/drivers/crypto/xilinx/zynqmp-sha.c
+new file mode 100644
+index 000000000..32e9eeaf4
+--- /dev/null
++++ b/drivers/crypto/xilinx/zynqmp-sha.c
+@@ -0,0 +1,294 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright (C) 2017 Xilinx, Inc.
++ */
++
++#include <asm/cacheflush.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/io.h>
++#include <linux/platform_device.h>
++#include <linux/device.h>
++#include <linux/init.h>
++#include <linux/scatterlist.h>
++#include <linux/dma-mapping.h>
++#include <linux/of_device.h>
++#include <linux/crypto.h>
++#include <crypto/scatterwalk.h>
++#include <crypto/algapi.h>
++#include <crypto/sha.h>
++#include <crypto/hash.h>
++#include <crypto/internal/hash.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/mutex.h>
++
++#define ZYNQMP_SHA3_INIT	1
++#define ZYNQMP_SHA3_UPDATE	2
++#define ZYNQMP_SHA3_FINAL	4
++
++#define ZYNQMP_SHA_QUEUE_LENGTH	1
++
++static struct zynqmp_sha_dev *sha_dd;
++
++/*
++ * .statesize = sizeof(struct zynqmp_sha_reqctx) must be <= PAGE_SIZE / 8 as
++ * tested by the ahash_prepare_alg() function.
++ */
++struct zynqmp_sha_reqctx {
++	struct zynqmp_sha_dev	*dd;
++	unsigned long		flags;
++};
++
++struct zynqmp_sha_ctx {
++	struct zynqmp_sha_dev	*dd;
++	unsigned long		flags;
++};
++
++struct zynqmp_sha_dev {
++	struct list_head	list;
++	struct device		*dev;
++	/* the lock protects queue and dev list*/
++	spinlock_t		lock;
++	int			err;
++
++	unsigned long		flags;
++	struct crypto_queue	queue;
++	struct ahash_request	*req;
++};
++
++struct zynqmp_sha_drv {
++	struct list_head	dev_list;
++	/* the lock protects queue and dev list*/
++	spinlock_t		lock;
++	/* the hw_engine_mutex makes the driver thread-safe */
++	struct mutex		hw_engine_mutex;
++};
++
++static struct zynqmp_sha_drv zynqmp_sha = {
++	.dev_list = LIST_HEAD_INIT(zynqmp_sha.dev_list),
++	.lock = __SPIN_LOCK_UNLOCKED(zynqmp_sha.lock),
++};
++
++static int zynqmp_sha_init(struct ahash_request *req)
++{
++	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
++	struct zynqmp_sha_ctx *tctx = crypto_ahash_ctx(tfm);
++	struct zynqmp_sha_reqctx *ctx = ahash_request_ctx(req);
++	struct zynqmp_sha_dev *dd = sha_dd;
++	int ret;
++
++	spin_lock_bh(&zynqmp_sha.lock);
++	if (!tctx->dd)
++		tctx->dd = dd;
++	else
++		dd = tctx->dd;
++
++	spin_unlock_bh(&zynqmp_sha.lock);
++
++	ctx->dd = dd;
++	dev_dbg(dd->dev, "init: digest size: %d\n",
++		crypto_ahash_digestsize(tfm));
++
++	ret = mutex_lock_interruptible(&zynqmp_sha.hw_engine_mutex);
++	if (ret)
++		goto end;
++
++	ret = zynqmp_pm_sha_hash(0, 0, ZYNQMP_SHA3_INIT);
++
++end:
++	return ret;
++}
++
++static int zynqmp_sha_update(struct ahash_request *req)
++{
++	struct zynqmp_sha_ctx *tctx = crypto_tfm_ctx(req->base.tfm);
++	struct zynqmp_sha_dev *dd = tctx->dd;
++	char *kbuf;
++	size_t dma_size = req->nbytes;
++	dma_addr_t dma_addr;
++	int ret;
++
++	if (!req->nbytes)
++		return 0;
++
++	kbuf = dma_alloc_coherent(dd->dev, dma_size, &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	scatterwalk_map_and_copy(kbuf, req->src, 0, req->nbytes, 0);
++	 __flush_cache_user_range((unsigned long)kbuf,
++				  (unsigned long)kbuf + dma_size);
++	ret = zynqmp_pm_sha_hash(dma_addr, req->nbytes, ZYNQMP_SHA3_UPDATE);
++	if (ret) {
++		mutex_unlock(&zynqmp_sha.hw_engine_mutex);
++		goto end;
++	}
++
++	dma_free_coherent(dd->dev, dma_size, kbuf, dma_addr);
++
++end:
++	return ret;
++}
++
++static int zynqmp_sha_final(struct ahash_request *req)
++{
++	struct zynqmp_sha_ctx *tctx = crypto_tfm_ctx(req->base.tfm);
++	struct zynqmp_sha_dev *dd = tctx->dd;
++	char *kbuf;
++	size_t dma_size = SHA384_DIGEST_SIZE;
++	dma_addr_t dma_addr;
++	int ret;
++
++	kbuf = dma_alloc_coherent(dd->dev, dma_size, &dma_addr, GFP_KERNEL);
++	if (!kbuf)
++		return -ENOMEM;
++
++	ret = zynqmp_pm_sha_hash(dma_addr, dma_size, ZYNQMP_SHA3_FINAL);
++	memcpy(req->result, kbuf, 48);
++	dma_free_coherent(dd->dev, dma_size, kbuf, dma_addr);
++
++	mutex_unlock(&zynqmp_sha.hw_engine_mutex);
++	return ret;
++}
++
++static int zynqmp_sha_finup(struct ahash_request *req)
++{
++	zynqmp_sha_update(req);
++	zynqmp_sha_final(req);
++
++	return 0;
++}
++
++static int zynqmp_sha_digest(struct ahash_request *req)
++{
++	zynqmp_sha_init(req);
++	zynqmp_sha_update(req);
++	zynqmp_sha_final(req);
++
++	return 0;
++}
++
++static int zynqmp_sha_export(struct ahash_request *req, void *out)
++{
++	const struct zynqmp_sha_reqctx *ctx = ahash_request_ctx(req);
++
++	memcpy(out, ctx, sizeof(*ctx));
++	return 0;
++}
++
++static int zynqmp_sha_import(struct ahash_request *req, const void *in)
++{
++	struct zynqmp_sha_reqctx *ctx = ahash_request_ctx(req);
++
++	memcpy(ctx, in, sizeof(*ctx));
++	return 0;
++}
++
++static int zynqmp_sha_cra_init(struct crypto_tfm *tfm)
++{
++	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
++				 sizeof(struct zynqmp_sha_reqctx));
++
++	return 0;
++}
++
++static struct ahash_alg sha3_alg = {
++	.init		= zynqmp_sha_init,
++	.update		= zynqmp_sha_update,
++	.final		= zynqmp_sha_final,
++	.finup		= zynqmp_sha_finup,
++	.digest		= zynqmp_sha_digest,
++	.export		= zynqmp_sha_export,
++	.import		= zynqmp_sha_import,
++	.halg = {
++		.digestsize	= SHA384_DIGEST_SIZE,
++		.statesize	= sizeof(struct sha256_state),
++		.base	= {
++			.cra_name		= "xilinx-keccak-384",
++			.cra_driver_name	= "zynqmp-keccak-384",
++			.cra_priority		= 300,
++			.cra_flags		= CRYPTO_ALG_ASYNC,
++			.cra_blocksize		= SHA384_BLOCK_SIZE,
++			.cra_ctxsize		= sizeof(struct zynqmp_sha_ctx),
++			.cra_alignmask		= 0,
++			.cra_module		= THIS_MODULE,
++			.cra_init		= zynqmp_sha_cra_init,
++		}
++	}
++};
++
++static const struct of_device_id zynqmp_sha_dt_ids[] = {
++	{ .compatible = "xlnx,zynqmp-keccak-384" },
++	{ /* sentinel */ }
++};
++
++MODULE_DEVICE_TABLE(of, zynqmp_sha_dt_ids);
++
++static int zynqmp_sha_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	int err;
++
++	sha_dd = devm_kzalloc(&pdev->dev, sizeof(*sha_dd), GFP_KERNEL);
++	if (!sha_dd)
++		return -ENOMEM;
++
++	sha_dd->dev = dev;
++	platform_set_drvdata(pdev, sha_dd);
++	INIT_LIST_HEAD(&sha_dd->list);
++	spin_lock_init(&sha_dd->lock);
++	mutex_init(&zynqmp_sha.hw_engine_mutex);
++	crypto_init_queue(&sha_dd->queue, ZYNQMP_SHA_QUEUE_LENGTH);
++	spin_lock(&zynqmp_sha.lock);
++	list_add_tail(&sha_dd->list, &zynqmp_sha.dev_list);
++	spin_unlock(&zynqmp_sha.lock);
++
++	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
++	if (err < 0)
++		dev_err(dev, "no usable DMA configuration");
++
++	err = crypto_register_ahash(&sha3_alg);
++	if (err)
++		goto err_algs;
++
++	return 0;
++
++err_algs:
++	spin_lock(&zynqmp_sha.lock);
++	list_del(&sha_dd->list);
++	spin_unlock(&zynqmp_sha.lock);
++	dev_err(dev, "initialization failed.\n");
++
++	return err;
++}
++
++static int zynqmp_sha_remove(struct platform_device *pdev)
++{
++	sha_dd = platform_get_drvdata(pdev);
++
++	if (!sha_dd)
++		return -ENODEV;
++
++	spin_lock(&zynqmp_sha.lock);
++	list_del(&sha_dd->list);
++	spin_unlock(&zynqmp_sha.lock);
++
++	crypto_unregister_ahash(&sha3_alg);
++
++	return 0;
++}
++
++static struct platform_driver zynqmp_sha_driver = {
++	.probe		= zynqmp_sha_probe,
++	.remove		= zynqmp_sha_remove,
++	.driver		= {
++		.name	= "zynqmp-keccak-384",
++		.of_match_table	= of_match_ptr(zynqmp_sha_dt_ids),
++	},
++};
++
++module_platform_driver(zynqmp_sha_driver);
++
++MODULE_DESCRIPTION("ZynqMP SHA3 hw acceleration support.");
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("Nava kishore Manne <navam@xilinx.com>");

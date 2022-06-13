@@ -1,0 +1,829 @@
+diff --git a/Documentation/devicetree/bindings/nvmem/xlnx,versal-sec-cfg.yaml b/Documentation/devicetree/bindings/nvmem/xlnx,versal-sec-cfg.yaml
+new file mode 100644
+index 000000000..25771a499
+--- /dev/null
++++ b/Documentation/devicetree/bindings/nvmem/xlnx,versal-sec-cfg.yaml
+@@ -0,0 +1,148 @@
++# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/nvmem/xlnx,versal-sec-cfg.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Xilinx Secure Configuration driver binding
++
++description: |
++  The versal_sec_cfg node provides access to the BBRAM keys,
++  BBRAM user data and volatile user keys by using the firmware interface.
++
++maintainers:
++  - Harsha <harshah@xilinx.com>
++
++allOf:
++  - $ref: "nvmem.yaml#"
++
++properties:
++  compatible:
++    const: xlnx,versal-sec-cfg
++
++  '#address-cells':
++    const: 1
++
++  '#size-cells':
++    const: 1
++
++patternProperties:
++  "^bbram-zeroize@4$":
++    type: object
++    description:
++      Initiates zeroization of BBRAM AES key. Write-only.
++
++    properties:
++      reg:
++        maxItems: 1
++
++    required:
++      - reg
++
++  "^bbram-key@10$":
++    type: object
++    description:
++      256-bit BBRAM AES key. Write-only.
++
++    properties:
++      reg:
++        maxItems: 1
++
++    required:
++      - reg
++
++  "^bbram-usr@30$":
++    type: object
++    description:
++      32-bit BBRAM user data space. Read and Write is supported.
++
++    properties:
++      reg:
++        maxItems: 1
++
++    required:
++      - reg
++
++  "^bbram-lock@48$":
++    type: object
++    description:
++      Lock register for upper 32 bits of the BBRAM. Write-only
++
++    properties:
++      reg:
++        maxItems: 1
++
++    required:
++      - reg
++
++  "^user-key@1[1,3,5,7,9,b,d,f,B,D,F]0$":
++    type: object
++    description:
++      Eight volatile user keys, Size can be 128-bits or 256-bits.
++      All are write-only.
++
++    properties:
++      reg:
++        maxItems: 1
++
++    required:
++      - reg
++
++additionalProperties: false
++
++examples:
++  - |
++    versal-sec-cfg {
++      compatible = "xlnx,versal-sec-cfg";
++      #address-cells = <1>;
++      #size-cells = <1>;
++
++      bbram_zeroize: bbram-zeroize@4 {
++        reg = <0x4 0x4>;
++      };
++
++      bbram_key: bbram-key@10 {
++        reg = <0x10 0x20>;
++      };
++
++      bbram_usr: bbram-usr@30 {
++        reg = <0x30 0x4>;
++      };
++
++      bbram_lock: bbram-lock@48 {
++        reg = <0x48 0x4>;
++      };
++
++      user_key0: user-key@110 {
++        reg = <0x110 0x20>;
++      };
++
++      user_key1: user-key@130 {
++        reg = <0x130 0x20>;
++      };
++
++      user_key2: user-key@150 {
++        reg = <0x150 0x20>;
++      };
++
++      user_key3: user-key@170 {
++        reg = <0x170 0x20>;
++      };
++
++      user_key4: user-key@190 {
++       reg = <0x190 0x20>;
++      };
++
++      user_key5: user-key@1b0 {
++        reg = <0x1b0 0x20>;
++      };
++
++      user_key6: user-key@1d0 {
++        reg = <0x1d0 0x20>;
++      };
++
++      user_key7: user-key@1f0 {
++        reg = <0x1f0 0x20>;
++      };
++    };
++
+diff --git a/Documentation/devicetree/bindings/nvmem/xlnx,zynqmp-nvmem.txt b/Documentation/devicetree/bindings/nvmem/xlnx,zynqmp-nvmem.txt
+index 4881561b3..be126ccf4 100644
+--- a/Documentation/devicetree/bindings/nvmem/xlnx,zynqmp-nvmem.txt
++++ b/Documentation/devicetree/bindings/nvmem/xlnx,zynqmp-nvmem.txt
+@@ -25,9 +25,78 @@ firmware {
+ 			#size-cells = <1>;
+ 
+ 			/* Data cells */
+-			soc_revision: soc_revision {
++			soc_revision: soc_revision@0 {
+ 				reg = <0x0 0x4>;
+ 			};
++			/*
++			* efuse memory access:
++			* all the efuse feilds need to be read
++			* with the exact size specified in the node
++			*/
++			/* DNA */
++			efuse_dna: efuse_dna@c {
++				reg = <0xc 0xc>;
++			};
++			/* User 0 */
++			efuse_usr0: efuse_usr0@20 {
++				reg = <0x20 0x4>;
++			};
++			/* User 1 */
++			efuse_usr1: efuse_usr1@24 {
++				reg = <0x24 0x4>;
++			};
++			/* User 2 */
++			efuse_usr2: efuse_usr2@28 {
++				reg = <0x28 0x4>;
++			};
++			/* User 3 */
++			efuse_usr3: efuse_usr3@2c {
++				reg = <0x2c 0x4>;
++			};
++			/* User 4 */
++			efuse_usr4: efuse_usr4@30 {
++				reg = <0x30 0x4>;
++			};
++			/* User 5 */
++			efuse_usr5: efuse_usr5@34 {
++				reg = <0x34 0x4>;
++			};
++			/* User 6 */
++			efuse_usr6: efuse_usr6@38 {
++				reg = <0x38 0x4>;
++			};
++			/* User 7 */
++			efuse_usr7: efuse_usr7@3c {
++				reg = <0x3c 0x4>;
++			};
++			/* Misc user control bits */
++			efuse_miscusr: efuse_miscusr@40 {
++				reg = <0x40 0x4>;
++			};
++			/* PUF chash */
++			efuse_chash: efuse_chash@50 {
++				reg = <0x50 0x4>;
++			};
++			/* PUF misc */
++			efuse_pufmisc: efuse_pufmisc@54 {
++				reg = <0x54 0x4>;
++			};
++			/* SEC_CTRL */
++			efuse_sec: efuse_sec@58 {
++				reg = <0x58 0x4>;
++			};
++			/* SPK ID */
++			efuse_spkid: efuse_spkid@5c {
++				reg = <0x5c 0x4>;
++			};
++			/* PPK0 hash */
++			efuse_ppk0hash: efuse_ppk0hash@a0 {
++				reg = <0xa0 0x30>;
++			};
++			/* PPK1 hash */
++			efuse_ppk1hash: efuse_ppk1hash@d0 {
++				reg = <0xd0 0x30>;
++			};
+ 		};
+ 	};
+ };
+@@ -44,3 +113,22 @@ For example:
+ 
+ 		...
+ 	};
++
++To program efuse memory, one should request specified bytes of size as below,
++NOTE: Efuse bits once programmed cannot be reverted.
++
++	- | TYPE	| OFFSET | SIZE(bytes)	|
++	- |User-0	| 0x20	 | 0x4		|
++	- |User-1	| 0x24	 | 0x4		|
++	- |User-2	| 0x28	 | 0x4		|
++	- |User-3	| 0x2C	 | 0x4		|
++	- |User-4	| 0x30	 | 0x4		|
++	- |User-5	| 0x34	 | 0x4		|
++	- |User-6	| 0x38	 | 0x4		|
++	- |User-7	| 0x3c	 | 0x4		|
++	- |Misc User	| 0x40	 | 0x4		|
++	- |SEC_CTRL	| 0x58	 | 0x4		|
++	- |SPK ID 	| 0x5C	 | 0x4		|
++	- |AES KEY 	| 0x60	 | 0x20		|
++	- |PPK0 hash	| 0xA0	 | 0x30		|
++	- |PPK1 hash	| 0xD0	 | 0x30		|
+diff --git a/drivers/nvmem/Kconfig b/drivers/nvmem/Kconfig
+index 954d3b4a5..dcff10204 100644
+--- a/drivers/nvmem/Kconfig
++++ b/drivers/nvmem/Kconfig
+@@ -259,6 +259,17 @@ config NVMEM_ZYNQMP
+ 
+ 	  If sure, say yes. If unsure, say no.
+ 
++config XLNX_SEC_CFG
++	tristate "Xilinx Secure Configuration nvmem firmware support"
++	depends on ARCH_ZYNQMP
++	help
++	  This is a driver to support secure configuration for Versal.
++	  The supported features are programming and zeroization of BBRAM AES key,
++	  programming, reading user data in BBRAM and locking user data for write.
++	  It also supports of programming AES keys in volatile user keys.
++
++	  If sure, say yes. If unsure, say no.
++
+ config SPRD_EFUSE
+ 	tristate "Spreadtrum SoC eFuse Support"
+ 	depends on ARCH_SPRD || COMPILE_TEST
+diff --git a/drivers/nvmem/Makefile b/drivers/nvmem/Makefile
+index a7c377218..3415a9200 100644
+--- a/drivers/nvmem/Makefile
++++ b/drivers/nvmem/Makefile
+@@ -53,5 +53,7 @@ obj-$(CONFIG_SC27XX_EFUSE)	+= nvmem-sc27xx-efuse.o
+ nvmem-sc27xx-efuse-y		:= sc27xx-efuse.o
+ obj-$(CONFIG_NVMEM_ZYNQMP)	+= nvmem_zynqmp_nvmem.o
+ nvmem_zynqmp_nvmem-y		:= zynqmp_nvmem.o
++obj-$(CONFIG_XLNX_SEC_CFG)	+= nvmem_xlnx_secure_config.o
++nvmem_xlnx_secure_config-y	:= xlnx_secure_config.o
+ obj-$(CONFIG_SPRD_EFUSE)	+= nvmem_sprd_efuse.o
+ nvmem_sprd_efuse-y		:= sprd-efuse.o
+diff --git a/drivers/nvmem/xlnx_secure_config.c b/drivers/nvmem/xlnx_secure_config.c
+new file mode 100644
+index 000000000..a42bc0661
+--- /dev/null
++++ b/drivers/nvmem/xlnx_secure_config.c
+@@ -0,0 +1,278 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Copyright (C) 2021 Xilinx, Inc.
++ */
++
++#include <linux/dma-mapping.h>
++#include <linux/firmware/xlnx-zynqmp.h>
++#include <linux/module.h>
++#include <linux/nvmem-provider.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/string.h>
++
++#define AES_KEY_STRING_256_BYTES	64
++#define AES_KEY_STRING_128_BYTES	32
++#define AES_KEY_SIZE_256_BYTES		32
++#define AES_KEY_SIZE_128_BYTES		16
++
++#define BBRAM_ZEROIZE_OFFSET		0x4
++#define BBRAM_KEY_OFFSET		0x10
++#define BBRAM_USER_DATA_OFFSET		0x30
++#define BBRAM_LOCK_DATA_OFFSET		0x48
++#define AES_USER_KEY_0_OFFSET		0x110
++#define AES_USER_KEY_1_OFFSET		0x130
++#define AES_USER_KEY_2_OFFSET		0x150
++#define AES_USER_KEY_3_OFFSET		0x170
++#define AES_USER_KEY_4_OFFSET		0x190
++#define AES_USER_KEY_5_OFFSET		0x1B0
++#define AES_USER_KEY_6_OFFSET		0x1D0
++#define AES_USER_KEY_7_OFFSET		0x1F0
++
++#define BBRAM_USER_DATA_SIZE		0x4
++#define BBRAM_LOCK_DATA_SIZE		0x4
++#define BBRAM_ZEROIZE_SIZE		0x4
++
++#define BBRAM_LOCK_DATA_VALUE		0x12345678
++#define BBRAM_ZEROIZE_VALUE		0x87654321
++
++#define NVMEM_SIZE			0x230
++
++enum aes_keysrc {
++	AES_USER_KEY_0 = 12,
++	AES_USER_KEY_1 = 13,
++	AES_USER_KEY_2 = 14,
++	AES_USER_KEY_3 = 15,
++	AES_USER_KEY_4 = 16,
++	AES_USER_KEY_5 = 17,
++	AES_USER_KEY_6 = 18,
++	AES_USER_KEY_7 = 19
++};
++
++enum aes_keysize {
++	AES_KEY_SIZE_128 = 0,
++	AES_KEY_SIZE_256 = 2
++};
++
++static u_int32_t convert_char_to_nibble(char in_char, unsigned char *num)
++{
++	if ((in_char >= '0') && (in_char <= '9'))
++		*num = in_char - '0';
++	else if ((in_char >= 'a') && (in_char <= 'f'))
++		*num = in_char - 'a' + 10;
++	else if ((in_char >= 'A') && (in_char <= 'F'))
++		*num = in_char - 'A' + 10;
++	else
++		return -EINVAL;
++
++	return 0;
++}
++
++static u_int32_t convert_string_to_hex_be(const char *str, unsigned char *buf, u_int32_t len)
++{
++	u32 converted_len;
++	unsigned char lower_nibble = 0;
++	unsigned char upper_nibble = 0;
++	u32 str_length = strnlen(str, 64);
++
++	if (!str || !buf)
++		return -EINVAL;
++
++	if (len == 0)
++		return -EINVAL;
++
++	if ((str_length / 2) > len)
++		return -EINVAL;
++
++	converted_len = 0;
++	while (converted_len < str_length) {
++		if (convert_char_to_nibble(str[converted_len], &upper_nibble) == 0) {
++			if (convert_char_to_nibble(str[converted_len + 1], &lower_nibble) == 0)
++				buf[converted_len / 2] = (upper_nibble << 4) | lower_nibble;
++			else
++				return -EINVAL;
++		} else {
++			return -EINVAL;
++		}
++
++		converted_len += 2;
++	}
++
++	return 0;
++}
++
++static u_int32_t convert_string_to_hex_le(const char *str, unsigned char *buf, u_int32_t len)
++{
++	u32 converted_len;
++	unsigned char lower_nibble = 0;
++	unsigned char upper_nibble = 0;
++	u32 str_index;
++	u32 str_length = strnlen(str, 64);
++
++	if (!str || !buf)
++		return -EINVAL;
++
++	if (len == 0)
++		return -EINVAL;
++
++	if (str_length != len)
++		return -EINVAL;
++
++	str_index = len / 2 - 1;
++	converted_len = 0;
++
++	while (converted_len < (len)) {
++		if (convert_char_to_nibble(str[converted_len], &upper_nibble) == 0) {
++			if (convert_char_to_nibble(str[converted_len + 1], &lower_nibble) == 0) {
++				buf[str_index] = (upper_nibble << 4) | lower_nibble;
++				str_index = str_index - 1;
++			} else {
++				return -EINVAL;
++			}
++		} else {
++			return -EINVAL;
++		}
++
++		converted_len += 2;
++	}
++
++	return 0;
++}
++
++static int sec_cfg_write(void *context, unsigned int offset, void *val, size_t bytes)
++{
++	int ret;
++	struct device *dev = context;
++	dma_addr_t dma_addr;
++	u8 *data;
++
++	data = dma_alloc_coherent(dev, bytes, &dma_addr, GFP_KERNEL);
++	if (!data)
++		return -ENOMEM;
++
++	switch (offset) {
++	case AES_USER_KEY_0_OFFSET:
++	case AES_USER_KEY_1_OFFSET:
++	case AES_USER_KEY_2_OFFSET:
++	case AES_USER_KEY_3_OFFSET:
++	case AES_USER_KEY_4_OFFSET:
++	case AES_USER_KEY_5_OFFSET:
++	case AES_USER_KEY_6_OFFSET:
++	case AES_USER_KEY_7_OFFSET:
++		if (bytes != AES_KEY_STRING_128_BYTES && bytes != AES_KEY_STRING_256_BYTES) {
++			ret = -EINVAL;
++		} else {
++			ret = convert_string_to_hex_be((const char *)val, data, bytes);
++			if (!ret) {
++				u32 keylen, keysrc;
++
++				keylen = (bytes == AES_KEY_STRING_128_BYTES) ? AES_KEY_SIZE_128 : AES_KEY_SIZE_256;
++				keysrc = ((offset - AES_USER_KEY_0_OFFSET) / 0x20) + 12;
++				ret = zynqmp_pm_write_aes_key(keylen, keysrc, dma_addr);
++			}
++		}
++		break;
++	case BBRAM_KEY_OFFSET:
++		if (bytes != AES_KEY_STRING_256_BYTES) {
++			ret = -EINVAL;
++		} else {
++			ret = convert_string_to_hex_le((const char *)val, data, bytes);
++			if (!ret)
++				ret = zynqmp_pm_bbram_write_aeskey(bytes / 2, dma_addr);
++		}
++		break;
++	case BBRAM_USER_DATA_OFFSET:
++		if (bytes != BBRAM_USER_DATA_SIZE)
++			ret = -EINVAL;
++		else
++			ret = zynqmp_pm_bbram_write_usrdata(*(u32 *)val);
++		break;
++	case BBRAM_LOCK_DATA_OFFSET:
++		if (bytes != BBRAM_USER_DATA_SIZE || *(u32 *)val != BBRAM_LOCK_DATA_VALUE)
++			ret = -EINVAL;
++		else
++			ret = zynqmp_pm_bbram_lock_userdata();
++		break;
++	case BBRAM_ZEROIZE_OFFSET:
++		if (bytes != BBRAM_ZEROIZE_SIZE || *(u32 *)val != BBRAM_ZEROIZE_VALUE)
++			ret = -EINVAL;
++		else
++			ret = zynqmp_pm_bbram_zeroize();
++		break;
++	default:
++		ret = -EINVAL;
++		break;
++	}
++
++	dma_free_coherent(dev, bytes, data, dma_addr);
++
++	return ret;
++}
++
++static int sec_cfg_read(void *context, unsigned int offset, void *val, size_t bytes)
++{
++	struct device *dev = context;
++	dma_addr_t dma_addr;
++	int *data;
++	int ret = -EINVAL;
++
++	if (offset != BBRAM_USER_DATA_OFFSET && bytes != BBRAM_USER_DATA_SIZE)
++		return -EOPNOTSUPP;
++
++	data = dma_alloc_coherent(dev, bytes, &dma_addr, GFP_KERNEL);
++	if (!data)
++		return -ENOMEM;
++
++	ret = zynqmp_pm_bbram_read_usrdata(dma_addr);
++	if (!ret)
++		memcpy(val, data, bytes);
++
++	dma_free_coherent(dev, bytes, data, dma_addr);
++
++	return ret;
++}
++
++static struct nvmem_config secureconfig = {
++	.name = "xilinx-secure-config",
++	.owner = THIS_MODULE,
++	.word_size = 1,
++	.size = NVMEM_SIZE,
++};
++
++static const struct of_device_id sec_cfg_match[] = {
++	{ .compatible = "xlnx,versal-sec-cfg", },
++	{ /* sentinel */ },
++};
++MODULE_DEVICE_TABLE(of, sec_cfg_match);
++
++static int sec_cfg_probe(struct platform_device *pdev)
++{
++	struct nvmem_device *nvmem;
++
++	secureconfig.dev = &pdev->dev;
++	secureconfig.priv = &pdev->dev;
++	secureconfig.reg_read = sec_cfg_read;
++	secureconfig.reg_write = sec_cfg_write;
++
++	nvmem = nvmem_register(&secureconfig);
++	if (IS_ERR(nvmem))
++		return PTR_ERR(nvmem);
++
++	dev_dbg(&pdev->dev, "Successfully registered driver to nvmem framework");
++
++	return 0;
++}
++
++static struct platform_driver secure_config_driver = {
++	.probe = sec_cfg_probe,
++	.driver = {
++		.name = "xilinx-secure-config",
++		.of_match_table = sec_cfg_match,
++	},
++};
++
++module_platform_driver(secure_config_driver);
++
++MODULE_AUTHOR("Harsha <harsha.harsha@xilinx.com>");
++MODULE_DESCRIPTION("Versal Secure Configuration driver");
++MODULE_LICENSE("GPL v2");
+diff --git a/drivers/nvmem/zynqmp_nvmem.c b/drivers/nvmem/zynqmp_nvmem.c
+index e28d7b133..92a9a987c 100644
+--- a/drivers/nvmem/zynqmp_nvmem.c
++++ b/drivers/nvmem/zynqmp_nvmem.c
+@@ -1,8 +1,9 @@
+ // SPDX-License-Identifier: GPL-2.0+
+ /*
+- * Copyright (C) 2019 Xilinx, Inc.
++ * Copyright (C) 2017 - 2021 Xilinx, Inc.
+  */
+ 
++#include <linux/dma-mapping.h>
+ #include <linux/module.h>
+ #include <linux/nvmem-provider.h>
+ #include <linux/of.h>
+@@ -10,35 +11,186 @@
+ #include <linux/firmware/xlnx-zynqmp.h>
+ 
+ #define SILICON_REVISION_MASK 0xF
+-
+-struct zynqmp_nvmem_data {
+-	struct device *dev;
+-	struct nvmem_device *nvmem;
++#define P_USER_0_64_UPPER_MASK	0x5FFF0000
++#define P_USER_127_LOWER_4_BIT_MASK 0xF
++#define WORD_INBYTES		(4)
++#define SOC_VER_SIZE		(0x4)
++#define EFUSE_MEMORY_SIZE	(0x177)
++#define UNUSED_SPACE		(0x8)
++#define ZYNQMP_NVMEM_SIZE	(SOC_VER_SIZE + UNUSED_SPACE + \
++				 EFUSE_MEMORY_SIZE)
++#define SOC_VERSION_OFFSET	(0x0)
++#define EFUSE_START_OFFSET	(0xC)
++#define EFUSE_END_OFFSET	(0xFC)
++#define EFUSE_PUF_START_OFFSET	(0x100)
++#define EFUSE_PUF_MID_OFFSET	(0x140)
++#define EFUSE_PUF_END_OFFSET	(0x17F)
++#define EFUSE_NOT_ENABLED	(29)
++#define EFUSE_READ		(0)
++#define EFUSE_WRITE		(1)
++
++/**
++ * struct xilinx_efuse - the basic structure
++ * @src:	address of the buffer to store the data to be write/read
++ * @size:	no of words to be read/write
++ * @offset:	offset to be read/write`
++ * @flag:	0 - represents efuse read and 1- represents efuse write
++ * @pufuserfuse:0 - represents non-puf efuses, offset is used for read/write
++ *		1 - represents puf user fuse row number.
++ *
++ * this structure stores all the required details to
++ * read/write efuse memory.
++ */
++struct xilinx_efuse {
++	u64 src;
++	u32 size;
++	u32 offset;
++	u32 flag;
++	u32 pufuserfuse;
+ };
+ 
+-static int zynqmp_nvmem_read(void *context, unsigned int offset,
+-			     void *val, size_t bytes)
++static int zynqmp_efuse_access(void *context, unsigned int offset,
++			       void *val, size_t bytes, unsigned int flag,
++			       unsigned int pufflag)
++{
++	size_t words = bytes / WORD_INBYTES;
++	struct device *dev = context;
++	dma_addr_t dma_addr, dma_buf;
++	struct xilinx_efuse *efuse;
++	char *data;
++	int ret, value;
++
++	if (bytes % WORD_INBYTES != 0) {
++		dev_err(dev, "Bytes requested should be word aligned\n");
++		return -EOPNOTSUPP;
++	}
++
++	if (pufflag == 0 && offset % WORD_INBYTES) {
++		dev_err(dev, "Offset requested should be word aligned\n");
++		return -EOPNOTSUPP;
++	}
++
++	if (pufflag == 1 && flag == EFUSE_WRITE) {
++		memcpy(&value, val, bytes);
++		if ((offset == EFUSE_PUF_START_OFFSET ||
++		     offset == EFUSE_PUF_MID_OFFSET) &&
++		    value & P_USER_0_64_UPPER_MASK) {
++			dev_err(dev, "Only lower 4 bytes are allowed to be programmed in P_USER_0 & P_USER_64\n");
++			return -EOPNOTSUPP;
++		}
++
++		if (offset == EFUSE_PUF_END_OFFSET &&
++		    (value & P_USER_127_LOWER_4_BIT_MASK)) {
++			dev_err(dev, "Only MSB 28 bits are allowed to be programmed for P_USER_127\n");
++			return -EOPNOTSUPP;
++		}
++	}
++
++	efuse = dma_alloc_coherent(dev, sizeof(struct xilinx_efuse),
++				   &dma_addr, GFP_KERNEL);
++	if (!efuse)
++		return -ENOMEM;
++
++	data = dma_alloc_coherent(dev, sizeof(bytes),
++				  &dma_buf, GFP_KERNEL);
++	if (!data) {
++		dma_free_coherent(dev, sizeof(struct xilinx_efuse),
++				  efuse, dma_addr);
++		return -ENOMEM;
++	}
++
++	if (flag == EFUSE_WRITE) {
++		memcpy(data, val, bytes);
++		efuse->flag = EFUSE_WRITE;
++	} else {
++		efuse->flag = EFUSE_READ;
++	}
++
++	efuse->src = dma_buf;
++	efuse->size = words;
++	efuse->offset = offset;
++	efuse->pufuserfuse = pufflag;
++
++	zynqmp_pm_efuse_access(dma_addr, (u32 *)&ret);
++	if (ret != 0) {
++		if (ret == EFUSE_NOT_ENABLED) {
++			dev_err(dev, "efuse access is not enabled\n");
++			ret = -EOPNOTSUPP;
++			goto END;
++		}
++		dev_err(dev, "Error in efuse read %x\n", ret);
++		ret = -EPERM;
++		goto END;
++	}
++
++	if (flag == EFUSE_READ)
++		memcpy(val, data, bytes);
++END:
++
++	dma_free_coherent(dev, sizeof(struct xilinx_efuse),
++			  efuse, dma_addr);
++	dma_free_coherent(dev, sizeof(bytes),
++			  data, dma_buf);
++
++	return ret;
++}
++
++static int zynqmp_nvmem_read(void *context, unsigned int offset, void *val, size_t bytes)
+ {
+-	int ret;
++	int ret, pufflag = 0;
+ 	int idcode, version;
+-	struct zynqmp_nvmem_data *priv = context;
+ 
+-	ret = zynqmp_pm_get_chipid(&idcode, &version);
+-	if (ret < 0)
+-		return ret;
++	if (offset >= EFUSE_PUF_START_OFFSET && offset <= EFUSE_PUF_END_OFFSET)
++		pufflag = 1;
++
++	switch (offset) {
++	/* Soc version offset is zero */
++	case SOC_VERSION_OFFSET:
++		if (bytes != SOC_VER_SIZE)
++			return -EOPNOTSUPP;
++
++		ret = zynqmp_pm_get_chipid((u32 *)&idcode, (u32 *)&version);
++		if (ret < 0)
++			return ret;
++
++		pr_debug("Read chipid val %x %x\n", idcode, version);
++		*(int *)val = version & SILICON_REVISION_MASK;
++		break;
++	/* Efuse offset starts from 0xc */
++	case EFUSE_START_OFFSET ... EFUSE_END_OFFSET:
++	case EFUSE_PUF_START_OFFSET ... EFUSE_PUF_END_OFFSET:
++		ret = zynqmp_efuse_access(context, offset, val,
++					  bytes, EFUSE_READ, pufflag);
++		break;
++	default:
++		*(u32 *)val = 0xDEADBEEF;
++		ret = 0;
++		break;
++	}
++
++	return ret;
++}
+ 
+-	dev_dbg(priv->dev, "Read chipid val %x %x\n", idcode, version);
+-	*(int *)val = version & SILICON_REVISION_MASK;
++static int zynqmp_nvmem_write(void *context,
++			      unsigned int offset, void *val, size_t bytes)
++{
++	int pufflag = 0;
+ 
+-	return 0;
++	if (offset < EFUSE_START_OFFSET || offset > EFUSE_PUF_END_OFFSET)
++		return -EOPNOTSUPP;
++
++	if (offset >= EFUSE_PUF_START_OFFSET && offset <= EFUSE_PUF_END_OFFSET)
++		pufflag = 1;
++
++	return zynqmp_efuse_access(context, offset,
++				   val, bytes, EFUSE_WRITE, pufflag);
+ }
+ 
+ static struct nvmem_config econfig = {
+ 	.name = "zynqmp-nvmem",
+ 	.owner = THIS_MODULE,
+ 	.word_size = 1,
+-	.size = 1,
+-	.read_only = true,
++	.size = ZYNQMP_NVMEM_SIZE,
+ };
+ 
+ static const struct of_device_id zynqmp_nvmem_match[] = {
+@@ -49,21 +201,20 @@ MODULE_DEVICE_TABLE(of, zynqmp_nvmem_match);
+ 
+ static int zynqmp_nvmem_probe(struct platform_device *pdev)
+ {
+-	struct device *dev = &pdev->dev;
+-	struct zynqmp_nvmem_data *priv;
+-
+-	priv = devm_kzalloc(dev, sizeof(struct zynqmp_nvmem_data), GFP_KERNEL);
+-	if (!priv)
+-		return -ENOMEM;
++	struct nvmem_device *nvmem;
+ 
+-	priv->dev = dev;
+-	econfig.dev = dev;
++	econfig.dev = &pdev->dev;
++	econfig.priv = &pdev->dev;
+ 	econfig.reg_read = zynqmp_nvmem_read;
+-	econfig.priv = priv;
++	econfig.reg_write = zynqmp_nvmem_write;
+ 
+-	priv->nvmem = devm_nvmem_register(dev, &econfig);
++	nvmem = nvmem_register(&econfig);
++	if (IS_ERR(nvmem))
++		return PTR_ERR(nvmem);
+ 
+-	return PTR_ERR_OR_ZERO(priv->nvmem);
++	platform_set_drvdata(pdev, nvmem);
++
++	return 0;
+ }
+ 
+ static struct platform_driver zynqmp_nvmem_driver = {

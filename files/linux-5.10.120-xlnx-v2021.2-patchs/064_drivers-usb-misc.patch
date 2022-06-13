@@ -1,0 +1,225 @@
+diff --git a/Documentation/devicetree/bindings/usb/microchip,usb5744.yaml b/Documentation/devicetree/bindings/usb/microchip,usb5744.yaml
+new file mode 100644
+index 000000000..fe222f6db
+--- /dev/null
++++ b/Documentation/devicetree/bindings/usb/microchip,usb5744.yaml
+@@ -0,0 +1,56 @@
++# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
++%YAML 1.2
++---
++$id: "http://devicetree.org/schemas/usb/microchip,usb5744.yaml#"
++$schema: "http://devicetree.org/meta-schemas/core.yaml#"
++
++title: Bindings for the Microchip USB5744 4-port Hub Controller
++
++description:
++  Microchip’s USB5744 SmartHub™ IC is a 4 port, SuperSpeed (SS)/Hi-Speed (HS),
++  low power, low pin count configurable and fully compliant with the USB 3.1
++  Gen 1 specification. The USB5744 also supports Full Speed (FS) and Low Speed
++  (LS) USB signaling, offering complete coverage of all defined USB operating
++  speeds. The new SuperSpeed hubs operate in parallel with the USB 2.0
++  controller, so 5 Gbps SuperSpeed data transfers are not affected by slower
++  USB 2.0 traffic.
++
++maintainers:
++  - Piyush Mehta <piyush.mehta@xilinx.com>
++  - Michal Simek <michal.simek@xilinx.com>
++
++properties:
++  compatible:
++    const: microchip,usb5744
++
++  reg:
++    maxItems: 1
++    description: |
++      Specifies the i2c slave address, it is required and should be 0x2d
++      if I2C is used.
++
++  reset-gpios:
++    maxItems: 1
++    description:
++      The phandle and specifier for the GPIO that controls the RESET line of
++      USB hub.
++
++required:
++  - compatible
++
++additionalProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/gpio/gpio.h>
++
++    i2c {
++        #address-cells = <1>;
++        #size-cells = <0>;
++
++        usb5744@2d {
++            compatible = "microchip,usb5744";
++            reg = <0x2d>;
++            reset-gpios = <&gpio 44 GPIO_ACTIVE_HIGH>;
++        };
++    };
+diff --git a/drivers/usb/misc/Kconfig b/drivers/usb/misc/Kconfig
+index 6818ea689..77fdaf9b1 100644
+--- a/drivers/usb/misc/Kconfig
++++ b/drivers/usb/misc/Kconfig
+@@ -242,6 +242,14 @@ config USB_HUB_USB251XB
+ 	  parameters may be set in devicetree or platform data.
+ 	  Say Y or M here if you need to configure such a device via SMBus.
+ 
++config USB_USB5744
++	tristate "Microchip USB5744 Hub driver"
++	depends on I2C
++	depends on GPIOLIB
++	help
++	  This option enables support for Microchip USB5744 Hub. This driver
++	  reset the hub using gpio pin and configure hub via i2c.
++
+ config USB_HSIC_USB3503
+ 	tristate "USB3503 HSIC to USB20 Driver"
+ 	depends on I2C
+diff --git a/drivers/usb/misc/Makefile b/drivers/usb/misc/Makefile
+index da39bddb0..2a6f9878f 100644
+--- a/drivers/usb/misc/Makefile
++++ b/drivers/usb/misc/Makefile
+@@ -25,6 +25,7 @@ obj-$(CONFIG_USB_USS720)		+= uss720.o
+ obj-$(CONFIG_USB_SEVSEG)		+= usbsevseg.o
+ obj-$(CONFIG_USB_YUREX)			+= yurex.o
+ obj-$(CONFIG_USB_HUB_USB251XB)		+= usb251xb.o
++obj-$(CONFIG_USB_USB5744)		+= usb5744.o
+ obj-$(CONFIG_USB_HSIC_USB3503)		+= usb3503.o
+ obj-$(CONFIG_USB_HSIC_USB4604)		+= usb4604.o
+ obj-$(CONFIG_USB_CHAOSKEY)		+= chaoskey.o
+diff --git a/drivers/usb/misc/usb5744.c b/drivers/usb/misc/usb5744.c
+new file mode 100644
+index 000000000..71997649e
+--- /dev/null
++++ b/drivers/usb/misc/usb5744.c
+@@ -0,0 +1,126 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Driver for the Microchip USB5744 4-port hub.
++ *
++ * Copyright (c) 2021 Xilinx, Inc.
++ */
++
++#include <linux/delay.h>
++#include <linux/err.h>
++#include <linux/i2c.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/byteorder/generic.h>
++#include <linux/gpio/consumer.h>
++#include <linux/platform_device.h>
++
++struct usb5744 {
++	struct gpio_desc *reset_gpio;
++};
++
++static int usb5744_init_hw(struct device *dev, struct usb5744 *data)
++{
++	data = devm_kzalloc(dev, sizeof(struct usb5744), GFP_KERNEL);
++	if (!data)
++		return -ENOMEM;
++
++	data->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
++	if (IS_ERR(data->reset_gpio)) {
++		dev_err(dev, "Failed to bind reset gpio");
++		return -ENODEV;
++	}
++
++	if (data->reset_gpio) {
++		/* Toggle RESET_N to reset the hub. */
++		gpiod_set_value(data->reset_gpio, 0);
++		usleep_range(5, 20);
++		gpiod_set_value(data->reset_gpio, 1);
++		msleep(5);
++	}
++
++	return 0;
++}
++
++static int usb5744_i2c_probe(struct i2c_client *client,
++			const struct i2c_device_id *id)
++{
++	struct device *dev = &client->dev;
++	struct usb5744 *data = NULL;
++	int ret = 0;
++
++	i2c_set_clientdata(client, data);
++
++	/* Trigger gpio reset to the hub. */
++	ret = usb5744_init_hw(dev, data);
++	if (ret)
++		return ret;
++
++	/* Send SMBus command to boot hub. */
++	ret = i2c_smbus_write_word_data(client, 0xAA, htons(0x5600));
++	if (ret < 0)
++		dev_err(dev, "Sending boot command failed");
++
++	return ret;
++}
++
++static int usb5744_platform_probe(struct platform_device *pdev)
++{
++	struct usb5744 *data = NULL;
++
++	/* Trigger gpio reset to the hub. */
++	return usb5744_init_hw(&pdev->dev, data);
++}
++
++static const struct i2c_device_id usb5744_id[] = {
++	{ "usb5744", 0 },
++	{}
++};
++MODULE_DEVICE_TABLE(i2c, usb5744_id);
++
++static struct i2c_driver usb5744_i2c_driver = {
++	.driver = {
++		.name = "usb5744",
++	},
++	.probe = usb5744_i2c_probe,
++	.id_table = usb5744_id,
++};
++
++static const struct of_device_id usb5744_platform_id[] = {
++	{ .compatible = "microchip,usb5744", },
++	{ }
++};
++
++static struct platform_driver usb5744_platform_driver = {
++	.driver = {
++		.name = "microchip,usb5744",
++		.of_match_table	= usb5744_platform_id,
++	},
++	.probe = usb5744_platform_probe,
++};
++
++static int __init usb5744_init(void)
++{
++	int err;
++
++	err = i2c_add_driver(&usb5744_i2c_driver);
++	if (err != 0)
++		pr_err("usb5744: Failed to register I2C driver: %d\n", err);
++
++	err = platform_driver_register(&usb5744_platform_driver);
++	if (err != 0)
++		pr_err("usb5744: Failed to register platform driver: %d\n",
++		       err);
++	return 0;
++}
++module_init(usb5744_init);
++
++static void __exit usb5744_exit(void)
++{
++	platform_driver_unregister(&usb5744_platform_driver);
++	i2c_del_driver(&usb5744_i2c_driver);
++}
++module_exit(usb5744_exit);
++
++MODULE_AUTHOR("Piyush Mehta <piyush.mehta@xilinx.com>");
++MODULE_DESCRIPTION("USB5744 Hub");
++MODULE_LICENSE("GPL v2");

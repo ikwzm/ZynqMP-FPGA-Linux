@@ -1,0 +1,49 @@
+diff --git a/drivers/staging/Kconfig b/drivers/staging/Kconfig
+index 2d0310448..9d424b925 100644
+--- a/drivers/staging/Kconfig
++++ b/drivers/staging/Kconfig
+@@ -76,7 +76,7 @@ source "drivers/staging/gs_fpgaboot/Kconfig"
+ 
+ source "drivers/staging/unisys/Kconfig"
+ 
+-source "drivers/staging/clocking-wizard/Kconfig"
++source "drivers/staging/apf/Kconfig"
+ 
+ source "drivers/staging/fbtft/Kconfig"
+ 
+@@ -118,4 +118,14 @@ source "drivers/staging/wfx/Kconfig"
+ 
+ source "drivers/staging/hikey9xx/Kconfig"
+ 
++source "drivers/staging/fclk/Kconfig"
++
++source "drivers/staging/xlnxsync/Kconfig"
++
++source "drivers/staging/xlnx_tsmux/Kconfig"
++
++source "drivers/staging/xroeframer/Kconfig"
++
++source "drivers/staging/xroetrafficgen/Kconfig"
++
+ endif # STAGING
+diff --git a/drivers/staging/Makefile b/drivers/staging/Makefile
+index 757a892ab..55a321d29 100644
+--- a/drivers/staging/Makefile
++++ b/drivers/staging/Makefile
+@@ -28,7 +28,7 @@ obj-$(CONFIG_FIREWIRE_SERIAL)	+= fwserial/
+ obj-$(CONFIG_GOLDFISH)		+= goldfish/
+ obj-$(CONFIG_GS_FPGABOOT)	+= gs_fpgaboot/
+ obj-$(CONFIG_UNISYSSPAR)	+= unisys/
+-obj-$(CONFIG_COMMON_CLK_XLNX_CLKWZRD)	+= clocking-wizard/
++obj-$(CONFIG_XILINX_APF)	+= apf/
+ obj-$(CONFIG_FB_TFT)		+= fbtft/
+ obj-$(CONFIG_FSL_DPAA2)		+= fsl-dpaa2/
+ obj-$(CONFIG_MOST)		+= most/
+@@ -49,3 +49,7 @@ obj-$(CONFIG_KPC2000)		+= kpc2000/
+ obj-$(CONFIG_QLGE)		+= qlge/
+ obj-$(CONFIG_WFX)		+= wfx/
+ obj-y				+= hikey9xx/
++obj-$(CONFIG_XILINX_FCLK)	+= fclk/
++obj-$(CONFIG_XLNX_SYNC)		+= xlnxsync/
++obj-$(CONFIG_XLNX_TSMUX)	+= xlnx_tsmux/
++obj-$(CONFIG_XROE_FRAMER)	+= xroeframer/
