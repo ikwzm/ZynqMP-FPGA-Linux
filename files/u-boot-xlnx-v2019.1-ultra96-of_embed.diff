@@ -1,9 +1,0 @@
-diff --git a/configs/avnet_ultra96_rev1_defconfig b/configs/avnet_ultra96_rev1_defconfig
-index f6d5830..f4ac2b3 100644
---- a/configs/avnet_ultra96_rev1_defconfig
-+++ b/configs/avnet_ultra96_rev1_defconfig
-@@ -89,3 +89,4 @@ CONFIG_USB_ETHER_ASIX=y
- CONFIG_SPL_GZIP=y
- CONFIG_OF_LIBFDT_OVERLAY=y
- CONFIG_EFI_LOADER_BOUNCE_BUFFER=y
-+CONFIG_OF_EMBED=y
