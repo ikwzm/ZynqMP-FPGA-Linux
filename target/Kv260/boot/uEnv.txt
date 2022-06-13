@@ -3,8 +3,8 @@
 #  * linux_kernel_image : Linux Kernel Image File Name
 #  * linux_fdt_image    : Linux Device Tree Blob File Name
 ########################################################################
-linux_kernel_image=image-5.10.0-xlnx-v2021.1-zynqmp-fpga
-linux_fdt_image=devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-kv260-revB.dtb
+linux_kernel_image=image-5.10.120-zynqmp-fpga-generic
+linux_fdt_image=devicetree-5.10.120-zynqmp-fpga-generic-kv260-revB.dtb
 
 ########################################################################
 # Linux Boot Argments
@@ -22,7 +22,7 @@ linux_boot_args_console=console=ttyPS1,115200
 linux_boot_args_rootfs=root=/dev/mmcblk1p2 rw rootwait
 linux_boot_args_systemd=systemd.unit=multi-user.target
 linux_boot_args_cpuidle=cpuidle.off=1
-linux_boot_args_cma=1000M
+linux_boot_args_cma=cma=1000M
 linux_boot_args_uio=uio_pdrv_genirq.of_id=generic-uio
 linux_boot_args_other=
 
