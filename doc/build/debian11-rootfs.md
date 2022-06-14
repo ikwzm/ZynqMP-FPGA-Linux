@@ -18,8 +18,7 @@ shell$ sudo debootstrap --arch=arm64 --foreign $distro     $PWD/$targetdir
 shell$ sudo cp /usr/bin/qemu-aarch64-static                $PWD/$targetdir/usr/bin
 shell$ sudo cp /etc/resolv.conf                            $PWD/$targetdir/etc
 shell$ sudo cp scripts/build-debian11-rootfs-with-qemu.sh  $PWD/$targetdir
-shell$ sudo cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     $PWD/$targetdir
-shell$ sudo cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   $PWD/$targetdir
+shell$ sudo cp linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb     $PWD/$targetdir
 ````
 
 ## Build Debian RootFS second-step with QEMU
@@ -78,13 +77,29 @@ EOT
 
 ```console
 debian11-rootfs# apt-get update -y
+debian11-rootfs# apt-get upgrade -y
+```
+
+### Install Locales
+
+```console
+debian11-rootfs# apt-get install -y locales dialog
+debian11-rootfs# dpkg-reconfigure locales
+```
+
+or if noninteractive set to LANG=C.UTF-8
+
+```console
+debian11-rootfs# apt-get install -y locales dialog
+debian11-rootfs# sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+debian11-rootfs# echo 'LANG="C.UTF-8"' > /etc/default/locale
+debian11-rootfs# dpkg-reconfigure --frontend=noninteractive locales
+debian11-rootfs# update-locale LANG=C.UTF-8
 ```
 
 ### Install applications
 
 ```console
-debian11-rootfs# apt-get install -y locales dialog
-debian11-rootfs# dpkg-reconfigure locales
 debian11-rootfs# apt-get install -y net-tools openssh-server ntpdate resolvconf sudo less hwinfo ntp tcsh zsh file
 ```
 
@@ -230,8 +245,7 @@ debian11-rootfs# apt-get install -y haveged
 ### Install Linux Modules
 
 ```console
-debian11-rootfs# dpkg -i linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
-debian11-rootfs# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
+debian11-rootfs# dpkg -i linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb
 ```
 
 ### Clean Cache
@@ -252,8 +266,7 @@ debian11-rootfs# dpkg -l > dpkg-list.txt
 debian10-rootfs# exit
 shell$ sudo rm -f $PWD/$targetdir/usr/bin/qemu-aarch64-static
 shell$ sudo rm -f $PWD/$targetdir/build-debian11-rootfs-with-qemu.sh
-shell$ sudo rm -f $PWD/$targetdir/linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb
-shell$ sudo rm -f $PWD/$targetdir/linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
+shell$ sudo rm -f $PWD/$targetdir/linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb
 shell$ sudo mv    $PWD/$targetdir/dpkg-list.txt files/debian11-dpkg-list.txt
 ```
 
@@ -264,3 +277,11 @@ shell$ cd $PWD/$targetdir
 shell$ sudo tar cfz ../debian11-rootfs-vanilla.tgz *
 ```
 
+## Build debian11-rootfs-vanilla.tgz.files
+
+```console
+shell$ mkdir debian11-rootfs-vanilla.tgz.files
+shell$ cd    debian11-rootfs-vanilla.tgz.files
+shell$ split -d --bytes=40M ../debian11-rootfs-vanilla.tgz
+shell$ cd ..
+```
