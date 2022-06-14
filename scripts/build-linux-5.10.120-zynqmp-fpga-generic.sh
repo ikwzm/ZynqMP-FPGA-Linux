@@ -3,12 +3,12 @@
 CURRENT_DIR=`pwd`
 KERNEL_VERSION=5.10.120
 LOCAL_VERSION=zynqmp-fpga-generic
+BUILD_VERSION=0
 KERNEL_RELEASE=$KERNEL_VERSION-$LOCAL_VERSION
-LINUX_RELEASE=linux-$KERNEL_RELEASE
-LINUX_BUILD_DIR=$LINUX_RELEASE
+LINUX_BUILD_DIR=linux-$KERNEL_RELEASE
 
 echo "KERNEL_RELEASE  =" $KERNEL_RELEASE
-echo "LINUX_RELEASE   =" $LINUX_RELEASE
+echo "BUILD_VERSION   =" $BUILD_VERSION
 echo "LINUX_BUILD_DIR =" $LINUX_BUILD_DIR
 
 ## Download Linux Kernel Source
@@ -95,8 +95,8 @@ git commit -m "[add] zynqmp_fpga_generic_defconfig to arch/arm64/configs"
 
 ### Create tag and .version
 
-git tag -a $KERNEL_RELEASE-0 -m "release $KERNEL_RELEASE-0"
-echo 0 > .version
+git tag -a $KERNEL_RELEASE-$BUILD_VERSION -m "release $KERNEL_RELEASE-$BUILD_VERSION"
+echo $BUILD_VERSION > .version
 
 ## Build
 
@@ -112,32 +112,27 @@ export DTC_FLAGS=--symbols
 rm -rf debian
 make deb-pkg
 
-### Install kernel image and devicetree to target/UltraZed-EG-IOCC/boot/
+### Install kernel image to this repository
 
-cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-$KERNEL_RELEASE
+cp arch/arm64/boot/Image.gz ../vmlinuz-$KERNEL_RELEASE-$BUILD_VERSION
+
+### Install devicetree to target/UltraZed-EG-IOCC/boot/
+
 cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-$KERNEL_RELEASE-uz3eg-iocc.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-$KERNEL_RELEASE-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-$KERNEL_RELEASE-uz3eg-iocc.dtb
 
-### Install kernel image and devicetree to target/Ultra96/boot/
+### Install devicetree to target/Ultra96/boot/
 
-cp arch/arm64/boot/Image ../target/Ultra96/boot/image-$KERNEL_RELEASE
 cp arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dtb ../target/Ultra96/boot/devicetree-$KERNEL_RELEASE-ultra96.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-$KERNEL_RELEASE-ultra96.dts ../target/Ultra96/boot/devicetree-$KERNEL_RELEASE-ultra96.dtb
 
-### Install kernel image and devicetree to target/Ultra96-V2/boot/
+### Install devicetree to target/Ultra96-V2/boot/
 
-cp arch/arm64/boot/Image ../target/Ultra96-V2/boot/image-$KERNEL_RELEASE
 cp arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dtb ../target/Ultra96-V2/boot/devicetree-$KERNEL_RELEASE-ultra96v2.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96-V2/boot/devicetree-$KERNEL_RELEASE-ultra96v2.dts ../target/Ultra96-V2/boot/devicetree-$KERNEL_RELEASE-ultra96v2.dtb
 
-### Install kernel image and devicetree to target/Kv260/boot/
+### Install devicetree to target/Kv260/boot/
 
-cp arch/arm64/boot/Image ../target/Kv260/boot/image-$KERNEL_RELEASE
 cp arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dtb ../target/Kv260/boot/devicetree-$KERNEL_RELEASE-kv260-revB.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Kv260/boot/devicetree-$KERNEL_RELEASE-kv260-revB.dts ../target/Kv260/boot/devicetree-$KERNEL_RELEASE-kv260-revB.dtb
-
-
-
-
-
 

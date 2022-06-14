@@ -139,34 +139,36 @@ shell$ rm -rf debian
 shell$ make deb-pkg
 ```
 
-### Install kernel image and devicetree to target/UltraZed-EG-IOCC/boot/
+### Install kernel image to this repository
 
 ```console
-shell$ cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-5.10.120-zynqmp-fpga-generic
+shell$ cp arch/arm64/boot/Image.gz ../vmlinuz-5.10.120-zynqmp-fpga-generic-0
+```
+
+### Install devicetree to target/UltraZed-EG-IOCC/boot/
+
+```console
 shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.120-zynqmp-fpga-generic-uz3eg-iocc.dtb
 shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.120-zynqmp-fpga-generic-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.120-zynqmp-fpga-generic-uz3eg-iocc.dtb
 ```
 
-### Install kernel image and devicetree to target/Ultra96/boot/
+### Install devicetree to target/Ultra96/boot/
 
 ```console
-shell$ cp arch/arm64/boot/Image ../target/Ultra96/boot/image-5.10.120-zynqmp-fpga-generic
 shell$ cp arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dtb ../target/Ultra96/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96.dtb
 shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96.dts ../target/Ultra96/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96.dtb
 ```
 
-### Install kernel image and devicetree to target/Ultra96-V2/boot/
+### Install devicetree to target/Ultra96-V2/boot/
 
 ```console
-shell$ cp arch/arm64/boot/Image ../target/Ultra96-V2/boot/image-5.10.120-zynqmp-fpga-generic
 shell$ cp arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dtb ../target/Ultra96-V2/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96v2.dtb
 shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96-V2/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96v2.dts ../target/Ultra96-V2/boot/devicetree-5.10.120-zynqmp-fpga-generic-ultra96v2.dtb
 ```
 
-### Install kernel image and devicetree to target/Kv260/boot/
+### Install devicetree to target/Kv260/boot/
 
 ```console
-shell$ cp arch/arm64/boot/Image ../target/Kv260/boot/image-5.10.120-zynqmp-fpga-generic
 shell$ cp arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dtb ../target/Kv260/boot/devicetree-5.10.120-zynqmp-fpga-generic-kv260-revB.dtb
 shell$ ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Kv260/boot/devicetree-5.10.120-zynqmp-fpga-generic-kv260-revB.dts ../target/Kv260/boot/devicetree-5.10.120-zynqmp-fpga-generic-kv260-revB.dtb
 ```
