@@ -7,7 +7,7 @@
 ```console
 shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v1.0.0-rc1.tar.gz
 shell$ tar xfz v1.0.0-rc1.tar.gz
-shell$ cd ZynqMP-FPGA-Linux-v1.0.0-rc1
+shell$ cd ZynqMP-FPGA-Linux-1.0.0-rc1
 ```
 
 ### File Description
