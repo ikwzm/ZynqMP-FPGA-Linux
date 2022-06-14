@@ -5,9 +5,9 @@
 **Note: Downloading the entire repository takes time, so download the source code from https://github.com/ikwzm/ZynqMP-FPGA-Linux/releases.**
 
 ```console
-shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v2021.1.1.tar.gz
-shell$ tar xfz v2021.1.1.tar.gz
-shell$ cd ZynqMP-FPGA-Linux-2021.1.1
+shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v1.0.0-rc1.tar.gz
+shell$ tar xfz v1.0.0-rc1.tar.gz
+shell$ cd ZynqMP-FPGA-Linux-v1.0.0-rc1
 ```
 
 ### File Description
@@ -16,21 +16,16 @@ shell$ cd ZynqMP-FPGA-Linux-2021.1.1
    + boot/
      - boot.bin                                                    : Stage 1 Boot Loader
      - uEnv.txt                                                    : U-Boot environment variables for linux boot
-     - image-5.4.0-xlnx-v2020.2-zynqmp-fpga                        : Linux Kernel Image       (use Git LFS)
-     - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96.dtb       : Linux Device Tree Blob   
-     - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96.dts       : Linux Device Tree Blob   
-     - image-5.10.0-xlnx-v2021.1-zynqmp-fpga                       : Linux Kernel Image       (use Git LFS)
-     - devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96.dtb      : Linux Device Tree Blob   
-     - devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96.dts      : Linux Device Tree Source
- * debian11-rootfs-vanilla.tgz                                     : Debian10 Root File System (use Git LFS)
- * linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     : Linux Image Package      (use Git LFS)
- * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   : Linux Headers Package    (use Git LFS)
- * fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        : fclkcfg(1.7.2) Device Driver and Services Package
- * u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb      : u-dma-buf(3.2.4) Device Driver and Services Package
- * linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   : Linux Image Package      (use Git LFS)
- * linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb : Linux Headers Package    (use Git LFS)
- * fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       : fclkcfg(1.7.2) Device Driver and Services Package
- * u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     : u-dma-buf(3.2.4) Device Driver and Services Package
+     - uEnv-linux-5.10.120-zynqmp-fpga-generic.txt                 : U-Boot environment variables for boot menu
+     - devicetree-5.10.120-zynqmp-fpga-generic-ultra96.dtb         : Linux Device Tree Blob   
+     - devicetree-5.10.120-zynqmp-fpga-generic-ultra96.dts         : Linux Device Tree Source
+ * vmlinuz-5.10.120-zynqmp-fpga-generic-0                          : Linux Kernel Image
+ * debian11-rootfs-vanilla.tgz.files/                              : Debian11 Root File System
+   + x00 .. x08                                                    : (splited files)
+ * linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb   : Linux Image Package
+ * linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb : Linux Headers Package
+ * fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb          : fclkcfg(1.7.2) Device Driver and Services Package
+ * u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb        : u-dma-buf(3.2.4) Device Driver and Services Package
  
 ### Format SD-Card
 
@@ -47,22 +42,19 @@ shell# mount /dev/sdc2 /mnt/usb2
 #### Make Boot Partition
 
 ```console
-shell# cp target/Ultra96/boot/*                                           /mnt/usb1
+shell# cp target/Ultra96/boot/*                            /mnt/usb1
+shell# gzip -d -c vmlinuz-5.10.120-zynqmp-fpga-generic-0 > /mnt/usb1/image-5.10.120-zynqmp-fpga-generic
 ```
 
 #### Make RootFS Partition
 
 ```console
-shell# tar xfz debian11-rootfs-vanilla.tgz -C                             /mnt/usb2
+shell# cat debian11-rootfs-vanilla.tgz.files/* | tar xfz - -C             /mnt/usb2
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
-shell# cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        /mnt/usb2/home/fpga/debian
-shell# cp u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb      /mnt/usb2/home/fpga/debian
-shell# cp linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb /mnt/usb2/home/fpga/debian
-shell# cp fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       /mnt/usb2/home/fpga/debian
-shell# cp u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     /mnt/usb2/home/fpga/debian
+shell# cp linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb   /mnt/usb2/home/fpga/debian
+shell# cp linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb /mnt/usb2/home/fpga/debian
+shell# cp fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb          /mnt/usb2/home/fpga/debian
+shell# cp u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb        /mnt/usb2/home/fpga/debian
 ```
 
 #### Add boot partition mount position to /etc/fstab
@@ -128,30 +120,28 @@ root@debian-fpga:~#
 
 #### Install Linux Image Package
 
-Since linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb is already pre-installed in debian11-rootfs.tgz, this The process can be omitted.
+Since linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb is already pre-installed in debian11-rootfs-vanilla.tgz.files, this The process can be omitted.
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
-Selecting previously unselected package linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 117342 files and directories currently installed.)
-Preparing to unpack linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb ...
-Unpacking linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
-Setting up linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb
+(Reading database ... 27259 files and directories currently installed.)
+Preparing to unpack linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb ...
+Unpacking linux-image-5.10.120-zynqmp-fpga-generic (5.10.120-zynqmp-fpga-generic-0) over (5.10.120-zynqmp-fpga-generic-0) ...
+Setting up linux-image-5.10.120-zynqmp-fpga-generic (5.10.120-zynqmp-fpga-generic-0) ...
 ```
 
 #### Install Linux Headers Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-5.10.0-xlnx-v2021.1-zy
-nqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb
-Selecting previously unselected package linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 117624 files and directories currently installed.)
-Preparing to unpack linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb ...
-Unpacking linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
-Setting up linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga (5.10.0-xlnx-v2021.1-zynqmp-fpga-4) ...
-make: Entering directory '/usr/src/linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga'
+root@debian-fpga:/home/fpga/debian# dpkg -i linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb
+Selecting previously unselected package linux-headers-5.10.120-zynqmp-fpga-generic.
+(Reading database ... 27259 files and directories currently installed.)
+Preparing to unpack linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb ...
+Unpacking linux-headers-5.10.120-zynqmp-fpga-generic (5.10.120-zynqmp-fpga-generic-0) ...
+Setting up linux-headers-5.10.120-zynqmp-fpga-generic (5.10.120-zynqmp-fpga-generic-0) ...
+make: Entering directory '/usr/src/linux-headers-5.10.120-zynqmp-fpga-generic'
   SYNC    include/config/auto.conf.cmd
   HOSTCC  scripts/basic/fixdep
   HOSTCC  scripts/kconfig/conf.o
@@ -172,6 +162,7 @@ make: Entering directory '/usr/src/linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga
 * ARMv8.5 architectural features
 *
 Branch Target Identification support (ARM64_BTI) [Y/n/?] y
+  Use Branch Target Identification for kernel (ARM64_BTI_KERNEL) [Y/n/?] (NEW)
 Enable support for E0PD (ARM64_E0PD) [Y/n/?] y
 Enable support for random number generation (ARCH_RANDOM) [Y/n/?] y
 Memory Tagging Extension support (ARM64_MTE) [Y/n/?] (NEW)
@@ -191,6 +182,8 @@ KASAN: runtime memory debugger (KASAN) [N/y/?] (NEW)
   HOSTCC  scripts/dtc/dtc-lexer.lex.o
   HOSTCC  scripts/dtc/dtc-parser.tab.o
   HOSTLD  scripts/dtc/dtc
+  HOSTCC  scripts/selinux/genheaders/genheaders
+  HOSTCC  scripts/selinux/mdp/mdp
   HOSTCC  scripts/kallsyms
   HOSTCC  scripts/sorttable
   HOSTCC  scripts/asn1_compiler
@@ -203,32 +196,32 @@ KASAN: runtime memory debugger (KASAN) [N/y/?] (NEW)
   HOSTCC  scripts/mod/file2alias.o
   HOSTCC  scripts/mod/sumversion.o
   HOSTLD  scripts/mod/modpost
-scripts/Makefile.build:414: warning: overriding recipe for target 'modules.order'
-Makefile:1405: warning: ignoring old recipe for target 'modules.order'
-make: Leaving directory '/usr/src/linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga'
+scripts/Makefile.build:415: warning: overriding recipe for target 'modules.order'
+Makefile:1422: warning: ignoring old recipe for target 'modules.order'
+make: Leaving directory '/usr/src/linux-headers-5.10.120-zynqmp-fpga-generic'
 ```
 
 #### Install fclkcfg Device Driver and Services Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb
-Selecting previously unselected package fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 134025 files and directories currently installed.)
-Preparing to unpack fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb ...
-Unpacking fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga (1.7.2-1) ...
-Setting up fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga (1.7.2-1) ...
+root@debian-fpga:/home/fpga/debian# dpkg -i fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb
+Selecting previously unselected package fclkcfg-5.10.120-zynqmp-fpga-generic.
+(Reading database ... 44680 files and directories currently installed.)
+Preparing to unpack fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb ...
+Unpacking fclkcfg-5.10.120-zynqmp-fpga-generic (1.7.2-1) ...
+Setting up fclkcfg-5.10.120-zynqmp-fpga-generic (1.7.2-1) ...
 ```
 
 #### Install u-dma-buf Device Driver and Services Package
 
 ```console
 root@debian-fpga:~# cd /home/fpga/debian
-root@debian-fpga:/home/fpga/debian# dpkg -i u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb
-Selecting previously unselected package u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga.
-(Reading database ... 134031 files and directories currently installed.)
-Preparing to unpack u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb ...
-Unpacking u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga (3.2.4-0) ...
-Setting up u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga (3.2.4-0) ...
+root@debian-fpga:/home/fpga/debian# dpkg -i u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb
+Selecting previously unselected package u-dma-buf-5.10.120-zynqmp-fpga-generic.
+(Reading database ... 44686 files and directories currently installed.)
+Preparing to unpack u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb ...
+Unpacking u-dma-buf-5.10.120-zynqmp-fpga-generic (3.2.4-0) ...
+Setting up u-dma-buf-5.10.120-zynqmp-fpga-generic (3.2.4-0) ...
 ```
 
