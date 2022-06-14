@@ -115,6 +115,7 @@ make deb-pkg
 ### Install kernel image to this repository
 
 cp arch/arm64/boot/Image.gz ../vmlinuz-$KERNEL_RELEASE-$BUILD_VERSION
+cp .config             ../files/config-$KERNEL_RELEASE-$BUILD_VERSION
 
 ### Install devicetree to target/UltraZed-EG-IOCC/boot/
 

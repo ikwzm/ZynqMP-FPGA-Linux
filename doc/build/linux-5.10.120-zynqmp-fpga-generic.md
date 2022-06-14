@@ -143,6 +143,7 @@ shell$ make deb-pkg
 
 ```console
 shell$ cp arch/arm64/boot/Image.gz ../vmlinuz-5.10.120-zynqmp-fpga-generic-0
+shell$ cp .config ../files/config-5.10.120-zynqmp-fpga-generic-0
 ```
 
 ### Install devicetree to target/UltraZed-EG-IOCC/boot/
