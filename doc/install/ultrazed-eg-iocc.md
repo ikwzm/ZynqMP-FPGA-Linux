@@ -39,31 +39,31 @@ shell$ cd ZynqMP-FPGA-Linux-1.0.0-rc1
 shell# mount /dev/sdc1 /mnt/usb1
 shell# mount /dev/sdc2 /mnt/usb2
 ```
-#### Make Boot Partition
+
+#### Make Boot/Root Partition
 
 ```console
-shell# cp target/UltraZed-EG-IOCC/boot/*                   /mnt/usb1
-shell# gzip -d -c vmlinuz-5.10.120-zynqmp-fpga-generic-0 > /mnt/usb1/image-5.10.120-zynqmp-fpga-generic
-```
+shell# ./scripts/install-sd-5.10.120-zynqmp-fpga-generic.sh -v -t UltraZed-EG-IOCC -b /mnt/usb1 -r /mnt/usb2
 
-#### Make RootFS Partition
+# Make Boot Partition
 
-```console
-shell# cat debian11-rootfs-vanilla.tgz.files/* | tar xfz - -C             /mnt/usb2
-shell# mkdir                                                              /mnt/usb2/home/fpga/debian
-shell# cp linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb   /mnt/usb2/home/fpga/debian
-shell# cp linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb /mnt/usb2/home/fpga/debian
-shell# cp fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb          /mnt/usb2/home/fpga/debian
-shell# cp u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb        /mnt/usb2/home/fpga/debian
-```
+cp ./target/UltraZed-EG-IOCC/boot/* /mnt/usb1
+gzip -d -c vmlinuz-5.10.120-zynqmp-fpga-generic-0 > /mnt/usb1/image-5.10.120-zynqmp-fpga-generic
 
-#### Add boot partition mount position to /etc/fstab
+# Make Root Partition
 
-```console
-shell# mkdir /mnt/usb2/mnt/boot
-shell# cat <<EOT >> /mnt/usb2/etc/fstab
-/dev/mmcblk1p1	/mnt/boot	auto	defaults	0	0
-EOT
+(cat debian11-rootfs-vanilla.tgz.files/*) | tar xfz - -C /mnt/usb2
+mkdir /mnt/usb2/home/fpga/debian
+cp ./linux-image-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb /mnt/usb2/home/fpga/debian
+cp ./linux-headers-5.10.120-zynqmp-fpga-generic_5.10.120-zynqmp-fpga-generic-0_arm64.deb /mnt/usb2/home/fpga/debian
+cp ./u-dma-buf-5.10.120-zynqmp-fpga-generic_3.2.4-0_arm64.deb /mnt/usb2/home/fpga/debian
+cp ./fclkcfg-5.10.120-zynqmp-fpga-generic_1.7.2-1_arm64.deb /mnt/usb2/home/fpga/debian
+mkdir /mnt/usb2/mnt/boot
+
+# Add boot partition mount position to /etc/fstab
+
+echo '/dev/mmcblk1p1    /mnt/boot       auto            defaults        0       0' >> /mnt/usb2/etc/fstab
+
 ```
 
 #### Unmount SD-Card
@@ -71,6 +71,26 @@ EOT
 ```console
 shell# umount /mnt/usb1
 shell# umount /mnt/usb2
+```
+
+### Install Debian Packages
+
+#### Boot UltraZed and login fpga or root user
+
+fpga'password is "fpga".
+
+```console
+debian-fpga login: fpga
+Password:
+fpga@debian-fpga:~$
+```
+
+root'password is "admin".
+
+```console
+debian-fpga login: root
+Password:
+root@debian-fpga:~#
 ```
 
 #### Install Linux Image Package
