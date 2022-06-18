@@ -5,9 +5,9 @@
 **Note: Downloading the entire repository takes time, so download the source code from https://github.com/ikwzm/ZynqMP-FPGA-Linux/releases.**
 
 ```console
-shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v1.0.0-rc1.tar.gz
-shell$ tar xfz v1.0.0-rc1.tar.gz
-shell$ cd ZynqMP-FPGA-Linux-1.0.0-rc1
+shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v1.0.0-rc2.tar.gz
+shell$ tar xfz v1.0.0-rc2.tar.gz
+shell$ cd ZynqMP-FPGA-Linux-1.0.0-rc2
 ```
 
 ### File Description
