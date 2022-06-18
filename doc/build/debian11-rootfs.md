@@ -224,7 +224,7 @@ debian11-rootfs# rm -rf ti-bt-firmware
 ```
 
 ```console
-debian11-rootfs# git clone git://github.com/linux4wilc/firmware  linux4wilc-firmware  
+debian11-rootfs# git clone https://github.com/linux4wilc/firmware  linux4wilc-firmware  
 debian11-rootfs# cp linux4wilc-firmware/*.bin /lib/firmware/mchp
 debian11-rootfs# rm -rf linux4wilc-firmware  
 ```

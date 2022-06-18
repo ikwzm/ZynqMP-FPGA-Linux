@@ -113,7 +113,7 @@ git clone git://git.ti.com/wilink8-bt/ti-bt-firmware
 cp ti-bt-firmware/TIInit_11.8.32.bts /lib/firmware/ti-connectivity
 rm -rf ti-bt-firmware
 
-git clone git://github.com/linux4wilc/firmware  linux4wilc-firmware  
+git clone https://github.com/linux4wilc/firmware  linux4wilc-firmware  
 cp linux4wilc-firmware/*.bin /lib/firmware/mchp
 rm -rf linux4wilc-firmware  
 
