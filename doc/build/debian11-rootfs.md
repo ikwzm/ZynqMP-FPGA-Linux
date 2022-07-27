@@ -262,5 +262,15 @@ shell$ sudo mv    $PWD/$targetdir/dpkg-list.txt files/debian11-dpkg-list.txt
 ```console
 shell$ cd $PWD/$targetdir
 shell$ sudo tar cfz ../debian11-rootfs-vanilla.tgz *
+shell$ cd ..
+```
+
+## Build debian11-rootfs-vanilla.tgz.files
+
+```consle
+shell$ mkdir debian11-rootfs-vanilla.tgz.files
+shell$ cd    debian11-rootfs-vanilla.tgz.files
+shell$ split -d --bytes=40M ../debian11-rootfs-vanilla.tgz
+shell$ cd ..
 ```
 
