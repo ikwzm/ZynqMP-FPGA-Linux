@@ -66,36 +66,42 @@ git add --update
 git commit -m "[add] Xilinx APF driver."
 
 ## Create tag and .version
+
 git tag -a xilinx-v2021.1-zynqmp-fpga-4 -m "release xilinx-v2021.1-zynqmp-fpga-4"
 echo 4 > .version
 
 ## Setup for Build 
+
 export ARCH=arm64
 export export CROSS_COMPILE=aarch64-linux-gnu-
 make xilinx_zynqmp_defconfig
 
 ## Build Linux Kernel and device tree
+
 export DTC_FLAGS=--symbols
 make deb-pkg
 
-## Build kernel image and devicetree to target/UltraZed-EG-IOCC/boot/
-cp arch/arm64/boot/Image ../target/UltraZed-EG-IOCC/boot/image-5.10.0-xlnx-v2021.1-zynqmp-fpga
+## Copy Image to image-5.10.0-xlnx-v2021.1-zynqmp-fpga
+
+cp arch/arm64/boot/Image ../image-5.10.0-xlnx-v2021.1-zynqmp-fpga
+
+## Copy devicetree to target/UltraZed-EG-IOCC/boot/
+
 cp arch/arm64/boot/dts/xilinx/zynqmp-uz3eg-iocc.dtb ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-uz3eg-iocc.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-uz3eg-iocc.dts ../target/UltraZed-EG-IOCC/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-uz3eg-iocc.dtb
 
-## Build kernel image and devicetree to target/Ultra96/boot/
-cp arch/arm64/boot/Image ../target/Ultra96/boot/image-5.10.0-xlnx-v2021.1-zynqmp-fpga
+## Copy devicetree to target/Ultra96/boot/
+
 cp arch/arm64/boot/dts/xilinx/avnet-ultra96-rev1.dtb ../target/Ultra96/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96.dts ../target/Ultra96/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96.dtb
 
-## Build kernel image and devicetree to target/Ultra96-V2/boot/
-cp arch/arm64/boot/Image ../target/Ultra96-V2/boot/image-5.10.0-xlnx-v2021.1-zynqmp-fpga
+## Copy devicetree to target/Ultra96-V2/boot/
+
 cp arch/arm64/boot/dts/xilinx/avnet-ultra96v2-rev1.dtb ../target/Ultra96-V2/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96v2.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Ultra96-V2/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96v2.dts ../target/Ultra96-V2/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96v2.dtb
 
-## Build kernel image and devicetree to target/Kv260/boot/
+## Copy devicetree to target/Kv260/boot/
 
-cp arch/arm64/boot/Image ../target/Kv260/boot/image-5.10.0-xlnx-v2021.1-zynqmp-fpga
 cp arch/arm64/boot/dts/xilinx/zynqmp-kv260-revB.dtb ../target/Kv260/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-kv260-revB.dtb
 ./scripts/dtc/dtc -I dtb -O dts --symbols -o ../target/Kv260/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-kv260-revB.dts ../target/Kv260/boot/devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-kv260-revB.dtb
 
