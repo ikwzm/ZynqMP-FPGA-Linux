@@ -5,9 +5,9 @@
 **Note: Downloading the entire repository takes time, so download the source code from https://github.com/ikwzm/ZynqMP-FPGA-Linux/releases.**
 
 ```console
-shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v2021.1.1.tar.gz
-shell$ tar xfz v2021.1.1.tar.gz
-shell$ cd ZynqMP-FPGA-Linux-2021.1.1
+shell$ wget https://github.com/ikwzm/ZynqMP-FPGA-Linux/archive/refs/tags/v2021.1.2.tar.gz
+shell$ tar xfz v2021.1.2.tar.gz
+shell$ cd ZynqMP-FPGA-Linux-2021.1.2
 ```
 
 ### File Description
@@ -16,19 +16,20 @@ shell$ cd ZynqMP-FPGA-Linux-2021.1.1
    + boot/
      - boot.bin                                                    : Stage 1 Boot Loader
      - uEnv.txt                                                    : U-Boot environment variables for linux boot
-     - image-5.4.0-xlnx-v2020.2-zynqmp-fpga                        : Linux Kernel Image       (use Git LFS)
      - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96v2.dtb     : Linux Device Tree Blob   
      - devicetree-5.4.0-xlnx-v2020.2-zynqmp-fpga-ultra96v2.dts     : Linux Device Tree Blob   
-     - image-5.10.0-xlnx-v2021.1-zynqmp-fpga                       : Linux Kernel Image       (use Git LFS)
      - devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96v2.dtb    : Linux Device Tree Blob   
      - devicetree-5.10.0-xlnx-v2021.1-zynqmp-fpga-ultra96v2.dts    : Linux Device Tree Source
- * debian11-rootfs-vanilla.tgz                                     : Debian11 Root File System (use Git LFS)
- * linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     : Linux Image Package      (use Git LFS)
- * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   : Linux Headers Package    (use Git LFS)
+ * image-5.4.0-xlnx-v2020.2-zynqmp-fpga                            : Linux Kernel Image
+ * image-5.10.0-xlnx-v2021.1-zynqmp-fpga                           : Linux Kernel Image
+ * debian11-rootfs-vanilla.tgz.files/                              : Debian11 Root File System
+   + x00 .. x08                                                    : (splited files)
+ * linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     : Linux Image Package
+ * linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   : Linux Headers Package
  * fclkcfg-5.4.0-xlnx-v2020.2-zynqmp-fpga_1.7.2-1_arm64.deb        : fclkcfg(1.7.2) Device Driver and Services Package
  * u-dma-buf-5.4.0-xlnx-v2020.2-zynqmp-fpga_3.2.4-0_arm64.deb      : u-dma-buf(3.2.4) Device Driver and Services Package
- * linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   : Linux Image Package      (use Git LFS)
- * linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb : Linux Headers Package    (use Git LFS)
+ * linux-image-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb   : Linux Image Package
+ * linux-headers-5.10.0-xlnx-v2021.1-zynqmp-fpga_5.10.0-xlnx-v2021.1-zynqmp-fpga-4_arm64.deb : Linux Headers Package
  * fclkcfg-5.10.0-xlnx-v2021.1-zynqmp-fpga_1.7.2-1_arm64.deb       : fclkcfg(1.7.2) Device Driver and Services Package
  * u-dma-buf-5.10.0-xlnx-v2021.1-zynqmp-fpga_3.2.4-0_arm64.deb     : u-dma-buf(3.2.4) Device Driver and Services Package
  
@@ -48,12 +49,14 @@ shell# mount /dev/sdc2 /mnt/usb2
 
 ```console
 shell# cp target/Ultra96-V2/boot/*                                        /mnt/usb1
+shell# cp image-5.4.0-xlnx-v2020.2-zynqmp-fpga                            /mnt/usb1
+shell# cp image-5.10.0-xlnx-v2021.1-zynqmp-fpga                           /mnt/usb1
 ```
 
 #### Make RootFS Partition
 
 ```console
-shell# tar xfz debian11-rootfs-vanilla.tgz -C                             /mnt/usb2
+shell# cat debian11-rootfs-vanilla.tgz.files/* | tar xfz - -C             /mnt/usb2
 shell# mkdir                                                              /mnt/usb2/home/fpga/debian
 shell# cp linux-image-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb     /mnt/usb2/home/fpga/debian
 shell# cp linux-headers-5.4.0-xlnx-v2020.2-zynqmp-fpga_5.4.0-xlnx-v2020.2-zynqmp-fpga-3_arm64.deb   /mnt/usb2/home/fpga/debian
