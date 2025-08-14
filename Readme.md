@@ -19,6 +19,8 @@ Please refer to the following repositories
    - https://github.com/ikwzm/ZynqMP-FPGA-Debian11
  * Debian12
    - https://github.com/ikwzm/ZynqMP-FPGA-Debian12
+ * Debian13
+   - https://github.com/ikwzm/ZynqMP-FPGA-Debian13
  * Ubuntu22.04
    - https://github.com/ikwzm/ZynqMP-FPGA-Ubuntu22.04-Console
    - https://github.com/ikwzm/ZynqMP-FPGA-Ubuntu22.04-Desktop
